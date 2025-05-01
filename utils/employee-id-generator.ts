@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server"
 
+// Implement the original function name for backward compatibility
 export async function getNewEmployeeId(): Promise<string> {
   const supabase = createClient()
 
@@ -42,3 +43,6 @@ export async function getNewEmployeeId(): Promise<string> {
 
   return `EMP-${currentYear}-${paddedSequence}`
 }
+
+// Also export the function with the new name for future use
+export const generateEmployeeId = getNewEmployeeId

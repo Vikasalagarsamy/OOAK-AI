@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import type { Employee, Department, Designation, Company, Branch, EmployeeCompany } from "@/types/employee"
+import { getNewEmployeeId } from "@/utils/employee-id-generator"
 
 // Add employee (alias for createEmployee for backward compatibility)
 export async function addEmployee(formData: FormData): Promise<void> {
@@ -83,7 +84,7 @@ export async function createEmployee(formData: FormData): Promise<void> {
   const supabase = createClient()
 
   // Extract form data
-  const employee_id = formData.get("employee_id") as string
+  let employee_id = formData.get("employee_id") as string
   const first_name = formData.get("first_name") as string
   const last_name = formData.get("last_name") as string
   const email = formData.get("email") as string
@@ -99,6 +100,19 @@ export async function createEmployee(formData: FormData): Promise<void> {
   const designation_id = formData.get("designation_id") as string
   const primary_company_id = formData.get("primary_company_id") as string
   const home_branch_id = formData.get("home_branch_id") as string
+
+  // Check if employee ID already exists
+  const { data: existingEmployee } = await supabase
+    .from("employees")
+    .select("id")
+    .eq("employee_id", employee_id)
+    .single()
+
+  // If employee ID already exists, generate a new one
+  if (existingEmployee) {
+    console.log("Employee ID already exists, generating a new one")
+    employee_id = await getNewEmployeeId()
+  }
 
   // Prepare employee data
   const employeeData: any = {
@@ -131,18 +145,45 @@ export async function createEmployee(formData: FormData): Promise<void> {
     employeeData.home_branch_id = Number.parseInt(home_branch_id)
   }
 
-  // Insert employee
-  const { data, error } = await supabase.from("employees").insert(employeeData).select().single()
+  // Insert employee - with retry mechanism for unique constraint errors
+  const maxRetries = 3
+  let retries = 0
+  let insertSuccess = false
+  let insertedData = null
 
-  if (error) {
-    console.error("Error creating employee:", error)
-    throw new Error("Failed to create employee")
+  while (!insertSuccess && retries < maxRetries) {
+    const { data, error } = await supabase.from("employees").insert(employeeData).select().single()
+
+    if (error) {
+      if (error.code === "23505" && error.message.includes("employees_employee_id_key")) {
+        // Unique constraint violation on employee_id, generate new ID and retry
+        retries++
+        console.log(`Retry ${retries}: Generating new employee ID due to duplicate`)
+        employeeData.employee_id = await getNewEmployeeId()
+      } else {
+        console.error("Error creating employee:", error)
+        throw new Error(`Failed to create employee: ${error.message}`)
+      }
+    } else {
+      insertSuccess = true
+      insertedData = data
+    }
+  }
+
+  if (!insertSuccess) {
+    throw new Error("Failed to create employee after multiple retries")
   }
 
   // If primary company and home branch are set, create a primary company allocation
-  if (primary_company_id && primary_company_id !== "none" && home_branch_id && home_branch_id !== "none") {
+  if (
+    primary_company_id &&
+    primary_company_id !== "none" &&
+    home_branch_id &&
+    home_branch_id !== "none" &&
+    insertedData
+  ) {
     const { error: allocationError } = await supabase.from("employee_companies").insert({
-      employee_id: data.id,
+      employee_id: insertedData.id,
       company_id: Number.parseInt(primary_company_id),
       branch_id: Number.parseInt(home_branch_id),
       allocation_percentage: 100,
@@ -506,30 +547,10 @@ export async function getBranches() {
   }))
 }
 
-// Update the generateEmployeeId function to be more robust
+// Update the generateEmployeeId function to use getNewEmployeeId from the utility
 export async function generateEmployeeId() {
-  const supabase = createClient()
-
   try {
-    // Get the current year
-    const currentYear = new Date().getFullYear().toString().slice(-2)
-
-    // Get the count of employees for this year
-    const { count, error } = await supabase
-      .from("employees")
-      .select("*", { count: "exact", head: true })
-      .like("employee_id", `EMP-${currentYear}%`)
-
-    if (error) {
-      console.error("Error counting employees:", error)
-      return `EMP-${currentYear}-0001`
-    }
-
-    // Generate the next employee ID
-    const nextNumber = (count || 0) + 1
-    const paddedNumber = nextNumber.toString().padStart(4, "0")
-
-    return `EMP-${currentYear}-${paddedNumber}`
+    return await getNewEmployeeId()
   } catch (error) {
     console.error("Error generating employee ID:", error)
     // Fallback to a timestamp-based ID if there's an error
