@@ -32,9 +32,8 @@ interface Employee {
     company_name: string
     branch_id?: number
     branch_name?: string
-    percentage?: number // Make percentage optional
+    allocation_percentage?: number // Use allocation_percentage instead of percentage
     is_primary?: boolean
-    location?: string
   }[]
 }
 
@@ -59,112 +58,85 @@ export function AssignLeadDialog({ lead, open, onOpenChange, onComplete }: Assig
     }
   }, [open, lead])
 
-  // Update the fetchSalesEmployees function to better handle employee company-branch allocations
+  // Update the fetchSalesEmployees function
   const fetchSalesEmployees = async () => {
     setFetchingEmployees(true)
     try {
-      console.log("Fetching employees for lead assignment with company-branch allocations")
+      console.log("Fetching employees for lead assignment with company allocations")
 
-      // First attempt: Try to get employees with their allocations using a direct query
-      try {
-        // Query employees with their company and branch allocations
-        const { data: employeesWithAllocations, error: allocationsError } = await supabase
+      // Direct database approach - get employees with company allocations
+      const { data: employees, error } = await supabase
+        .from("employees")
+        .select(`
+        id, employee_id, first_name, last_name, job_title, department_id, designation_id, status,
+        employee_companies(
+          id, company_id, branch_id, allocation_percentage, is_primary,
+          companies:company_id(id, name),
+          branches:branch_id(id, name)
+        )
+      `)
+        .eq("status", "active")
+        .order("first_name")
+
+      if (error) {
+        console.error("Error fetching employees with allocations:", error)
+        // Fall back to basic employee data
+        const { data: basicEmployees, error: basicError } = await supabase
           .from("employees")
-          .select(`
-            id, 
-            employee_id, 
-            first_name, 
-            last_name, 
-            job_title,
-            status,
-            department_id,
-            role
-          `)
+          .select("id, employee_id, first_name, last_name, job_title")
           .eq("status", "active")
-          .or(
-            `job_title.ilike.%sales%,job_title.ilike.%account%,job_title.ilike.%business development%,role.ilike.%sales%`,
-          )
+          .order("first_name")
 
-        if (allocationsError) {
-          console.error("Error fetching employees with allocations:", allocationsError)
-          throw allocationsError
-        }
-
-        if (employeesWithAllocations && employeesWithAllocations.length > 0) {
-          console.log(`Found ${employeesWithAllocations.length} sales employees, fetching their allocations`)
-
-          // For each employee, fetch their company-branch allocations
-          const employeesWithDetails = await Promise.all(
-            employeesWithAllocations.map(async (employee) => {
-              // Get company allocations for this employee
-              const { data: allocations, error: allocError } = await supabase
-                .from("employee_companies")
-                .select(`
-                  id,
-                  company_id,
-                  branch_id,
-                  allocation_percentage,
-                  is_primary,
-                  companies(id, name),
-                  branches(id, name, location)
-                `)
-                .eq("employee_id", employee.id)
-
-              if (allocError) {
-                console.warn(`Error fetching allocations for employee ${employee.id}:`, allocError)
-                return {
-                  ...employee,
-                  companies: [],
-                }
-              }
-
-              // Format the allocations data
-              const companies = (allocations || []).map((allocation) => ({
-                company_id: allocation.company_id,
-                company_name: allocation.companies?.name || "Unknown Company",
-                branch_id: allocation.branch_id,
-                branch_name: allocation.branches?.name || "Unknown Branch",
-                location: allocation.branches?.location,
-                percentage: allocation.allocation_percentage,
-                is_primary: allocation.is_primary,
-              }))
-
-              return {
-                ...employee,
-                companies,
-              }
-            }),
-          )
-
-          processEmployees(employeesWithDetails)
+        if (basicError) {
+          console.error("Error fetching basic employee data:", basicError)
+          setEmployees([])
+          setFetchingEmployees(false)
           return
         }
-      } catch (directQueryError) {
-        console.error("Error with direct query approach:", directQueryError)
-      }
 
-      // Fallback: Get basic employee data if the detailed query fails
-      console.log("Falling back to basic employee query")
-      const { data: basicEmployees, error: basicError } = await supabase
-        .from("employees")
-        .select("id, employee_id, first_name, last_name, job_title")
-        .eq("status", "active")
-
-      if (basicError) {
-        console.error("Error fetching basic employee data:", basicError)
-        setEmployees([])
-        setFetchingEmployees(false)
+        processEmployees(basicEmployees || [])
         return
       }
 
-      if (!basicEmployees || basicEmployees.length === 0) {
-        console.log("No employees found")
-        setEmployees([])
-        setFetchingEmployees(false)
-        return
+      // Process employees with their company allocations
+      const processedEmployees = employees.map((emp) => {
+        // Map company allocations
+        const companies =
+          emp.employee_companies?.map((ec) => ({
+            company_id: ec.company_id,
+            company_name: ec.companies?.name || "Unknown Company",
+            branch_id: ec.branch_id,
+            branch_name: ec.branches?.name || "Unknown Branch",
+            allocation_percentage: ec.allocation_percentage,
+            is_primary: ec.is_primary,
+          })) || []
+
+        return {
+          ...emp,
+          companies,
+          full_name: `${emp.first_name} ${emp.last_name}`,
+        }
+      })
+
+      // Filter for sales employees
+      const salesEmployees = processedEmployees.filter((emp) => {
+        const isSalesDept = emp.department_id === 3 // Assuming 3 is sales dept
+        const hasSalesTitle =
+          (emp.job_title || "").toLowerCase().includes("sales") ||
+          (emp.job_title || "").toLowerCase().includes("account") ||
+          (emp.job_title || "").toLowerCase().includes("business development")
+
+        return isSalesDept || hasSalesTitle
+      })
+
+      if (salesEmployees.length > 0) {
+        setEmployees(salesEmployees)
+      } else {
+        // If no sales employees found, use all employees
+        setEmployees(processedEmployees)
       }
 
-      processEmployees(basicEmployees)
+      setFetchingEmployees(false)
     } catch (error) {
       console.error("Exception fetching employees:", error)
       setEmployees([])
@@ -174,52 +146,24 @@ export function AssignLeadDialog({ lead, open, onOpenChange, onComplete }: Assig
 
   // Process and format employee data
   const processEmployees = (employeeData: any[]) => {
-    console.log(`Processing ${employeeData.length} employees`)
+    console.log(`Found ${employeeData.length} employees`)
 
     // Format employees for display
-    const formattedEmployees = employeeData.map((emp) => {
-      // Ensure we have the basic employee data
-      const employee = {
-        id: emp.id,
-        employee_id: emp.employee_id || "",
-        first_name: emp.first_name,
-        last_name: emp.last_name,
-        full_name: `${emp.first_name} ${emp.last_name}`,
-        job_title: emp.job_title || "",
-        companies: emp.companies || [],
-      }
-
-      // Log employee allocations for debugging
-      if (employee.companies && employee.companies.length > 0) {
-        console.log(`Employee ${employee.full_name} has ${employee.companies.length} company allocations`)
-      }
-
-      return employee
-    })
+    const formattedEmployees = employeeData.map((emp) => ({
+      id: emp.id,
+      employee_id: emp.employee_id || "",
+      first_name: emp.first_name,
+      last_name: emp.last_name,
+      full_name: `${emp.first_name} ${emp.last_name}`,
+      job_title: emp.job_title || "",
+    }))
 
     // Sort by name
     const sortedEmployees = formattedEmployees.sort((a, b) => {
       return a.full_name.localeCompare(b.full_name)
     })
 
-    // Filter to prioritize employees with matching company/branch to the lead
-    const prioritizedEmployees = sortedEmployees.sort((a, b) => {
-      const aHasMatchingCompany =
-        a.companies?.some(
-          (c) => c.company_name === lead.company_name || (lead.branch_name && c.branch_name === lead.branch_name),
-        ) || false
-
-      const bHasMatchingCompany =
-        b.companies?.some(
-          (c) => c.company_name === lead.company_name || (lead.branch_name && c.branch_name === lead.branch_name),
-        ) || false
-
-      if (aHasMatchingCompany && !bHasMatchingCompany) return -1
-      if (!aHasMatchingCompany && bHasMatchingCompany) return 1
-      return 0
-    })
-
-    setEmployees(prioritizedEmployees)
+    setEmployees(sortedEmployees)
     setFetchingEmployees(false)
   }
 
@@ -328,32 +272,26 @@ export function AssignLeadDialog({ lead, open, onOpenChange, onComplete }: Assig
                     employees.map((employee) => (
                       <SelectItem key={employee.id} value={employee.id.toString()} className="py-2">
                         <div className="flex flex-col">
-                          <span className="font-medium">{employee.full_name}</span>
+                          <span>{employee.full_name}</span>
                           {employee.job_title && (
                             <span className="text-xs text-muted-foreground">{employee.job_title}</span>
                           )}
-                          {employee.companies && employee.companies.length > 0 ? (
+                          {employee.companies && employee.companies.length > 0 && (
                             <div className="mt-1 space-y-0.5">
                               {employee.companies.map((allocation, idx) => (
                                 <div key={idx} className="text-xs flex items-center gap-1">
                                   <Building className="h-3 w-3 text-muted-foreground" />
                                   <span
-                                    className={`${allocation.is_primary ? "font-medium" : ""} ${
-                                      allocation.company_name === lead.company_name
-                                        ? "text-green-600"
-                                        : "text-muted-foreground"
-                                    }`}
+                                    className={`${allocation.is_primary ? "font-medium text-primary" : "text-muted-foreground"}`}
                                   >
                                     {allocation.company_name}
                                     {allocation.branch_name && ` - ${allocation.branch_name}`}
-                                    {allocation.percentage && ` (${allocation.percentage}%)`}
+                                    {allocation.allocation_percentage && ` (${allocation.allocation_percentage}%)`}
                                     {allocation.is_primary && " (Primary)"}
                                   </span>
                                 </div>
                               ))}
                             </div>
-                          ) : (
-                            <div className="mt-1 text-xs text-amber-600">No company allocations</div>
                           )}
                         </div>
                       </SelectItem>
