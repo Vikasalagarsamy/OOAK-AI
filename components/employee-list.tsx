@@ -9,9 +9,11 @@ import { getEmployees } from "@/actions/employee-actions"
 import type { Employee } from "@/types/employee"
 import Link from "next/link"
 import { DeleteEmployeeDialog } from "./delete-employee-dialog"
+import { BatchDeleteEmployeesDialog } from "./batch-delete-employees-dialog"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useToast } from "@/components/ui/use-toast"
 import { useRouter } from "next/navigation"
+import { Checkbox } from "@/components/ui/checkbox"
 
 export function EmployeeList() {
   const [employees, setEmployees] = useState<Employee[]>([])
@@ -22,6 +24,8 @@ export function EmployeeList() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [employeeToDelete, setEmployeeToDelete] = useState<Employee | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [selectedEmployees, setSelectedEmployees] = useState<Employee[]>([])
+  const [isBatchDeleteDialogOpen, setIsBatchDeleteDialogOpen] = useState(false)
   const { toast } = useToast()
   const router = useRouter()
 
@@ -106,26 +110,89 @@ export function EmployeeList() {
     return sortDirection === "asc" ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
   }
 
+  // Handle selecting/deselecting a single employee
+  const handleSelectEmployee = (employee: Employee, isChecked: boolean) => {
+    if (isChecked) {
+      setSelectedEmployees((prev) => [...prev, employee])
+    } else {
+      setSelectedEmployees((prev) => prev.filter((emp) => emp.id !== employee.id))
+    }
+  }
+
+  // Handle selecting/deselecting all employees
+  const handleSelectAllEmployees = (isChecked: boolean) => {
+    if (isChecked) {
+      setSelectedEmployees(filteredEmployees)
+    } else {
+      setSelectedEmployees([])
+    }
+  }
+
+  // Check if an employee is selected
+  const isEmployeeSelected = (employeeId: string | number) => {
+    return selectedEmployees.some((emp) => emp.id === employeeId)
+  }
+
+  // Handle batch delete
+  const handleBatchDelete = () => {
+    if (selectedEmployees.length > 0) {
+      setIsBatchDeleteDialogOpen(true)
+    } else {
+      toast({
+        title: "No employees selected",
+        description: "Please select at least one employee to delete.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Handle batch delete completion
+  const handleBatchDeleteComplete = (deletedIds: string[]) => {
+    // Remove deleted employees from the state
+    setEmployees((currentEmployees) => currentEmployees.filter((emp) => !deletedIds.includes(emp.id.toString())))
+
+    // Clear selection
+    setSelectedEmployees([])
+
+    // Refresh the data
+    router.refresh()
+  }
+
   if (isLoading) {
     return <div className="flex justify-center items-center h-64">Loading employees...</div>
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <Search className="h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Search employees..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="max-w-sm"
-        />
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Search className="h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search employees..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="max-w-sm"
+          />
+        </div>
+
+        {selectedEmployees.length > 0 && (
+          <Button variant="destructive" onClick={handleBatchDelete}>
+            Delete Selected ({selectedEmployees.length})
+          </Button>
+        )}
       </div>
 
       <div className="rounded-md border">
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-[50px]">
+                <Checkbox
+                  checked={filteredEmployees.length > 0 && selectedEmployees.length === filteredEmployees.length}
+                  onCheckedChange={handleSelectAllEmployees}
+                  aria-label="Select all employees"
+                />
+              </TableHead>
               <TableHead className="cursor-pointer" onClick={() => handleSort("employee_id")}>
                 <div className="flex items-center gap-1">
                   Employee ID
@@ -149,13 +216,20 @@ export function EmployeeList() {
           <TableBody>
             {filteredEmployees.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                   No employees found
                 </TableCell>
               </TableRow>
             ) : (
               filteredEmployees.map((employee) => (
-                <TableRow key={employee.id}>
+                <TableRow key={employee.id} className={isEmployeeSelected(employee.id) ? "bg-muted/50" : ""}>
+                  <TableCell>
+                    <Checkbox
+                      checked={isEmployeeSelected(employee.id)}
+                      onCheckedChange={(checked) => handleSelectEmployee(employee, !!checked)}
+                      aria-label={`Select ${employee.first_name} ${employee.last_name}`}
+                    />
+                  </TableCell>
                   <TableCell className="font-medium">{employee.employee_id}</TableCell>
                   <TableCell>
                     <Link href={`/people/employees/${employee.id}`} className="hover:underline">
@@ -238,6 +312,13 @@ export function EmployeeList() {
         onOpenChange={setIsDeleteDialogOpen}
         employee={employeeToDelete}
         onDelete={handleEmployeeDeleted}
+      />
+
+      <BatchDeleteEmployeesDialog
+        open={isBatchDeleteDialogOpen}
+        onOpenChange={setIsBatchDeleteDialogOpen}
+        selectedEmployees={selectedEmployees}
+        onEmployeesDeleted={handleBatchDeleteComplete}
       />
     </div>
   )

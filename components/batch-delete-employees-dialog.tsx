@@ -43,7 +43,7 @@ export function BatchDeleteEmployeesDialog({
 
     try {
       // Get the IDs of the selected employees
-      const employeeIds = selectedEmployees.map((employee) => employee.id)
+      const employeeIds = selectedEmployees.map((employee) => employee.id.toString())
 
       // Call the batch delete function
       const { data, error } = await supabase.rpc("batch_delete_employees", {
