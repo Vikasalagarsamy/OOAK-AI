@@ -2,7 +2,6 @@
 
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
-import { redirect } from "next/navigation"
 import type { Employee, Department, Designation, Company, Branch, EmployeeCompany } from "@/types/employee"
 
 // Add employee (alias for createEmployee for backward compatibility)
@@ -195,7 +194,7 @@ export async function createEmployee(formData: FormData): Promise<void> {
   }
 
   revalidatePath("/people/employees")
-  redirect("/people/employees")
+  return { success: true }
 }
 
 // Update an employee

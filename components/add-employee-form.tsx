@@ -188,15 +188,17 @@ export function AddEmployeeForm({
         }
       })
 
-      await addEmployee(formData)
+      const result = await addEmployee(formData)
 
-      toast({
-        title: "Employee added successfully",
-        description: `${data.first_name} ${data.last_name} has been added to the system.`,
-        variant: "default",
-      })
+      if (result?.success) {
+        toast({
+          title: "Employee added successfully",
+          description: `${data.first_name} ${data.last_name} has been added to the system.`,
+          variant: "default",
+        })
 
-      router.push("/people/employees")
+        router.push("/people/employees")
+      }
     } catch (error) {
       console.error("Error adding employee:", error)
       toast({
