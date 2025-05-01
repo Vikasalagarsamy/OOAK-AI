@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Eye, Plus, Search, RefreshCw, Database, Pencil, Trash2 } from "lucide-react"
+import { Eye, Plus, Search, RefreshCw, Database, Pencil, Trash2, Trash } from "lucide-react"
 import { AddClientDialog } from "./add-client-dialog"
 import { EditClientDialog } from "./edit-client-dialog"
 import { DeleteClientDialog } from "./delete-client-dialog"
@@ -14,6 +14,8 @@ import { ViewClientDialog } from "./view-client-dialog"
 import type { Client } from "@/types/client"
 import { supabase } from "@/lib/supabase"
 import { useToast } from "@/components/ui/use-toast"
+import { Checkbox } from "@/components/ui/checkbox"
+import { BatchDeleteClientsDialog } from "./batch-delete-clients-dialog"
 
 export function ClientList() {
   const [clients, setClients] = useState<Client[]>([])
@@ -26,6 +28,8 @@ export function ClientList() {
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)
   const [tableExists, setTableExists] = useState(true)
   const { toast } = useToast()
+  const [selectedClientIds, setSelectedClientIds] = useState<number[]>([])
+  const [batchDeleteDialogOpen, setBatchDeleteDialogOpen] = useState(false)
 
   // Check if the table exists by attempting to query it
   const checkTableExists = async () => {
@@ -260,6 +264,35 @@ export function ClientList() {
     }
   }
 
+  const handleSelectClient = (clientId: number, isChecked: boolean) => {
+    if (isChecked) {
+      setSelectedClientIds([...selectedClientIds, clientId])
+    } else {
+      setSelectedClientIds(selectedClientIds.filter((id) => id !== clientId))
+    }
+  }
+
+  const handleSelectAll = (isChecked: boolean) => {
+    if (isChecked) {
+      setSelectedClientIds(filteredClients.map((client) => client.id))
+    } else {
+      setSelectedClientIds([])
+    }
+  }
+
+  const handleBatchDelete = () => {
+    if (selectedClientIds.length > 0) {
+      setBatchDeleteDialogOpen(true)
+    }
+  }
+
+  const handleBatchDeleteComplete = () => {
+    // Refresh the client list
+    fetchClients()
+    // Clear selections
+    setSelectedClientIds([])
+  }
+
   if (!tableExists) {
     return (
       <div className="flex flex-col items-center justify-center p-8 border rounded-lg">
@@ -290,6 +323,12 @@ export function ClientList() {
             />
           </div>
           <div className="flex items-center gap-2 w-full sm:w-auto">
+            {selectedClientIds.length > 0 && (
+              <Button variant="destructive" size="sm" onClick={handleBatchDelete} className="h-9">
+                <Trash className="h-4 w-4 mr-2" />
+                Delete Selected ({selectedClientIds.length})
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={fetchClients} disabled={loading} className="h-9">
               <RefreshCw className="h-4 w-4 mr-2" />
               Refresh
@@ -305,6 +344,14 @@ export function ClientList() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-[40px] text-center">
+                  <Checkbox
+                    checked={filteredClients.length > 0 && selectedClientIds.length === filteredClients.length}
+                    onCheckedChange={handleSelectAll}
+                    aria-label="Select all clients"
+                    disabled={loading || filteredClients.length === 0}
+                  />
+                </TableHead>
                 <TableHead>Client Code</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Company</TableHead>
@@ -319,19 +366,26 @@ export function ClientList() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8">
+                  <TableCell colSpan={10} className="text-center py-8">
                     Loading clients...
                   </TableCell>
                 </TableRow>
               ) : filteredClients.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8">
+                  <TableCell colSpan={10} className="text-center py-8">
                     {searchTerm ? "No clients found matching your search." : "No clients found. Add your first client."}
                   </TableCell>
                 </TableRow>
               ) : (
                 filteredClients.map((client) => (
                   <TableRow key={client.id}>
+                    <TableCell className="text-center">
+                      <Checkbox
+                        checked={selectedClientIds.includes(client.id)}
+                        onCheckedChange={(checked) => handleSelectClient(client.id, checked === true)}
+                        aria-label={`Select client ${client.name}`}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium">{client.client_code}</TableCell>
                     <TableCell>{client.name}</TableCell>
                     <TableCell>{client.company_name}</TableCell>
@@ -451,6 +505,12 @@ export function ClientList() {
             />
           </>
         )}
+        <BatchDeleteClientsDialog
+          open={batchDeleteDialogOpen}
+          onOpenChange={setBatchDeleteDialogOpen}
+          selectedClients={clients.filter((client) => selectedClientIds.includes(client.id))}
+          onClientsDeleted={handleBatchDeleteComplete}
+        />
       </div>
     </TooltipProvider>
   )
