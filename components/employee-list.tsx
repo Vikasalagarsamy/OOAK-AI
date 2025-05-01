@@ -1,259 +1,283 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import Link from "next/link"
-import { Eye, Pencil, Trash2 } from "lucide-react"
-import { supabase } from "@/lib/supabase"
-import { useToast } from "@/components/ui/use-toast"
-import { Button } from "@/components/ui/button"
+import { useState } from "react"
+import type { Employee } from "@/types/employee"
+import { Card, CardContent } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { DeleteEmployeeDialog } from "@/components/delete-employee-dialog"
-import { BatchDeleteEmployeesDialog } from "@/components/batch-delete-employees-dialog"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Eye, Pencil, Trash2, Search, X } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import type { Employee } from "@/types/employee"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
-export function EmployeeList() {
-  const [employees, setEmployees] = useState<Employee[]>([])
-  const [loading, setLoading] = useState(true)
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [employeeToDelete, setEmployeeToDelete] = useState<Employee | null>(null)
-  const [selectedEmployees, setSelectedEmployees] = useState<Employee[]>([])
-  const [batchDeleteDialogOpen, setBatchDeleteDialogOpen] = useState(false)
-  const [selectAll, setSelectAll] = useState(false)
-  const { toast } = useToast()
+interface EmployeeListProps {
+  employees: Employee[]
+  loading?: boolean
+  onEditEmployee: (id: number) => void
+  onDeleteEmployee: (id: number) => void
+  onViewEmployee: (id: number) => void
+  selectedEmployees: number[]
+  setSelectedEmployees: (ids: number[]) => void
+}
 
-  useEffect(() => {
-    fetchEmployees()
-  }, [])
+export default function EmployeeList({
+  employees,
+  loading,
+  onEditEmployee,
+  onDeleteEmployee,
+  onViewEmployee,
+  selectedEmployees,
+  setSelectedEmployees,
+}: EmployeeListProps) {
+  const [searchTerm, setSearchTerm] = useState("")
+  const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
-  useEffect(() => {
-    // Update selectAll state based on whether all employees are selected
-    if (employees.length > 0 && selectedEmployees.length === employees.length) {
-      setSelectAll(true)
-    } else {
-      setSelectAll(false)
-    }
-  }, [selectedEmployees, employees])
+  // Safely access properties with fallbacks
+  const safeEmployees = employees.map((employee) => ({
+    id: employee?.id || 0,
+    employee_id: employee?.employee_id || "N/A",
+    first_name: employee?.first_name || "",
+    last_name: employee?.last_name || "",
+    email: employee?.email || "",
+    job_title: employee?.job_title || "N/A",
+    department: employee?.department || employee?.departments?.name || "Not Assigned",
+    status: employee?.status || "Unknown",
+    // Don't include location as it might not exist
+  }))
 
-  const fetchEmployees = async () => {
+  const filteredEmployees = safeEmployees.filter(
+    (employee) =>
+      employee.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      employee.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (employee.email && employee.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      employee.employee_id.toLowerCase().includes(searchTerm.toLowerCase()),
+  )
+
+  const handleDelete = async () => {
+    if (!deletingId) return
+
+    setIsDeleting(true)
     try {
-      setLoading(true)
-      const { data, error } = await supabase
-        .from("employees")
-        .select(`
-          *,
-          departments(name),
-          companies:primary_company_id(name)
-        `)
-        .order("created_at", { ascending: false })
-
-      if (error) {
-        throw error
-      }
-
-      // Transform the data to include department and company names
-      const transformedData =
-        data?.map((employee) => ({
-          ...employee,
-          department: employee.departments?.name || "Not Assigned",
-          primary_company: employee.companies?.name || "Not Assigned",
-        })) || []
-
-      setEmployees(transformedData)
+      onDeleteEmployee(deletingId)
     } catch (error) {
-      console.error("Error fetching employees:", error)
-      toast({
-        title: "Error",
-        description: "Failed to fetch employees. Please try again.",
-        variant: "destructive",
-      })
+      console.error("Error deleting employee:", error)
     } finally {
-      setLoading(false)
+      setIsDeleting(false)
+      setDeletingId(null)
     }
   }
 
-  const handleDeleteEmployee = (employee: Employee) => {
-    setEmployeeToDelete(employee)
-    setDeleteDialogOpen(true)
-  }
-
-  const handleEmployeeDeleted = (employeeId: string) => {
-    setEmployees((prevEmployees) => prevEmployees.filter((emp) => emp.id.toString() !== employeeId))
-    setSelectedEmployees((prevSelected) => prevSelected.filter((emp) => emp.id.toString() !== employeeId))
-  }
-
-  const handleBatchEmployeesDeleted = (deletedIds: string[]) => {
-    setEmployees((prevEmployees) => prevEmployees.filter((emp) => !deletedIds.includes(emp.id.toString())))
-    setSelectedEmployees([])
-  }
-
-  const toggleEmployeeSelection = (employee: Employee) => {
+  const toggleEmployeeSelection = (employeeId: number) => {
     setSelectedEmployees((prevSelected) => {
-      const isSelected = prevSelected.some((emp) => emp.id === employee.id)
+      const isSelected = prevSelected.includes(employeeId)
       if (isSelected) {
-        return prevSelected.filter((emp) => emp.id !== employee.id)
+        return prevSelected.filter((id) => id !== employeeId)
       } else {
-        return [...prevSelected, employee]
+        return [...prevSelected, employeeId]
       }
     })
   }
 
-  const toggleSelectAll = () => {
-    if (selectAll) {
-      setSelectedEmployees([])
-    } else {
-      setSelectedEmployees([...employees])
+  const getStatusBadge = (status: string) => {
+    if (!status) return <Badge variant="outline">Unknown</Badge>
+
+    switch (status.toLowerCase()) {
+      case "active":
+        return <Badge className="bg-green-500">Active</Badge>
+      case "inactive":
+        return <Badge variant="secondary">Inactive</Badge>
+      case "on_leave":
+        return (
+          <Badge variant="outline" className="text-amber-500 border-amber-500">
+            On Leave
+          </Badge>
+        )
+      case "terminated":
+        return <Badge variant="destructive">Terminated</Badge>
+      default:
+        return <Badge variant="outline">{status}</Badge>
     }
-    setSelectAll(!selectAll)
+  }
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="p-6 text-center">
+          <p className="text-muted-foreground">Loading employees...</p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (employees.length === 0) {
+    return (
+      <Card>
+        <CardContent className="p-6 text-center">
+          <p className="text-muted-foreground">No employees added yet. Add your first employee to get started.</p>
+        </CardContent>
+      </Card>
+    )
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Employees</h2>
-        <div className="flex gap-2">
-          {selectedEmployees.length > 0 && (
-            <Button variant="destructive" size="sm" onClick={() => setBatchDeleteDialogOpen(true)}>
-              Delete Selected ({selectedEmployees.length})
+      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+        <div className="relative w-full sm:w-auto">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search employees..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-9 w-full sm:w-[300px]"
+          />
+          {searchTerm && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute right-0 top-0 h-9 w-9"
+              onClick={() => setSearchTerm("")}
+            >
+              <X className="h-4 w-4" />
             </Button>
           )}
-          <Link href="/people/employees/add">
-            <Button>Add Employee</Button>
-          </Link>
         </div>
       </div>
 
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[50px]">
-                <Checkbox checked={selectAll} onCheckedChange={toggleSelectAll} aria-label="Select all employees" />
-              </TableHead>
-              <TableHead>Employee ID</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Job Title</TableHead>
-              <TableHead>Department</TableHead>
-              <TableHead>Primary Company</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-center">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading ? (
-              <TableRow>
-                <TableCell colSpan={9} className="text-center py-4">
-                  Loading employees...
-                </TableCell>
-              </TableRow>
-            ) : employees.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={9} className="text-center py-4">
-                  No employees found. Add your first employee to get started.
-                </TableCell>
-              </TableRow>
-            ) : (
-              employees.map((employee) => (
-                <TableRow key={employee.id}>
-                  <TableCell>
+      {filteredEmployees.length === 0 ? (
+        <Card>
+          <CardContent className="p-6 text-center">
+            <p className="text-muted-foreground">No employees found matching your search.</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[50px]">
                     <Checkbox
-                      checked={selectedEmployees.some((emp) => emp.id === employee.id)}
-                      onCheckedChange={() => toggleEmployeeSelection(employee)}
-                      aria-label={`Select ${employee.first_name} ${employee.last_name}`}
+                      checked={selectedEmployees.length === filteredEmployees.length && filteredEmployees.length > 0}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setSelectedEmployees(filteredEmployees.map((emp) => emp.id))
+                        } else {
+                          setSelectedEmployees([])
+                        }
+                      }}
+                      aria-label="Select all employees"
                     />
-                  </TableCell>
-                  <TableCell>{employee.employee_id}</TableCell>
-                  <TableCell>
-                    {employee.first_name} {employee.last_name}
-                  </TableCell>
-                  <TableCell className="max-w-[200px] truncate" title={employee.email || ""}>
-                    {employee.email}
-                  </TableCell>
-                  <TableCell>{employee.job_title}</TableCell>
-                  <TableCell>{employee.department}</TableCell>
-                  <TableCell>{employee.primary_company}</TableCell>
-                  <TableCell>
-                    <Badge variant={employee.status === "Active" ? "default" : "secondary"}>{employee.status}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center justify-center space-x-2">
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Link href={`/people/employees/${employee.id}`}>
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
-                                <Eye className="h-4 w-4 text-blue-600" />
-                                <span className="sr-only">View employee</span>
-                              </Button>
-                            </Link>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>View employee details</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Link href={`/people/employees/${employee.id}/edit`}>
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
-                                <Pencil className="h-4 w-4 text-green-600" />
-                                <span className="sr-only">Edit employee</span>
-                              </Button>
-                            </Link>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Edit employee information</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={() => handleDeleteEmployee(employee)}
-                            >
-                              <Trash2 className="h-4 w-4 text-red-600" />
-                              <span className="sr-only">Delete employee</span>
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Delete employee</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </div>
-                  </TableCell>
+                  </TableHead>
+                  <TableHead>Employee ID</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Job Title</TableHead>
+                  <TableHead>Department</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+              </TableHeader>
+              <TableBody>
+                {filteredEmployees.map((employee) => (
+                  <TableRow key={employee.id}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedEmployees.includes(employee.id)}
+                        onCheckedChange={() => toggleEmployeeSelection(employee.id)}
+                        aria-label={`Select ${employee.first_name} ${employee.last_name}`}
+                      />
+                    </TableCell>
+                    <TableCell>{employee.employee_id}</TableCell>
+                    <TableCell className="font-medium">
+                      {employee.first_name} {employee.last_name}
+                    </TableCell>
+                    <TableCell className="max-w-[200px] truncate" title={employee.email || ""}>
+                      {employee.email}
+                    </TableCell>
+                    <TableCell>{employee.job_title}</TableCell>
+                    <TableCell>{employee.department}</TableCell>
+                    <TableCell>{getStatusBadge(employee.status)}</TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button variant="ghost" size="icon" onClick={() => onViewEmployee(employee.id)}>
+                                <Eye className="h-4 w-4 text-blue-600" />
+                                <span className="sr-only">View</span>
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>View employee details</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
 
-      {employeeToDelete && (
-        <DeleteEmployeeDialog
-          open={deleteDialogOpen}
-          onOpenChange={setDeleteDialogOpen}
-          employee={employeeToDelete}
-          onEmployeeDeleted={handleEmployeeDeleted}
-        />
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button variant="ghost" size="icon" onClick={() => onEditEmployee(employee.id)}>
+                                <Pencil className="h-4 w-4 text-green-600" />
+                                <span className="sr-only">Edit</span>
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Edit employee information</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button variant="ghost" size="icon" onClick={() => setDeletingId(employee.id)}>
+                                <Trash2 className="h-4 w-4 text-red-600" />
+                                <span className="sr-only">Delete</span>
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Delete employee</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       )}
 
-      <BatchDeleteEmployeesDialog
-        open={batchDeleteDialogOpen}
-        onOpenChange={setBatchDeleteDialogOpen}
-        selectedEmployees={selectedEmployees}
-        onEmployeesDeleted={handleBatchEmployeesDeleted}
-      />
+      <AlertDialog open={!!deletingId} onOpenChange={(open) => !open && setDeletingId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the employee.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} disabled={isDeleting}>
+              {isDeleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

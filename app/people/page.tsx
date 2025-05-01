@@ -1,11 +1,75 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { PeopleSubmenu } from "@/components/people/people-submenu"
+"use client"
+
+import { useState, useEffect } from "react"
 import Link from "next/link"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Users, Building, Briefcase } from "lucide-react"
+import { Users, Building2, Briefcase } from "lucide-react"
+import { PeopleSubmenu } from "@/components/people/people-submenu"
+import { getCurrentUser, checkPermissions } from "@/lib/permission-utils"
+import { useToast } from "@/components/ui/use-toast"
 
 export default function PeoplePage() {
+  const [permissions, setPermissions] = useState({
+    employees: true,
+    departments: true,
+    designations: true,
+  })
+  const [loading, setLoading] = useState(true)
+  const { toast } = useToast()
+
+  useEffect(() => {
+    async function loadPermissions() {
+      try {
+        const user = await getCurrentUser()
+
+        if (!user) {
+          setPermissions({
+            employees: false,
+            departments: false,
+            designations: false,
+          })
+          setLoading(false)
+          return
+        }
+
+        const permissionResults = await checkPermissions(user.id, [
+          { path: "people.employees" },
+          { path: "people.departments" },
+          { path: "people.designations" },
+        ])
+
+        setPermissions({
+          employees: permissionResults["people.employees"],
+          departments: permissionResults["people.departments"],
+          designations: permissionResults["people.designations"],
+        })
+      } catch (error) {
+        console.error("Error loading permissions:", error)
+        toast({
+          title: "Error",
+          description: "Failed to load permissions. Please try again.",
+          variant: "destructive",
+        })
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadPermissions()
+  }, [toast])
+
+  if (loading) {
+    return (
+      <div className="container mx-auto py-6 space-y-6">
+        <div className="flex flex-col gap-2">
+          <h1 className="text-3xl font-bold tracking-tight">People Management</h1>
+          <p className="text-muted-foreground">Loading permissions...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="container mx-auto py-6 space-y-6">
       <div className="flex flex-col gap-2">
@@ -15,83 +79,68 @@ export default function PeoplePage() {
 
       <PeopleSubmenu />
 
-      <Tabs defaultValue="employees">
-        <TabsList>
-          <TabsTrigger value="employees">Employees</TabsTrigger>
-          <TabsTrigger value="departments">Departments</TabsTrigger>
-          <TabsTrigger value="designations">Designations</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="employees" className="space-y-4">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        {permissions.employees && (
           <Card>
-            <CardHeader>
-              <CardTitle>Employees</CardTitle>
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center">
+                <Users className="mr-2 h-5 w-5" />
+                Employees
+              </CardTitle>
               <CardDescription>Manage your organization's employees</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="flex justify-end mb-4">
-                <Link href="/people/employees">
-                  <Button>
-                    <Users className="mr-2 h-4 w-4" />
-                    View All Employees
-                  </Button>
-                </Link>
-              </div>
-              <p>
-                Employees can be assigned to multiple companies and branches with specific work allocation percentages.
-                Each employee has a primary company and home branch, but can undertake tasks from different branches and
-                companies.
+              <p className="mb-4 text-sm">
+                Add, edit, and manage employee information, including personal details, contact information, and company
+                allocations.
               </p>
+              <Link href="/people/employees">
+                <Button>Manage Employees</Button>
+              </Link>
             </CardContent>
           </Card>
-        </TabsContent>
+        )}
 
-        <TabsContent value="departments" className="space-y-4">
+        {permissions.departments && (
           <Card>
-            <CardHeader>
-              <CardTitle>Departments</CardTitle>
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center">
+                <Building2 className="mr-2 h-5 w-5" />
+                Departments
+              </CardTitle>
               <CardDescription>Manage your organization's departments</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="flex justify-end mb-4">
-                <Link href="/people/departments">
-                  <Button>
-                    <Building className="mr-2 h-4 w-4" />
-                    View All Departments
-                  </Button>
-                </Link>
-              </div>
-              <p>
-                Departments help organize employees by their functional areas within the organization. Each department
-                can have multiple employees and can span across different companies and branches.
+              <p className="mb-4 text-sm">
+                Create and manage departments within your organization to better organize your workforce.
               </p>
+              <Link href="/people/departments">
+                <Button>Manage Departments</Button>
+              </Link>
             </CardContent>
           </Card>
-        </TabsContent>
+        )}
 
-        <TabsContent value="designations" className="space-y-4">
+        {permissions.designations && (
           <Card>
-            <CardHeader>
-              <CardTitle>Designations</CardTitle>
-              <CardDescription>Manage your organization's job designations</CardDescription>
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center">
+                <Briefcase className="mr-2 h-5 w-5" />
+                Designations
+              </CardTitle>
+              <CardDescription>Manage job designations</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="flex justify-end mb-4">
-                <Link href="/people/designations">
-                  <Button>
-                    <Briefcase className="mr-2 h-4 w-4" />
-                    View All Designations
-                  </Button>
-                </Link>
-              </div>
-              <p>
-                Designations define the roles and responsibilities of employees within the organization. Each
-                designation can be associated with specific departments and have different levels of authority.
+              <p className="mb-4 text-sm">
+                Define and manage job designations and roles within your organization's departments.
               </p>
+              <Link href="/people/designations">
+                <Button>Manage Designations</Button>
+              </Link>
             </CardContent>
           </Card>
-        </TabsContent>
-      </Tabs>
+        )}
+      </div>
     </div>
   )
 }

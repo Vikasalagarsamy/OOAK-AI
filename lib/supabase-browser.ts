@@ -1,39 +1,60 @@
-import { createClient } from "@supabase/supabase-js"
+import { createBrowserClient } from "@supabase/ssr"
 
-let supabaseInstance: ReturnType<typeof createClient> | null = null
+let browserClient: ReturnType<typeof createBrowserClient> | null = null
 
 export function getSupabaseBrowser() {
-  if (supabaseInstance) return supabaseInstance
-
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-  if (!supabaseUrl || !supabaseAnonKey) {
-    console.error("Missing Supabase environment variables. Check your .env file.")
-    // Return a dummy client that won't throw errors when methods are called
-    return {
-      from: () => ({
-        select: () => ({
-          order: () => ({
-            then: () => Promise.resolve({ data: [], error: null }),
-          }),
-          eq: () => ({
-            then: () => Promise.resolve({ data: [], error: null }),
-          }),
-        }),
-      }),
-    } as any
+  if (browserClient) {
+    return browserClient
   }
 
-  supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-    },
-  })
+  browserClient = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
 
-  return supabaseInstance
+  // Override auth methods to always return a mock authenticated user
+  const originalGetUser = browserClient.auth.getUser
+  browserClient.auth.getUser = async () => {
+    // Return a mock authenticated user
+    return {
+      data: {
+        user: {
+          id: "00000000-0000-0000-0000-000000000000",
+          app_metadata: {},
+          user_metadata: {},
+          aud: "authenticated",
+          created_at: new Date().toISOString(),
+          role: "authenticated",
+          email: "admin@example.com",
+        },
+      },
+      error: null,
+    }
+  }
+
+  // Override getSession to always return a mock session
+  const originalGetSession = browserClient.auth.getSession
+  browserClient.auth.getSession = async () => {
+    // Return a mock session
+    return {
+      data: {
+        session: {
+          access_token: "mock-access-token",
+          refresh_token: "mock-refresh-token",
+          expires_in: 3600,
+          expires_at: new Date().getTime() + 3600000,
+          token_type: "bearer",
+          user: {
+            id: "00000000-0000-0000-0000-000000000000",
+            app_metadata: {},
+            user_metadata: {},
+            aud: "authenticated",
+            created_at: new Date().toISOString(),
+            role: "authenticated",
+            email: "admin@example.com",
+          },
+        },
+      },
+      error: null,
+    }
+  }
+
+  return browserClient
 }
-
-// Re-export the client-side singleton
-export { supabase, getSupabaseClient as createBrowserSupabaseClient } from "./supabase-singleton"

@@ -18,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
+import { AddEmployeeAllocations, type AllocationFormData } from "@/components/add-employee-allocations"
 
 // Define the validation schema
 const employeeFormSchema = z.object({
@@ -64,10 +65,12 @@ export function AddEmployeeForm({
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>("")
   const [filteredBranches, setFilteredBranches] = useState<Branch[]>(branches)
   const [generatedId, setGeneratedId] = useState<string>("")
+  const [allocations, setAllocations] = useState<AllocationFormData[]>([])
   const [formProgress, setFormProgress] = useState({
     personal: false,
     address: false,
     employment: false,
+    allocations: false,
   })
 
   // Initialize form with default values
@@ -171,6 +174,13 @@ export function AddEmployeeForm({
     }))
   }, [])
 
+  useEffect(() => {
+    setFormProgress((prev) => ({
+      ...prev,
+      allocations: allocations.length > 0,
+    }))
+  }, [allocations])
+
   // Handle form submission
   const onSubmit = async (data: EmployeeFormValues) => {
     setIsSubmitting(true)
@@ -187,6 +197,9 @@ export function AddEmployeeForm({
           formData.append(key, String(value))
         }
       })
+
+      // Include allocations data
+      formData.append("allocations_json", JSON.stringify(allocations))
 
       const result = await addEmployee(formData)
 
@@ -208,6 +221,19 @@ export function AddEmployeeForm({
       })
       setIsSubmitting(false)
     }
+  }
+
+  // Add company allocations to form data
+  const addCompanyAllocationsToFormData = (formData: FormData, employeeId: string) => {
+    allocations.forEach((allocation, index) => {
+      formData.append(`allocations[${index}][employee_id]`, employeeId)
+      formData.append(`allocations[${index}][company_id]`, allocation.company_id.toString())
+      formData.append(`allocations[${index}][branch_id]`, allocation.branch_id.toString())
+      formData.append(`allocations[${index}][allocation_percentage]`, allocation.allocation_percentage.toString())
+      formData.append(`allocations[${index}][is_primary]`, allocation.is_primary.toString())
+    })
+
+    return formData
   }
 
   // Navigate between tabs
@@ -244,7 +270,7 @@ export function AddEmployeeForm({
           </CardHeader>
           <CardContent>
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="personal" className="flex items-center gap-2">
                   <User className="h-4 w-4" />
                   <span className="hidden sm:inline">Personal Info</span>
@@ -259,6 +285,11 @@ export function AddEmployeeForm({
                   <Briefcase className="h-4 w-4" />
                   <span className="hidden sm:inline">Employment</span>
                   {formProgress.employment && <Badge variant="success" className="ml-2 h-2 w-2 rounded-full p-0" />}
+                </TabsTrigger>
+                <TabsTrigger value="allocations" className="flex items-center gap-2">
+                  <Building className="h-4 w-4" />
+                  <span className="hidden sm:inline">Allocations</span>
+                  {formProgress.allocations && <Badge variant="success" className="ml-2 h-2 w-2 rounded-full p-0" />}
                 </TabsTrigger>
               </TabsList>
 
@@ -601,6 +632,39 @@ export function AddEmployeeForm({
                     type="button"
                     variant="outline"
                     onClick={() => navigateToTab("address")}
+                    className="flex items-center gap-2"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Previous
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="default"
+                    onClick={() => navigateToTab("allocations")}
+                    className="flex items-center gap-2"
+                  >
+                    Next
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </TabsContent>
+
+              {/* Company Allocations Tab */}
+              <TabsContent value="allocations" className="space-y-4 pt-4">
+                <AddEmployeeAllocations
+                  companies={companies}
+                  initialBranches={branches}
+                  allocations={allocations}
+                  setAllocations={setAllocations}
+                  primaryCompanyId={form.watch("primary_company_id")}
+                  primaryBranchId={form.watch("home_branch_id")}
+                />
+
+                <div className="flex justify-between space-x-2 pt-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => navigateToTab("employment")}
                     className="flex items-center gap-2"
                   >
                     <ChevronLeft className="h-4 w-4" />

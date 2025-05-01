@@ -15,8 +15,11 @@ import {
   getDesignations,
   getCompanies,
   getBranchesByCompany,
+  getEmployeeCompanies,
 } from "@/actions/employee-actions"
 import type { Employee, Department, Designation, Company, Branch } from "@/types/employee"
+import { EmployeeCompaniesManager } from "@/components/employee-companies-manager"
+import type { EmployeeCompany } from "@/types/employee-company"
 
 interface EditEmployeeFormProps {
   employee: Employee
@@ -33,15 +36,22 @@ export function EditEmployeeForm({ employee }: EditEmployeeFormProps) {
     employee.primary_company_id ? employee.primary_company_id.toString() : "",
   )
   const [isLoading, setIsLoading] = useState(true)
+  const [employeeCompanies, setEmployeeCompanies] = useState<EmployeeCompany[]>([])
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [deptData, desigData, compData] = await Promise.all([getDepartments(), getDesignations(), getCompanies()])
+        const [deptData, desigData, compData, empCompanies] = await Promise.all([
+          getDepartments(),
+          getDesignations(),
+          getCompanies(),
+          getEmployeeCompanies(employee.id.toString()),
+        ])
 
         setDepartments(deptData)
         setDesignations(desigData)
         setCompanies(compData)
+        setEmployeeCompanies(empCompanies)
 
         if (employee.primary_company_id) {
           const branchData = await getBranchesByCompany(employee.primary_company_id)
@@ -56,7 +66,7 @@ export function EditEmployeeForm({ employee }: EditEmployeeFormProps) {
     }
 
     fetchData()
-  }, [employee.primary_company_id])
+  }, [employee.primary_company_id, employee.id])
 
   useEffect(() => {
     const fetchBranches = async () => {
@@ -291,6 +301,22 @@ export function EditEmployeeForm({ employee }: EditEmployeeFormProps) {
                   <Input id="country" name="country" defaultValue={employee.country || ""} />
                 </div>
               </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="mt-6">
+          <CardContent className="pt-6">
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium">Company Allocations</h3>
+              <p className="text-sm text-muted-foreground">
+                Manage which companies this employee works for and their allocation percentage.
+              </p>
+
+              <EmployeeCompaniesManager
+                employeeId={employee.id.toString()}
+                employeeCompanies={employeeCompanies}
+                setEmployeeCompanies={setEmployeeCompanies}
+              />
             </div>
           </CardContent>
         </Card>

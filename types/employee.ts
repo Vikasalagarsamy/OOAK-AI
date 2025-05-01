@@ -1,8 +1,8 @@
 export interface Employee {
   id: number
-  employee_id: string
-  first_name: string
-  last_name: string
+  employee_id?: string
+  first_name?: string
+  last_name?: string
   email?: string
   phone?: string
   address?: string
@@ -10,24 +10,34 @@ export interface Employee {
   state?: string
   zip_code?: string
   country?: string
-  hire_date?: string
-  termination_date?: string
+  hire_date?: string | Date
+  termination_date?: string | Date | null
   job_title?: string
   department_id?: number
   designation_id?: number
   primary_company_id?: number
   home_branch_id?: number
-  status: string
-  created_at?: string
-  updated_at?: string
+  status?: string
+  created_at?: string | Date
+  updated_at?: string | Date
 
-  // Joined fields
-  department?: string
-  primary_company?: string
-
-  // For display purposes
+  // Nested relations
   departments?: { name: string }
+  designations?: { name: string }
   companies?: { name: string }
+  branches?: { name: string }
+
+  // Denormalized fields
+  department?: string
+  designation?: string
+  primary_company?: string
+  home_branch?: string
+
+  // This field might not exist in the database
+  location?: string
+
+  // Add any other properties that might be returned
+  [key: string]: any
 }
 
 export interface Department {

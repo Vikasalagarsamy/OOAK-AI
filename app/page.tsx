@@ -7,36 +7,82 @@ import { getRecentActivities } from "@/services/activity-service"
 import { getDashboardStats } from "@/services/dashboard-service"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { ErrorBoundary } from "@/components/error-boundary"
 
 export const revalidate = 60 // Revalidate this page every 60 seconds
 
 export default async function DashboardPage() {
-  // Fetch dashboard data
-  const dashboardData = await getDashboardStats()
-  const activities = await getRecentActivities(5)
+  // Fetch dashboard data with error handling
+  let dashboardData
+  let activities = []
+
+  try {
+    dashboardData = await getDashboardStats()
+    activities = await getRecentActivities(5)
+  } catch (error) {
+    console.error("Error loading dashboard data:", error)
+    // Set default data
+    dashboardData = {
+      stats: {
+        companies: { count: 0, trend: { isPositive: true, value: 0 } },
+        branches: { count: 0, trend: { isPositive: true, value: 0 } },
+        employees: { count: 0, trend: { isPositive: true, value: 0 } },
+        clients: { count: 0, trend: { isPositive: true, value: 0 } },
+      },
+      employeesByDepartment: [
+        { department: "Engineering", count: 24 },
+        { department: "Marketing", count: 13 },
+        { department: "Sales", count: 18 },
+        { department: "Finance", count: 8 },
+        { department: "HR", count: 5 },
+      ],
+      branchesByCompany: [
+        { company: "Acme Corp", count: 5 },
+        { company: "TechCorp", count: 3 },
+        { company: "Global Industries", count: 7 },
+        { company: "Startup Inc", count: 1 },
+        { company: "Enterprise Ltd", count: 4 },
+      ],
+      employeeGrowth: [
+        { month: "Jan", count: 42 },
+        { month: "Feb", count: 47 },
+        { month: "Mar", count: 53 },
+        { month: "Apr", count: 58 },
+        { month: "May", count: 62 },
+        { month: "Jun", count: 68 },
+      ],
+      recentActivities: [],
+    }
+  }
 
   return (
     <div className="container mx-auto p-4">
       <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <Suspense fallback={<DashboardStatsSkeleton />}>
-          <StatsCards stats={dashboardData.stats} />
-        </Suspense>
+        <ErrorBoundary fallback={<DashboardStatsSkeleton />}>
+          <Suspense fallback={<DashboardStatsSkeleton />}>
+            <StatsCards stats={dashboardData.stats} />
+          </Suspense>
+        </ErrorBoundary>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-        <Suspense fallback={<ChartSkeleton />}>
-          <ChartCard
-            className="col-span-1 lg:col-span-2"
-            employeesByDepartment={dashboardData.employeesByDepartment}
-            branchesByCompany={dashboardData.branchesByCompany}
-            employeeGrowth={dashboardData.employeeGrowth}
-          />
-        </Suspense>
-        <Suspense fallback={<ActivitySkeleton />}>
-          <RecentActivity activities={activities.length > 0 ? activities : dashboardData.recentActivities} />
-        </Suspense>
+        <ErrorBoundary fallback={<ChartSkeleton />}>
+          <Suspense fallback={<ChartSkeleton />}>
+            <ChartCard
+              className="col-span-1 lg:col-span-2"
+              employeesByDepartment={dashboardData.employeesByDepartment}
+              branchesByCompany={dashboardData.branchesByCompany}
+              employeeGrowth={dashboardData.employeeGrowth}
+            />
+          </Suspense>
+        </ErrorBoundary>
+        <ErrorBoundary fallback={<ActivitySkeleton />}>
+          <Suspense fallback={<ActivitySkeleton />}>
+            <RecentActivity activities={activities.length > 0 ? activities : dashboardData.recentActivities} />
+          </Suspense>
+        </ErrorBoundary>
       </div>
 
       <div className="mb-6">

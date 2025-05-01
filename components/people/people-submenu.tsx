@@ -3,47 +3,105 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
+import { Users, Building2, Briefcase } from "lucide-react"
+import { useState, useEffect } from "react"
+import { getCurrentUser, checkPermissions } from "@/lib/permission-utils"
 
 export function PeopleSubmenu() {
   const pathname = usePathname()
+  const [permissions, setPermissions] = useState({
+    employees: true,
+    departments: true,
+    designations: true,
+  })
+  const [loading, setLoading] = useState(true)
 
-  const items = [
-    {
-      title: "Dashboard",
-      href: "/people/dashboard",
-      active: pathname === "/people/dashboard",
-    },
-    {
-      title: "Employees",
-      href: "/people/employees",
-      active: pathname.startsWith("/people/employees"),
-    },
-    {
-      title: "Departments",
-      href: "/people/departments",
-      active: pathname === "/people/departments",
-    },
-    {
-      title: "Designations",
-      href: "/people/designations",
-      active: pathname === "/people/designations",
-    },
-  ]
+  useEffect(() => {
+    async function loadPermissions() {
+      try {
+        const user = await getCurrentUser()
+
+        if (!user) {
+          setPermissions({
+            employees: false,
+            departments: false,
+            designations: false,
+          })
+          setLoading(false)
+          return
+        }
+
+        const permissionResults = await checkPermissions(user.id, [
+          { path: "people.employees" },
+          { path: "people.departments" },
+          { path: "people.designations" },
+        ])
+
+        setPermissions({
+          employees: permissionResults["people.employees"],
+          departments: permissionResults["people.departments"],
+          designations: permissionResults["people.designations"],
+        })
+      } catch (error) {
+        console.error("Error loading permissions:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadPermissions()
+  }, [])
+
+  if (loading) {
+    return <div className="h-10"></div>
+  }
 
   return (
-    <nav className="flex space-x-2 lg:space-x-6 overflow-auto pb-2">
-      {items.map((item) => (
+    <div className="flex flex-wrap gap-2">
+      {permissions.employees && (
         <Link
-          key={item.href}
-          href={item.href}
+          href="/people/employees"
           className={cn(
-            "text-sm font-medium transition-colors hover:text-primary whitespace-nowrap",
-            item.active ? "text-primary border-b-2 border-primary" : "text-muted-foreground",
+            "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+            pathname === "/people/employees"
+              ? "bg-primary text-primary-foreground hover:bg-primary/90"
+              : "bg-secondary text-secondary-foreground hover:bg-secondary/80",
           )}
         >
-          {item.title}
+          <Users className="mr-2 h-4 w-4" />
+          Employees
         </Link>
-      ))}
-    </nav>
+      )}
+
+      {permissions.departments && (
+        <Link
+          href="/people/departments"
+          className={cn(
+            "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+            pathname === "/people/departments"
+              ? "bg-primary text-primary-foreground hover:bg-primary/90"
+              : "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+          )}
+        >
+          <Building2 className="mr-2 h-4 w-4" />
+          Departments
+        </Link>
+      )}
+
+      {permissions.designations && (
+        <Link
+          href="/people/designations"
+          className={cn(
+            "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+            pathname === "/people/designations"
+              ? "bg-primary text-primary-foreground hover:bg-primary/90"
+              : "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+          )}
+        >
+          <Briefcase className="mr-2 h-4 w-4" />
+          Designations
+        </Link>
+      )}
+    </div>
   )
 }

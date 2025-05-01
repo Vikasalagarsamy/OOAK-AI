@@ -84,7 +84,7 @@ export async function getDashboardStats() {
       console.error("Error fetching departments:", departmentsError)
     }
 
-    // Then, for each department, count employees
+    // Default employee distribution in case of fetch errors
     let employeesByDepartment = [
       { department: "Engineering", count: 24 },
       { department: "Marketing", count: 13 },
@@ -93,25 +93,60 @@ export async function getDashboardStats() {
       { department: "HR", count: 5 },
     ]
 
+    // Only attempt to fetch department counts if we successfully retrieved departments
     if (departments && departments.length > 0) {
-      employeesByDepartment = await Promise.all(
-        departments.map(async (dept) => {
-          const { count, error } = await supabase
-            .from("employee_departments")
-            .select("*", { count: "exact", head: true })
-            .eq("department_id", dept.id)
+      try {
+        // Use Promise.allSettled instead of Promise.all to handle individual promise rejections
+        const departmentCountPromises = departments.map(async (dept) => {
+          try {
+            // Add timeout to prevent hanging requests
+            const timeoutPromise = new Promise((_, reject) =>
+              setTimeout(() => reject(new Error("Request timeout")), 5000),
+            )
 
-          if (error) {
-            console.error(`Error counting employees for department ${dept.name}:`, error)
+            const fetchPromise = supabase
+              .from("employee_departments")
+              .select("*", { count: "exact", head: true })
+              .eq("department_id", dept.id)
+
+            // Race between the fetch and the timeout
+            const { count, error } = (await Promise.race([fetchPromise, timeoutPromise])) as any
+
+            if (error) {
+              console.error(`Error counting employees for department ${dept.name}:`, error)
+              // Return default count on error
+              return { department: dept.name, count: 0 }
+            }
+
+            return {
+              department: dept.name,
+              count: count || 0,
+            }
+          } catch (error) {
+            console.error(`Failed to fetch count for department ${dept.name}:`, error)
+            // Return default count on error
             return { department: dept.name, count: 0 }
           }
+        })
 
-          return {
-            department: dept.name,
-            count: count || 0,
-          }
-        }),
-      )
+        const results = await Promise.allSettled(departmentCountPromises)
+
+        // Filter for fulfilled promises and map to the expected format
+        const successfulResults = results
+          .filter(
+            (result): result is PromiseFulfilledResult<{ department: string; count: number }> =>
+              result.status === "fulfilled",
+          )
+          .map((result) => result.value)
+
+        // Only update if we have some successful results
+        if (successfulResults.length > 0) {
+          employeesByDepartment = successfulResults
+        }
+      } catch (error) {
+        console.error("Error fetching department employee counts:", error)
+        // Keep using the default employeesByDepartment on error
+      }
     }
 
     // Get branches by company (real data)
@@ -122,6 +157,7 @@ export async function getDashboardStats() {
       console.error("Error fetching companies for branch count:", companiesError)
     }
 
+    // Default branch distribution
     let branchesByCompany = [
       { company: "Acme Corp", count: 5 },
       { company: "TechCorp", count: 3 },
@@ -130,25 +166,58 @@ export async function getDashboardStats() {
       { company: "Enterprise Ltd", count: 4 },
     ]
 
+    // Only attempt to fetch branch counts if we successfully retrieved companies
     if (companies && companies.length > 0) {
-      branchesByCompany = await Promise.all(
-        companies.map(async (company) => {
-          const { count, error } = await supabase
-            .from("branches")
-            .select("*", { count: "exact", head: true })
-            .eq("company_id", company.id)
+      try {
+        // Use Promise.allSettled instead of Promise.all
+        const branchCountPromises = companies.map(async (company) => {
+          try {
+            // Add timeout to prevent hanging requests
+            const timeoutPromise = new Promise((_, reject) =>
+              setTimeout(() => reject(new Error("Request timeout")), 5000),
+            )
 
-          if (error) {
-            console.error(`Error counting branches for company ${company.name}:`, error)
+            const fetchPromise = supabase
+              .from("branches")
+              .select("*", { count: "exact", head: true })
+              .eq("company_id", company.id)
+
+            // Race between the fetch and the timeout
+            const { count, error } = (await Promise.race([fetchPromise, timeoutPromise])) as any
+
+            if (error) {
+              console.error(`Error counting branches for company ${company.name}:`, error)
+              return { company: company.name, count: 0 }
+            }
+
+            return {
+              company: company.name,
+              count: count || 0,
+            }
+          } catch (error) {
+            console.error(`Failed to fetch branch count for company ${company.name}:`, error)
             return { company: company.name, count: 0 }
           }
+        })
 
-          return {
-            company: company.name,
-            count: count || 0,
-          }
-        }),
-      )
+        const results = await Promise.allSettled(branchCountPromises)
+
+        // Filter for fulfilled promises and map to the expected format
+        const successfulResults = results
+          .filter(
+            (result): result is PromiseFulfilledResult<{ company: string; count: number }> =>
+              result.status === "fulfilled",
+          )
+          .map((result) => result.value)
+
+        // Only update if we have some successful results
+        if (successfulResults.length > 0) {
+          branchesByCompany = successfulResults
+        }
+      } catch (error) {
+        console.error("Error fetching company branch counts:", error)
+        // Keep using the default branchesByCompany on error
+      }
     }
 
     // Get monthly employee growth (real data)
@@ -164,7 +233,14 @@ export async function getDashboardStats() {
         ]
 
     // Get recent activities
-    const recentActivities = await getRecentActivities(10)
+    let recentActivities = []
+    try {
+      recentActivities = await getRecentActivities(10)
+    } catch (error) {
+      console.error("Error fetching recent activities:", error)
+      // Use default activities on error
+      recentActivities = generateMockActivities()
+    }
 
     return {
       stats: {

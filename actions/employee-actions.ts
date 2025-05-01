@@ -98,6 +98,16 @@ export async function createEmployee(formData: FormData): Promise<void> {
   const designation_id = formData.get("designation_id") as string
   const primary_company_id = formData.get("primary_company_id") as string
   const home_branch_id = formData.get("home_branch_id") as string
+  const allocations_json = formData.get("allocations_json") as string
+
+  let allocations = []
+  if (allocations_json) {
+    try {
+      allocations = JSON.parse(allocations_json)
+    } catch (error) {
+      console.error("Error parsing allocations JSON:", error)
+    }
+  }
 
   // Check if employee ID already exists
   const { data: existingEmployeeWithId } = await supabase
@@ -177,8 +187,27 @@ export async function createEmployee(formData: FormData): Promise<void> {
     throw new Error(`Failed to create employee: ${error.message}`)
   }
 
-  // If primary company and home branch are set, create a primary company allocation
-  if (primary_company_id && primary_company_id !== "none" && home_branch_id && home_branch_id !== "none") {
+  // Handle company allocations
+  if (allocations && allocations.length > 0) {
+    // Prepare allocations data
+    const allocationData = allocations.map((allocation: any) => ({
+      employee_id: data.id,
+      company_id: allocation.company_id,
+      branch_id: allocation.branch_id,
+      allocation_percentage: allocation.allocation_percentage,
+      is_primary: allocation.is_primary,
+    }))
+
+    // Insert allocations
+    const { error: allocationError } = await supabase.from("employee_companies").insert(allocationData)
+
+    if (allocationError) {
+      console.error("Error creating employee company allocations:", allocationError)
+      // Continue anyway, as the employee was created successfully
+    }
+  }
+  // If no allocations were provided but primary company and branch are set
+  else if (primary_company_id && primary_company_id !== "none" && home_branch_id && home_branch_id !== "none") {
     const { error: allocationError } = await supabase.from("employee_companies").insert({
       employee_id: data.id,
       company_id: Number.parseInt(primary_company_id),

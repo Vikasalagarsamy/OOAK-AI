@@ -1,5 +1,4 @@
 import { notFound } from "next/navigation"
-import { PeopleSubmenu } from "@/components/people/people-submenu"
 import { EditEmployeeForm } from "@/components/edit-employee-form"
 import { getEmployee } from "@/actions/employee-actions"
 
@@ -25,8 +24,6 @@ export default async function EditEmployeePage({ params }: EditEmployeePageProps
           <h1 className="text-3xl font-bold tracking-tight">Edit Employee</h1>
           <p className="text-muted-foreground">Update employee information and work details.</p>
         </div>
-
-        <PeopleSubmenu />
 
         <EditEmployeeForm employee={employee} />
       </div>

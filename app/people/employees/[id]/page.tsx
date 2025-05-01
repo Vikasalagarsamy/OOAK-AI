@@ -1,5 +1,4 @@
 import { Suspense } from "react"
-import { PeopleSubmenu } from "@/components/people/people-submenu"
 import { EmployeeDetailView } from "@/components/employee-detail-view"
 import { Skeleton } from "@/components/ui/skeleton"
 
@@ -10,8 +9,6 @@ export default function EmployeeDetailPage({ params }: { params: { id: string } 
         <h1 className="text-3xl font-bold tracking-tight">Employee Details</h1>
         <p className="text-muted-foreground">View and manage employee information and company allocations.</p>
       </div>
-
-      <PeopleSubmenu />
 
       <Suspense fallback={<Skeleton className="h-[600px] w-full" />}>
         <EmployeeDetailView id={params.id} />

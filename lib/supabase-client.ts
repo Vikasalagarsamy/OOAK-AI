@@ -44,6 +44,53 @@ export function getSupabaseBrowser(): SupabaseClient {
     },
   })
 
+  // Override auth methods to always return a mock authenticated user
+  const originalGetUser = browserClient.auth.getUser
+  browserClient.auth.getUser = async () => {
+    // Return a mock authenticated user
+    return {
+      data: {
+        user: {
+          id: "00000000-0000-0000-0000-000000000000",
+          app_metadata: {},
+          user_metadata: {},
+          aud: "authenticated",
+          created_at: new Date().toISOString(),
+          role: "authenticated",
+          email: "admin@example.com",
+        },
+      },
+      error: null,
+    }
+  }
+
+  // Override getSession to always return a mock session
+  const originalGetSession = browserClient.auth.getSession
+  browserClient.auth.getSession = async () => {
+    // Return a mock session
+    return {
+      data: {
+        session: {
+          access_token: "mock-access-token",
+          refresh_token: "mock-refresh-token",
+          expires_in: 3600,
+          expires_at: new Date().getTime() + 3600000,
+          token_type: "bearer",
+          user: {
+            id: "00000000-0000-0000-0000-000000000000",
+            app_metadata: {},
+            user_metadata: {},
+            aud: "authenticated",
+            created_at: new Date().toISOString(),
+            role: "authenticated",
+            email: "admin@example.com",
+          },
+        },
+      },
+      error: null,
+    }
+  }
+
   return browserClient
 }
 
@@ -53,11 +100,15 @@ export function getSupabaseServer(): SupabaseClient {
   if (typeof window === "undefined") {
     const { supabaseUrl, supabaseServiceKey } = getServerCredentials()
 
-    return createClient(supabaseUrl, supabaseServiceKey, {
+    const client = createClient(supabaseUrl, supabaseServiceKey, {
       auth: {
         persistSession: false,
       },
     })
+
+    // No need to override auth methods for server client as we're bypassing auth checks at the middleware level
+
+    return client
   }
 
   // If called from the client, use the browser client

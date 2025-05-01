@@ -18,15 +18,19 @@ import { logActivity } from "@/services/activity-service"
 interface BatchDeleteEmployeesDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  selectedEmployees: Employee[]
-  onEmployeesDeleted: (deletedIds: string[]) => void
+  selectedEmployees?: Employee[] // Make this optional
+  onEmployeesDeleted?: (deletedIds: string[]) => void
+  selectedCount?: number // Add this as an alternative to selectedEmployees.length
+  onConfirm?: () => void // Add this for simpler implementation
 }
 
 export function BatchDeleteEmployeesDialog({
   open,
   onOpenChange,
-  selectedEmployees,
+  selectedEmployees = [], // Provide default empty array
   onEmployeesDeleted,
+  selectedCount,
+  onConfirm,
 }: BatchDeleteEmployeesDialogProps) {
   const [loading, setLoading] = useState(false)
   const [results, setResults] = useState<{
@@ -35,7 +39,16 @@ export function BatchDeleteEmployeesDialog({
   } | null>(null)
   const { toast } = useToast()
 
+  // Use selectedCount if provided, otherwise use selectedEmployees.length
+  const count = selectedCount !== undefined ? selectedCount : selectedEmployees.length
+
   const handleBatchDelete = async () => {
+    if (onConfirm) {
+      // If onConfirm is provided, use that instead
+      onConfirm()
+      return
+    }
+
     if (selectedEmployees.length === 0) return
 
     setLoading(true)
@@ -100,7 +113,9 @@ export function BatchDeleteEmployeesDialog({
         })
 
         // Call the callback to update the parent component
-        onEmployeesDeleted(successfulDeletes.map((emp) => emp.id.toString()))
+        if (onEmployeesDeleted) {
+          onEmployeesDeleted(successfulDeletes.map((emp) => emp.id.toString()))
+        }
 
         // Close the dialog after a short delay
         setTimeout(() => {
@@ -114,7 +129,9 @@ export function BatchDeleteEmployeesDialog({
         })
 
         // Call the callback to update the parent component for the successful deletes
-        onEmployeesDeleted(successfulDeletes.map((emp) => emp.id.toString()))
+        if (onEmployeesDeleted) {
+          onEmployeesDeleted(successfulDeletes.map((emp) => emp.id.toString()))
+        }
       } else {
         toast({
           title: "Error",
@@ -140,7 +157,7 @@ export function BatchDeleteEmployeesDialog({
         <DialogHeader>
           <DialogTitle>Delete Multiple Employees</DialogTitle>
           <DialogDescription>
-            Are you sure you want to delete {selectedEmployees.length} selected employees? This action cannot be undone.
+            Are you sure you want to delete {count} selected employees? This action cannot be undone.
           </DialogDescription>
         </DialogHeader>
 
@@ -176,7 +193,7 @@ export function BatchDeleteEmployeesDialog({
               </div>
             )}
           </div>
-        ) : (
+        ) : selectedEmployees && selectedEmployees.length > 0 ? (
           <div className="py-4">
             <p className="text-sm text-muted-foreground">You are about to delete the following employees:</p>
             <ul className="mt-2 max-h-[200px] overflow-y-auto text-sm pl-5 list-disc">
@@ -186,6 +203,12 @@ export function BatchDeleteEmployeesDialog({
                 </li>
               ))}
             </ul>
+          </div>
+        ) : (
+          <div className="py-4">
+            <p className="text-sm text-muted-foreground">
+              You are about to delete {count} selected employees. This action cannot be undone.
+            </p>
           </div>
         )}
 
