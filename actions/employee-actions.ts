@@ -4,7 +4,6 @@ import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import type { Employee, Department, Designation, Company, Branch, EmployeeCompany } from "@/types/employee"
-import { getNewEmployeeId } from "@/utils/employee-id-generator"
 
 // Add employee (alias for createEmployee for backward compatibility)
 export async function addEmployee(formData: FormData): Promise<void> {
@@ -102,16 +101,31 @@ export async function createEmployee(formData: FormData): Promise<void> {
   const home_branch_id = formData.get("home_branch_id") as string
 
   // Check if employee ID already exists
-  const { data: existingEmployee } = await supabase
+  const { data: existingEmployeeWithId } = await supabase
     .from("employees")
     .select("id")
     .eq("employee_id", employee_id)
     .single()
 
   // If employee ID already exists, generate a new one
-  if (existingEmployee) {
+  if (existingEmployeeWithId) {
     console.log("Employee ID already exists, generating a new one")
-    employee_id = await getNewEmployeeId()
+    // Generate a new ID (implementation depends on your ID generation logic)
+    const timestamp = new Date().getTime().toString().slice(-6)
+    employee_id = `EMP-${timestamp}`
+  }
+
+  // Check if email already exists (only if email is provided)
+  if (email && email.trim() !== "") {
+    const { data: existingEmployeeWithEmail } = await supabase
+      .from("employees")
+      .select("id, email")
+      .eq("email", email)
+      .single()
+
+    if (existingEmployeeWithEmail) {
+      throw new Error(`Email ${email} is already in use by another employee. Please use a different email address.`)
+    }
   }
 
   // Prepare employee data
@@ -119,7 +133,7 @@ export async function createEmployee(formData: FormData): Promise<void> {
     employee_id,
     first_name,
     last_name,
-    email: email || null,
+    email: email && email.trim() !== "" ? email : null, // Set to null if empty
     phone: phone || null,
     address: address || null,
     city: city || null,
@@ -145,45 +159,29 @@ export async function createEmployee(formData: FormData): Promise<void> {
     employeeData.home_branch_id = Number.parseInt(home_branch_id)
   }
 
-  // Insert employee - with retry mechanism for unique constraint errors
-  const maxRetries = 3
-  let retries = 0
-  let insertSuccess = false
-  let insertedData = null
+  // Insert employee
+  const { data, error } = await supabase.from("employees").insert(employeeData).select().single()
 
-  while (!insertSuccess && retries < maxRetries) {
-    const { data, error } = await supabase.from("employees").insert(employeeData).select().single()
+  if (error) {
+    console.error("Error creating employee:", error)
 
-    if (error) {
-      if (error.code === "23505" && error.message.includes("employees_employee_id_key")) {
-        // Unique constraint violation on employee_id, generate new ID and retry
-        retries++
-        console.log(`Retry ${retries}: Generating new employee ID due to duplicate`)
-        employeeData.employee_id = await getNewEmployeeId()
-      } else {
-        console.error("Error creating employee:", error)
-        throw new Error(`Failed to create employee: ${error.message}`)
+    // Handle specific error cases
+    if (error.code === "23505") {
+      // Unique constraint violation
+      if (error.message.includes("employees_email_key")) {
+        throw new Error("This email address is already in use. Please use a different email.")
+      } else if (error.message.includes("employees_employee_id_key")) {
+        throw new Error("Employee ID is already in use. Please try again.")
       }
-    } else {
-      insertSuccess = true
-      insertedData = data
     }
-  }
 
-  if (!insertSuccess) {
-    throw new Error("Failed to create employee after multiple retries")
+    throw new Error(`Failed to create employee: ${error.message}`)
   }
 
   // If primary company and home branch are set, create a primary company allocation
-  if (
-    primary_company_id &&
-    primary_company_id !== "none" &&
-    home_branch_id &&
-    home_branch_id !== "none" &&
-    insertedData
-  ) {
+  if (primary_company_id && primary_company_id !== "none" && home_branch_id && home_branch_id !== "none") {
     const { error: allocationError } = await supabase.from("employee_companies").insert({
-      employee_id: insertedData.id,
+      employee_id: data.id,
       company_id: Number.parseInt(primary_company_id),
       branch_id: Number.parseInt(home_branch_id),
       allocation_percentage: 100,
@@ -223,11 +221,25 @@ export async function updateEmployee(id: string, formData: FormData): Promise<vo
   const primary_company_id = formData.get("primary_company_id") as string
   const home_branch_id = formData.get("home_branch_id") as string
 
+  // Check if email already exists for a different employee (only if email is provided)
+  if (email && email.trim() !== "") {
+    const { data: existingEmployeeWithEmail } = await supabase
+      .from("employees")
+      .select("id, email")
+      .eq("email", email)
+      .neq("id", id) // Exclude the current employee
+      .single()
+
+    if (existingEmployeeWithEmail) {
+      throw new Error(`Email ${email} is already in use by another employee. Please use a different email address.`)
+    }
+  }
+
   // Prepare employee data
   const employeeData: any = {
     first_name,
     last_name,
-    email: email || null,
+    email: email && email.trim() !== "" ? email : null, // Set to null if empty
     phone: phone || null,
     address: address || null,
     city: city || null,
@@ -270,6 +282,12 @@ export async function updateEmployee(id: string, formData: FormData): Promise<vo
 
   if (error) {
     console.error("Error updating employee:", error)
+
+    // Handle specific error cases
+    if (error.code === "23505" && error.message.includes("employees_email_key")) {
+      throw new Error("This email address is already in use. Please use a different email.")
+    }
+
     throw new Error("Failed to update employee")
   }
 
@@ -547,10 +565,29 @@ export async function getBranches() {
   }))
 }
 
-// Update the generateEmployeeId function to use getNewEmployeeId from the utility
 export async function generateEmployeeId() {
+  const supabase = createClient()
+
   try {
-    return await getNewEmployeeId()
+    // Get the current year
+    const currentYear = new Date().getFullYear().toString().slice(-2)
+
+    // Get the count of employees for this year
+    const { count, error } = await supabase
+      .from("employees")
+      .select("*", { count: "exact", head: true })
+      .like("employee_id", `EMP-${currentYear}%`)
+
+    if (error) {
+      console.error("Error counting employees:", error)
+      return `EMP-${currentYear}-0001`
+    }
+
+    // Generate the next employee ID
+    const nextNumber = (count || 0) + 1
+    const paddedNumber = nextNumber.toString().padStart(4, "0")
+
+    return `EMP-${currentYear}-${paddedNumber}`
   } catch (error) {
     console.error("Error generating employee ID:", error)
     // Fallback to a timestamp-based ID if there's an error
