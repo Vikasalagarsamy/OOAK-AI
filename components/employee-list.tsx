@@ -2,20 +2,22 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { Eye, Pencil, Trash2, MoreHorizontal } from "lucide-react"
+import { Eye, Pencil, Trash2 } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { useToast } from "@/components/ui/use-toast"
 import { Button } from "@/components/ui/button"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { DeleteEmployeeDialog } from "@/components/delete-employee-dialog"
 import { BatchDeleteEmployeesDialog } from "@/components/batch-delete-employees-dialog"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import type { Employee } from "@/types/employee"
+import type { EmployeeCompany } from "@/types/employee-company"
 
 export function EmployeeList() {
   const [employees, setEmployees] = useState<Employee[]>([])
+  const [employeeCompanies, setEmployeeCompanies] = useState<Record<string, EmployeeCompany[]>>({})
   const [loading, setLoading] = useState(true)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [employeeToDelete, setEmployeeToDelete] = useState<Employee | null>(null)
@@ -62,6 +64,11 @@ export function EmployeeList() {
         })) || []
 
       setEmployees(transformedData)
+
+      // Fetch company allocations for each employee
+      if (data && data.length > 0) {
+        await fetchEmployeeCompanies(data.map((emp) => emp.id.toString()))
+      }
     } catch (error) {
       console.error("Error fetching employees:", error)
       toast({
@@ -71,6 +78,49 @@ export function EmployeeList() {
       })
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchEmployeeCompanies = async (employeeIds: string[]) => {
+    try {
+      const { data, error } = await supabase
+        .from("employee_companies")
+        .select(`
+          *,
+          companies:company_id(name),
+          branches:branch_id(name)
+        `)
+        .in("employee_id", employeeIds)
+        .order("is_primary", { ascending: false })
+
+      if (error) {
+        throw error
+      }
+
+      // Group company allocations by employee ID
+      const companiesByEmployee: Record<string, EmployeeCompany[]> = {}
+
+      data.forEach((allocation) => {
+        const employeeId = allocation.employee_id.toString()
+        if (!companiesByEmployee[employeeId]) {
+          companiesByEmployee[employeeId] = []
+        }
+
+        companiesByEmployee[employeeId].push({
+          ...allocation,
+          company_name: allocation.companies?.name || "Unknown",
+          branch_name: allocation.branches?.name || "Unknown",
+        })
+      })
+
+      setEmployeeCompanies(companiesByEmployee)
+    } catch (error) {
+      console.error("Error fetching employee companies:", error)
+      toast({
+        title: "Error",
+        description: "Failed to fetch company allocations. Some information may be missing.",
+        variant: "destructive",
+      })
     }
   }
 
@@ -109,6 +159,29 @@ export function EmployeeList() {
     setSelectAll(!selectAll)
   }
 
+  // Helper function to render company allocations
+  const renderCompanyAllocations = (employeeId: string) => {
+    const allocations = employeeCompanies[employeeId.toString()]
+    if (!allocations || allocations.length === 0) {
+      return <span className="text-muted-foreground text-sm">No allocations</span>
+    }
+
+    return (
+      <div className="space-y-1">
+        {allocations.map((allocation, index) => (
+          <div key={index} className="flex items-center text-sm">
+            <Badge variant={allocation.is_primary ? "default" : "outline"} className="mr-2">
+              {allocation.allocation_percentage}%
+            </Badge>
+            <span>
+              {allocation.company_name} ({allocation.branch_name})
+            </span>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -138,20 +211,21 @@ export function EmployeeList() {
               <TableHead>Job Title</TableHead>
               <TableHead>Department</TableHead>
               <TableHead>Primary Company</TableHead>
+              <TableHead>Company Allocations</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead className="text-center">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-4">
+                <TableCell colSpan={10} className="text-center py-4">
                   Loading employees...
                 </TableCell>
               </TableRow>
             ) : employees.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-4">
+                <TableCell colSpan={10} className="text-center py-4">
                   No employees found. Add your first employee to get started.
                 </TableCell>
               </TableRow>
@@ -175,36 +249,63 @@ export function EmployeeList() {
                   <TableCell>{employee.job_title}</TableCell>
                   <TableCell>{employee.department}</TableCell>
                   <TableCell>{employee.primary_company}</TableCell>
+                  <TableCell>{renderCompanyAllocations(employee.id)}</TableCell>
                   <TableCell>
                     <Badge variant={employee.status === "Active" ? "default" : "secondary"}>{employee.status}</Badge>
                   </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal className="h-4 w-4" />
-                          <span className="sr-only">Open menu</span>
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem asChild>
-                          <Link href={`/people/employees/${employee.id}`}>
-                            <Eye className="mr-2 h-4 w-4" />
-                            View
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem asChild>
-                          <Link href={`/people/employees/${employee.id}/edit`}>
-                            <Pencil className="mr-2 h-4 w-4" />
-                            Edit
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleDeleteEmployee(employee)} className="text-red-600">
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                  <TableCell>
+                    <div className="flex items-center justify-center space-x-2">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Link href={`/people/employees/${employee.id}`}>
+                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <Eye className="h-4 w-4 text-blue-600" />
+                                <span className="sr-only">View employee</span>
+                              </Button>
+                            </Link>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>View employee details</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Link href={`/people/employees/${employee.id}/edit`}>
+                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <Pencil className="h-4 w-4 text-green-600" />
+                                <span className="sr-only">Edit employee</span>
+                              </Button>
+                            </Link>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Edit employee information</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => handleDeleteEmployee(employee)}
+                            >
+                              <Trash2 className="h-4 w-4 text-red-600" />
+                              <span className="sr-only">Delete employee</span>
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Delete employee</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))

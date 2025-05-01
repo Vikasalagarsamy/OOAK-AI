@@ -3,29 +3,31 @@ export interface Employee {
   employee_id: string
   first_name: string
   last_name: string
-  email: string | null
-  phone: string | null
-  address: string | null
-  city: string | null
-  state: string | null
-  zip_code: string | null
-  country: string | null
-  hire_date: string | null
-  termination_date: string | null
+  email?: string
+  phone?: string
+  address?: string
+  city?: string
+  state?: string
+  zip_code?: string
+  country?: string
+  hire_date?: string
+  termination_date?: string
+  job_title?: string
+  department_id?: number
+  designation_id?: number
+  primary_company_id?: number
+  home_branch_id?: number
   status: string
-  department_id: number | null
-  designation_id: number | null
-  job_title: string | null
-  home_branch_id: number | null
-  primary_company_id: number | null
-  created_at: string
-  updated_at: string
+  created_at?: string
+  updated_at?: string
 
   // Joined fields
-  department_name?: string | null
-  designation_name?: string | null
-  home_branch_name?: string | null
-  primary_company_name?: string | null
+  department?: string
+  primary_company?: string
+
+  // For display purposes
+  departments?: { name: string }
+  companies?: { name: string }
 }
 
 export interface Department {
