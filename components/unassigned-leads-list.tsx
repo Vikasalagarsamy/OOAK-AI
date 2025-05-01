@@ -33,10 +33,10 @@ export function UnassignedLeadsList() {
       const { data, error } = await supabase
         .from("leads")
         .select(`
-          *,
-          companies:company_id(name),
-          branches:branch_id(name)
-        `)
+         *,
+         companies:company_id(name),
+         branches:branch_id(name)
+       `)
         .eq("status", "UNASSIGNED")
         .order("created_at", { ascending: false })
 

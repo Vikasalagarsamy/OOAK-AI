@@ -1,6 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import type React from "react"
+
+import { useState, useEffect, useRef } from "react"
 import {
   Dialog,
   DialogContent,
@@ -17,6 +19,7 @@ import type { Lead } from "@/types/lead"
 import { assignLead } from "@/actions/lead-actions"
 import { supabase } from "@/lib/supabase"
 import { UserCog, Loader2, Check, X, User } from "lucide-react"
+import { useDialogPosition } from "@/hooks/use-dialog-position"
 
 interface Employee {
   id: number
@@ -31,19 +34,29 @@ interface AssignLeadDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onComplete: (success: boolean) => void
+  triggerRef?: React.RefObject<HTMLElement>
 }
 
-export function AssignLeadDialog({ lead, open, onOpenChange, onComplete }: AssignLeadDialogProps) {
+export function AssignLeadDialog({ lead, open, onOpenChange, onComplete, triggerRef }: AssignLeadDialogProps) {
   const { toast } = useToast()
   const [employees, setEmployees] = useState<Employee[]>([])
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("")
   const [loading, setLoading] = useState(false)
   const [fetchingEmployees, setFetchingEmployees] = useState(true)
+  const dialogRef = useRef<HTMLDivElement>(null)
+
+  // Get optimal dialog position based on trigger element
+  const position = useDialogPosition(triggerRef || { current: null }, dialogRef, open)
 
   // Fetch employees on component mount
   useEffect(() => {
-    fetchEmployees()
-  }, [])
+    if (open) {
+      fetchEmployees()
+    } else {
+      // Reset state when dialog closes
+      setSelectedEmployeeId("")
+    }
+  }, [open])
 
   const fetchEmployees = async () => {
     setFetchingEmployees(true)
@@ -126,8 +139,18 @@ export function AssignLeadDialog({ lead, open, onOpenChange, onComplete }: Assig
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
+    <Dialog open={open} onOpenChange={onOpenChange} modal={true}>
+      <DialogContent
+        ref={dialogRef}
+        className="sm:max-w-[425px] overflow-y-auto"
+        style={{
+          position: "fixed",
+          top: position.top,
+          left: position.left,
+          transform: position.transform,
+          maxHeight: position.maxHeight,
+        }}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <UserCog className="h-5 w-5" />

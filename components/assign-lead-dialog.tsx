@@ -12,256 +12,171 @@ import {
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
+import { Loader2, AlertCircle, Info, Building, Briefcase, Star } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
+import { getEmployeesForLeadAssignment, assignLeadToEmployee } from "@/actions/employee-selection-actions"
 import type { Lead } from "@/types/lead"
-import { assignLead } from "@/actions/lead-actions"
-import { supabase } from "@/lib/supabase"
-import { UserCog, Loader2, Check, X, User, MapPin, Building } from "lucide-react"
 
-// Employee interface with only columns we know exist
 interface Employee {
   id: number
   employee_id: string
-  first_name: string
-  last_name: string
-  full_name: string
-  job_title?: string
-  // Add company and branch allocation information
-  companies?: {
-    company_id: number
-    company_name: string
-    branch_id?: number
-    branch_name?: string
-    allocation_percentage?: number // Use allocation_percentage instead of percentage
-    is_primary?: boolean
-  }[]
+  name: string
+  designation: string
+  department?: string
+  allocation_percentage?: number
+  is_primary?: boolean
+  is_sales?: boolean
+  status?: string
 }
 
 interface AssignLeadDialogProps {
   lead: Lead
   open: boolean
   onOpenChange: (open: boolean) => void
-  onComplete: (success: boolean) => void
+  onAssignComplete?: () => void
 }
 
-export function AssignLeadDialog({ lead, open, onOpenChange, onComplete }: AssignLeadDialogProps) {
-  const { toast } = useToast()
+export function AssignLeadDialog({ lead, open, onOpenChange, onAssignComplete }: AssignLeadDialogProps) {
   const [employees, setEmployees] = useState<Employee[]>([])
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("")
   const [loading, setLoading] = useState(false)
-  const [fetchingEmployees, setFetchingEmployees] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const { toast } = useToast()
 
-  // Fetch employees when dialog opens
   useEffect(() => {
     if (open) {
-      fetchSalesEmployees()
+      fetchEmployees()
+    } else {
+      // Reset state when dialog closes
+      setSelectedEmployeeId("")
+      setError(null)
     }
-  }, [open, lead])
+  }, [open])
 
-  // Update the fetchSalesEmployees function
-  const fetchSalesEmployees = async () => {
-    setFetchingEmployees(true)
+  const fetchEmployees = async () => {
+    setLoading(true)
+    setError(null)
     try {
-      console.log("Fetching employees for lead assignment with company allocations")
+      // Make sure we're passing valid IDs
+      const companyId = lead.company_id || undefined
+      const branchId = lead.branch_id || undefined
 
-      // Direct database approach - get employees with company allocations
-      const { data: employees, error } = await supabase
-        .from("employees")
-        .select(`
-        id, employee_id, first_name, last_name, job_title, department_id, designation_id, status,
-        employee_companies(
-          id, company_id, branch_id, allocation_percentage, is_primary,
-          companies:company_id(id, name),
-          branches:branch_id(id, name)
-        )
-      `)
-        .eq("status", "active")
-        .order("first_name")
+      console.log(`Fetching employees for lead: ${lead.id}, company: ${companyId}, branch: ${branchId}`)
+      const employees = await getEmployeesForLeadAssignment(companyId, branchId)
+      console.log(`Fetched ${employees.length} employees`)
 
-      if (error) {
-        console.error("Error fetching employees with allocations:", error)
-        // Fall back to basic employee data
-        const { data: basicEmployees, error: basicError } = await supabase
-          .from("employees")
-          .select("id, employee_id, first_name, last_name, job_title")
-          .eq("status", "active")
-          .order("first_name")
+      setEmployees(employees)
 
-        if (basicError) {
-          console.error("Error fetching basic employee data:", basicError)
-          setEmployees([])
-          setFetchingEmployees(false)
-          return
-        }
-
-        processEmployees(basicEmployees || [])
-        return
+      if (employees.length === 0) {
+        setError("No eligible employees found. Please ensure there are active employees in the system.")
       }
 
-      // Process employees with their company allocations
-      const processedEmployees = employees.map((emp) => {
-        // Map company allocations
-        const companies =
-          emp.employee_companies?.map((ec) => ({
-            company_id: ec.company_id,
-            company_name: ec.companies?.name || "Unknown Company",
-            branch_id: ec.branch_id,
-            branch_name: ec.branches?.name || "Unknown Branch",
-            allocation_percentage: ec.allocation_percentage,
-            is_primary: ec.is_primary,
-          })) || []
-
-        return {
-          ...emp,
-          companies,
-          full_name: `${emp.first_name} ${emp.last_name}`,
-        }
-      })
-
-      // Filter for sales employees
-      const salesEmployees = processedEmployees.filter((emp) => {
-        const isSalesDept = emp.department_id === 3 // Assuming 3 is sales dept
-        const hasSalesTitle =
-          (emp.job_title || "").toLowerCase().includes("sales") ||
-          (emp.job_title || "").toLowerCase().includes("account") ||
-          (emp.job_title || "").toLowerCase().includes("business development")
-
-        return isSalesDept || hasSalesTitle
-      })
-
-      if (salesEmployees.length > 0) {
-        setEmployees(salesEmployees)
-      } else {
-        // If no sales employees found, use all employees
-        setEmployees(processedEmployees)
-      }
-
-      setFetchingEmployees(false)
+      // Reset selection
+      setSelectedEmployeeId("")
     } catch (error) {
-      console.error("Exception fetching employees:", error)
-      setEmployees([])
-      setFetchingEmployees(false)
+      console.error("Error fetching employees:", error)
+      setError("Failed to load employees. Please try again.")
+    } finally {
+      setLoading(false)
     }
-  }
-
-  // Process and format employee data
-  const processEmployees = (employeeData: any[]) => {
-    console.log(`Found ${employeeData.length} employees`)
-
-    // Format employees for display
-    const formattedEmployees = employeeData.map((emp) => ({
-      id: emp.id,
-      employee_id: emp.employee_id || "",
-      first_name: emp.first_name,
-      last_name: emp.last_name,
-      full_name: `${emp.first_name} ${emp.last_name}`,
-      job_title: emp.job_title || "",
-    }))
-
-    // Sort by name
-    const sortedEmployees = formattedEmployees.sort((a, b) => {
-      return a.full_name.localeCompare(b.full_name)
-    })
-
-    setEmployees(sortedEmployees)
-    setFetchingEmployees(false)
   }
 
   const handleAssign = async () => {
     if (!selectedEmployeeId) {
       toast({
         title: "Error",
-        description: "Please select a team member to assign this lead to.",
+        description: "Please select an employee to assign the lead to.",
         variant: "destructive",
       })
       return
     }
 
-    setLoading(true)
+    setSubmitting(true)
     try {
-      const employeeId = Number.parseInt(selectedEmployeeId, 10)
-      const employee = employees.find((emp) => emp.id === employeeId)
-
-      if (!employee) {
-        throw new Error("Selected employee not found")
-      }
-
-      const result = await assignLead(lead.id, lead.lead_number, lead.client_name, employeeId, employee.full_name)
+      const result = await assignLeadToEmployee(lead.id, Number.parseInt(selectedEmployeeId))
 
       if (result.success) {
         toast({
           title: "Success",
           description: result.message,
         })
-        onComplete(true)
+        onOpenChange(false)
+        if (onAssignComplete) {
+          onAssignComplete()
+        }
       } else {
-        throw new Error(result.message)
+        toast({
+          title: "Error",
+          description: result.message,
+          variant: "destructive",
+        })
       }
     } catch (error) {
       console.error("Error assigning lead:", error)
       toast({
         title: "Error",
-        description: `Failed to assign lead: ${error instanceof Error ? error.message : String(error)}`,
+        description: "An unexpected error occurred. Please try again.",
         variant: "destructive",
       })
-      onComplete(false)
     } finally {
-      setLoading(false)
+      setSubmitting(false)
     }
-  }
-
-  // Helper function to get role display text
-  const getRoleDisplay = (employee: Employee): string => {
-    if (employee.job_title) return employee.job_title
-    return "Team Member"
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <UserCog className="h-5 w-5" />
-            Assign Lead
-          </DialogTitle>
+          <DialogTitle>Assign Lead</DialogTitle>
           <DialogDescription>
-            Assign lead {lead.lead_number} ({lead.client_name}) to a team member.
-            <div className="mt-2 space-y-1">
-              <div className="flex items-center gap-1 text-sm">
-                <Building className="h-3.5 w-3.5" />
-                <span>Company: {lead.company_name}</span>
-              </div>
-              {lead.branch_name && (
-                <div className="flex items-center gap-1 text-sm">
-                  <Building className="h-3.5 w-3.5" />
-                  <span>Branch: {lead.branch_name}</span>
-                </div>
-              )}
-              {lead.location && (
-                <div className="flex items-center gap-1 text-sm">
-                  <MapPin className="h-3.5 w-3.5" />
-                  <span>Location: {lead.location}</span>
-                </div>
-              )}
-            </div>
+            Assign lead #{lead.lead_number} - {lead.client_name} to a team member.
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
-          <div className="space-y-2">
-            <Label htmlFor="employee" className="flex items-center gap-2">
-              <User className="h-4 w-4" />
-              Select Team Member
-            </Label>
-            {fetchingEmployees ? (
-              <div className="flex items-center gap-2 h-10 px-3 border rounded-md">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="text-sm text-muted-foreground">Loading team members...</span>
+          {/* Lead info */}
+          <div className="bg-muted/40 p-3 rounded-md space-y-1 text-sm">
+            <div className="grid grid-cols-2 gap-2">
+              {lead.company_name && (
+                <div>
+                  <span className="text-muted-foreground">Company:</span>
+                  <span className="font-medium ml-1">{lead.company_name}</span>
+                </div>
+              )}
+              {lead.branch_name && (
+                <div>
+                  <span className="text-muted-foreground">Branch:</span>
+                  <span className="font-medium ml-1">{lead.branch_name}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Info message */}
+          <div className="bg-blue-50 border border-blue-100 rounded-md p-3 text-sm text-blue-700 flex items-start gap-2">
+            <Info className="h-4 w-4 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="font-medium">Employee Selection</p>
+              <p className="text-xs mt-0.5">
+                {lead.company_id
+                  ? `Showing employees allocated to ${lead.company_name || "this company"}`
+                  : "Showing all active employees with sales employees prioritized"}
+              </p>
+            </div>
+          </div>
+
+          {/* Employee selection */}
+          <div className="grid gap-2">
+            <Label htmlFor="employee">Select Team Member</Label>
+            {loading ? (
+              <div className="flex items-center justify-center p-4">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
               </div>
             ) : (
-              <Select value={selectedEmployeeId} onValueChange={setSelectedEmployeeId} disabled={loading}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a team member" />
+              <Select value={selectedEmployeeId} onValueChange={setSelectedEmployeeId}>
+                <SelectTrigger id="employee">
+                  <SelectValue placeholder="Select team member" />
                 </SelectTrigger>
                 <SelectContent>
                   {employees.length === 0 ? (
@@ -272,25 +187,38 @@ export function AssignLeadDialog({ lead, open, onOpenChange, onComplete }: Assig
                     employees.map((employee) => (
                       <SelectItem key={employee.id} value={employee.id.toString()} className="py-2">
                         <div className="flex flex-col">
-                          <span>{employee.full_name}</span>
-                          {employee.job_title && (
-                            <span className="text-xs text-muted-foreground">{employee.job_title}</span>
-                          )}
-                          {employee.companies && employee.companies.length > 0 && (
-                            <div className="mt-1 space-y-0.5">
-                              {employee.companies.map((allocation, idx) => (
-                                <div key={idx} className="text-xs flex items-center gap-1">
-                                  <Building className="h-3 w-3 text-muted-foreground" />
-                                  <span
-                                    className={`${allocation.is_primary ? "font-medium text-primary" : "text-muted-foreground"}`}
-                                  >
-                                    {allocation.company_name}
-                                    {allocation.branch_name && ` - ${allocation.branch_name}`}
-                                    {allocation.allocation_percentage && ` (${allocation.allocation_percentage}%)`}
-                                    {allocation.is_primary && " (Primary)"}
-                                  </span>
-                                </div>
-                              ))}
+                          <div className="flex items-center gap-1">
+                            <span className="font-medium">{employee.name}</span>
+                            {employee.is_primary && (
+                              <span className="text-amber-500">
+                                <Star className="h-3 w-3 inline" />
+                              </span>
+                            )}
+                            {employee.status && employee.status.toLowerCase() !== "active" && (
+                              <span className="text-xs bg-amber-100 text-amber-800 px-1 rounded">
+                                {employee.status}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            {employee.designation && (
+                              <>
+                                <Briefcase className="h-3 w-3" />
+                                <span>{employee.designation}</span>
+                              </>
+                            )}
+                          </div>
+
+                          {employee.allocation_percentage !== undefined && (
+                            <div className="mt-1 bg-green-50 text-green-700 text-xs p-1 rounded flex items-center gap-1">
+                              <Building className="h-3 w-3" />
+                              <span>
+                                {lead.company_name || "Company"}
+                                {lead.branch_name && ` - ${lead.branch_name}`}
+                                {employee.is_primary && " (Primary)"}
+                                {employee.allocation_percentage < 100 && ` (${employee.allocation_percentage}%)`}
+                              </span>
                             </div>
                           )}
                         </div>
@@ -300,27 +228,28 @@ export function AssignLeadDialog({ lead, open, onOpenChange, onComplete }: Assig
                 </SelectContent>
               </Select>
             )}
-            <div className="text-xs text-muted-foreground">Select a team member to handle this lead.</div>
           </div>
+
+          {/* Error message */}
+          {error && (
+            <div className="bg-destructive/10 text-destructive text-sm p-2 rounded flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading} className="gap-1">
-            <X className="h-4 w-4" />
-            <span>Cancel</span>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
           </Button>
-          <Button onClick={handleAssign} disabled={loading || !selectedEmployeeId} className="gap-1">
-            {loading ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Assigning...</span>
-              </>
-            ) : (
-              <>
-                <Check className="h-4 w-4" />
-                <span>Assign Lead</span>
-              </>
-            )}
+          <Button
+            onClick={handleAssign}
+            disabled={submitting || !selectedEmployeeId}
+            className="bg-green-600 hover:bg-green-700 text-white"
+          >
+            {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            Assign Lead
           </Button>
         </DialogFooter>
       </DialogContent>

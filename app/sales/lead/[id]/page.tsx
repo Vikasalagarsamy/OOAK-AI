@@ -8,28 +8,14 @@ import Link from "next/link"
 async function getLead(id: string) {
   const supabase = createClient()
 
-  // First check if the lead exists
-  const { data: leadExists, error: checkError } = await supabase.from("leads").select("id").eq("id", id).single()
-
-  if (checkError) {
-    console.error("Error checking if lead exists:", checkError)
-    return null
-  }
-
-  if (!leadExists) {
-    console.error(`Lead with ID ${id} not found`)
-    return null
-  }
-
-  // Then fetch the lead with all related data
   try {
-    const { data, error } = await supabase
+    // First check if the lead exists and get basic lead data
+    const { data: lead, error } = await supabase
       .from("leads")
       .select(`
         *,
         companies:company_id(name),
-        branches:branch_id(name),
-        employees:assigned_to(id, first_name, last_name, role, job_title)
+        branches:branch_id(name)
       `)
       .eq("id", id)
       .single()
@@ -39,13 +25,30 @@ async function getLead(id: string) {
       return null
     }
 
-    // Fetch lead source separately to avoid join issues
+    // Fetch employee data separately if there's an assigned_to value
+    let assignedToName, assignedToRole
+    if (lead.assigned_to) {
+      const { data: employee, error: employeeError } = await supabase
+        .from("employees")
+        .select("id, first_name, last_name, role, job_title")
+        .eq("id", lead.assigned_to)
+        .single()
+
+      if (!employeeError && employee) {
+        assignedToName = `${employee.first_name} ${employee.last_name}`
+        assignedToRole = employee.role || employee.job_title
+      } else {
+        console.error("Error fetching employee:", employeeError)
+      }
+    }
+
+    // Fetch lead source separately
     let leadSourceName = null
-    if (data.lead_source_id) {
+    if (lead.lead_source_id) {
       const { data: sourceData, error: sourceError } = await supabase
         .from("lead_sources")
         .select("name")
-        .eq("id", data.lead_source_id)
+        .eq("id", lead.lead_source_id)
         .single()
 
       if (!sourceError && sourceData) {
@@ -56,11 +59,11 @@ async function getLead(id: string) {
     }
 
     return {
-      ...data,
-      company_name: data.companies?.name,
-      branch_name: data.branches?.name,
-      assigned_to_name: data.employees ? `${data.employees.first_name} ${data.employees.last_name}` : undefined,
-      assigned_to_role: data.employees?.role || data.employees?.job_title,
+      ...lead,
+      company_name: lead.companies?.name,
+      branch_name: lead.branches?.name,
+      assigned_to_name: assignedToName,
+      assigned_to_role: assignedToRole,
       lead_source_name: leadSourceName,
     }
   } catch (err) {

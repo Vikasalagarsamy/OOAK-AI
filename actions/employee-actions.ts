@@ -90,7 +90,7 @@ export async function createEmployee(formData: FormData): Promise<any> {
     const phone = formData.get("phone") as string
     const address = formData.get("address") as string
     const city = formData.get("city") as string
-    const state = formData.get("state") as string
+    const state_value = formData.get("state") as string
     const zip_code = formData.get("zip_code") as string
     const country = formData.get("country") as string
     const job_title = formData.get("job_title") as string
@@ -165,7 +165,7 @@ export async function createEmployee(formData: FormData): Promise<any> {
       phone: phone || null,
       address: address || null,
       city: city || null,
-      state: state || null,
+      state: state_value || null,
       zip_code: zip_code || null,
       country: country || null,
       job_title: job_title || null,
@@ -473,6 +473,65 @@ export async function updateEmployee(id: string, formData: FormData): Promise<an
   }
 }
 
+// Set primary company (from company allocations)
+export async function setPrimaryCompany(employeeId: string, allocationId: string): Promise<void> {
+  const supabase = createClient()
+
+  try {
+    // Begin transaction
+    // First get the allocation details to update the employee's primary company and branch
+    const { data: allocation, error: fetchError } = await supabase
+      .from("employee_companies")
+      .select("*")
+      .eq("id", allocationId)
+      .single()
+
+    if (fetchError) {
+      throw new Error(`Failed to fetch allocation: ${fetchError.message}`)
+    }
+
+    // Update all employee allocations to not be primary
+    const { error: updateAllocationsError } = await supabase
+      .from("employee_companies")
+      .update({ is_primary: false })
+      .eq("employee_id", employeeId)
+
+    if (updateAllocationsError) {
+      throw new Error(`Failed to update allocations: ${updateAllocationsError.message}`)
+    }
+
+    // Set the selected allocation as primary
+    const { error: setPrimaryError } = await supabase
+      .from("employee_companies")
+      .update({ is_primary: true })
+      .eq("id", allocationId)
+
+    if (setPrimaryError) {
+      throw new Error(`Failed to set primary allocation: ${setPrimaryError.message}`)
+    }
+
+    // Update the employee's primary company and home branch
+    const { error: updateEmployeeError } = await supabase
+      .from("employees")
+      .update({
+        primary_company_id: allocation.company_id,
+        home_branch_id: allocation.branch_id,
+      })
+      .eq("id", employeeId)
+
+    if (updateEmployeeError) {
+      throw new Error(`Failed to update employee: ${updateEmployeeError.message}`)
+    }
+
+    revalidatePath(`/people/employees/${employeeId}`)
+    revalidatePath(`/people/employees/${employeeId}/edit`)
+    revalidatePath("/people/employees")
+  } catch (error) {
+    console.error("Error setting primary company:", error)
+    throw error
+  }
+}
+
 // Delete an employee
 export async function deleteEmployee(id: string) {
   const supabase = createClient()
@@ -535,7 +594,23 @@ export async function addEmployeeCompany(employeeId: string, formData: FormData)
 
   const totalAllocation = existingAllocations?.reduce((sum, ec) => sum + ec.allocation_percentage, 0) || 0
   if (totalAllocation + allocation_percentage > 100) {
-    throw new Error("Total allocation percentage cannot exceed 100%")
+    throw new Error(
+      `Total allocation percentage cannot exceed 100%. Current total: ${totalAllocation}%, Adding: ${allocation_percentage}%`,
+    )
+  }
+
+  // Check if company already has an allocation for this employee
+  const { data: existingCompany } = await supabase
+    .from("employee_companies")
+    .select("id")
+    .eq("employee_id", employeeId)
+    .eq("company_id", company_id)
+    .maybeSingle()
+
+  if (existingCompany) {
+    throw new Error(
+      "This company already has an allocation for this employee. Please edit the existing allocation instead.",
+    )
   }
 
   // Insert employee company
@@ -549,10 +624,19 @@ export async function addEmployeeCompany(employeeId: string, formData: FormData)
 
   if (error) {
     console.error("Error adding employee company:", error)
+
+    // Handle unique constraint violation
+    if (error.code === "23505" && error.message.includes("employee_companies_employee_id_company_id_key")) {
+      throw new Error(
+        "This employee already has an allocation for this company. Each company can only be allocated once per employee.",
+      )
+    }
+
     throw new Error("Failed to add employee company")
   }
 
   revalidatePath(`/people/employees/${employeeId}`)
+  revalidatePath(`/people/employees/${employeeId}/edit`)
 }
 
 // Update employee company
@@ -567,7 +651,7 @@ export async function updateEmployeeCompany(id: string, formData: FormData): Pro
   // Get current allocation
   const { data: currentAllocation } = await supabase
     .from("employee_companies")
-    .select("allocation_percentage")
+    .select("allocation_percentage, is_primary")
     .eq("id", id)
     .single()
 
@@ -580,14 +664,15 @@ export async function updateEmployeeCompany(id: string, formData: FormData): Pro
 
   const totalAllocation = existingAllocations?.reduce((sum, ec) => sum + ec.allocation_percentage, 0) || 0
   if (totalAllocation + allocation_percentage > 100) {
-    throw new Error("Total allocation percentage cannot exceed 100%")
+    throw new Error(
+      `Total allocation percentage cannot exceed 100%. Other allocations: ${totalAllocation}%, This allocation: ${allocation_percentage}%`,
+    )
   }
 
   // Update employee company
   const { error } = await supabase
     .from("employee_companies")
     .update({
-      company_id,
       branch_id,
       allocation_percentage,
     })
@@ -598,12 +683,53 @@ export async function updateEmployeeCompany(id: string, formData: FormData): Pro
     throw new Error("Failed to update employee company")
   }
 
+  // If this is the primary allocation, also update the employee's home branch
+  if (currentAllocation?.is_primary) {
+    const { error: updateEmployeeError } = await supabase
+      .from("employees")
+      .update({
+        home_branch_id: branch_id,
+      })
+      .eq("id", employee_id)
+
+    if (updateEmployeeError) {
+      console.error("Error updating employee home branch:", updateEmployeeError)
+      // We don't throw here to avoid rolling back the allocation update
+    }
+  }
+
   revalidatePath(`/people/employees/${employee_id}`)
+  revalidatePath(`/people/employees/${employee_id}/edit`)
 }
 
 // Delete employee company
 export async function deleteEmployeeCompany(id: string, employeeId: string): Promise<void> {
   const supabase = createClient()
+
+  // Check if this is the only allocation
+  const { count, error: countError } = await supabase
+    .from("employee_companies")
+    .select("*", { count: "exact", head: true })
+    .eq("employee_id", employeeId)
+
+  if (countError) {
+    console.error("Error counting employee companies:", countError)
+    throw new Error("Failed to check employee companies")
+  }
+
+  // Get current allocation to check if it's primary
+  const { data: currentAllocation } = await supabase
+    .from("employee_companies")
+    .select("is_primary")
+    .eq("id", id)
+    .single()
+
+  // If this is the primary allocation and there are others, prevent deletion
+  if (currentAllocation?.is_primary && count > 1) {
+    throw new Error(
+      "Cannot delete the primary company allocation when other allocations exist. Please set another allocation as primary first.",
+    )
+  }
 
   // Delete employee company
   const { error } = await supabase.from("employee_companies").delete().eq("id", id)
@@ -613,7 +739,24 @@ export async function deleteEmployeeCompany(id: string, employeeId: string): Pro
     throw new Error("Failed to delete employee company")
   }
 
+  // If this was the primary allocation, clear the employee's primary company and home branch
+  if (currentAllocation?.is_primary) {
+    const { error: updateEmployeeError } = await supabase
+      .from("employees")
+      .update({
+        primary_company_id: null,
+        home_branch_id: null,
+      })
+      .eq("id", employeeId)
+
+    if (updateEmployeeError) {
+      console.error("Error updating employee after deleting primary company:", updateEmployeeError)
+      // We don't throw here to avoid rolling back the deletion
+    }
+  }
+
   revalidatePath(`/people/employees/${employeeId}`)
+  revalidatePath(`/people/employees/${employeeId}/edit`)
 }
 
 // Get departments
