@@ -141,28 +141,35 @@ export function AddEmployeeForm({
     form.setValue("home_branch_id", "")
   }
 
-  // Check form progress
-  useEffect(() => {
-    const values = form.getValues()
+  // Watch for changes to update progress indicators
+  const firstName = form.watch("first_name")
+  const lastName = form.watch("last_name")
+  const jobTitle = form.watch("job_title")
+  const departmentId = form.watch("department_id")
+  const primaryCompanyId = form.watch("primary_company_id")
 
-    // Check personal info
+  // Update form progress when specific fields change
+  useEffect(() => {
     setFormProgress((prev) => ({
       ...prev,
-      personal: !!values.first_name && !!values.last_name,
+      personal: !!firstName && !!lastName,
     }))
+  }, [firstName, lastName])
 
-    // Check address info (optional, so always true)
+  useEffect(() => {
+    setFormProgress((prev) => ({
+      ...prev,
+      employment: !!jobTitle || !!departmentId || !!primaryCompanyId,
+    }))
+  }, [jobTitle, departmentId, primaryCompanyId])
+
+  // Set address progress to true since it's optional
+  useEffect(() => {
     setFormProgress((prev) => ({
       ...prev,
       address: true,
     }))
-
-    // Check employment info
-    setFormProgress((prev) => ({
-      ...prev,
-      employment: !!values.job_title || !!values.department_id || !!values.primary_company_id,
-    }))
-  }, [form.watch()])
+  }, [])
 
   // Handle form submission
   const onSubmit = async (data: EmployeeFormValues) => {
