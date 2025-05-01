@@ -32,16 +32,6 @@ function createSupabaseClient(): SupabaseClient {
       persistSession: true,
       storageKey: "app-supabase-auth",
     },
-    global: {
-      headers: {
-        // Add a custom header to help with debugging
-        "x-app-client": "employee-detail-page",
-      },
-    },
-    // Ensure we're not caching responses
-    db: {
-      schema: "public",
-    },
   })
 
   return clientSingleton

@@ -13,11 +13,9 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import type { Employee } from "@/types/employee"
-import type { EmployeeCompany } from "@/types/employee-company"
 
 export function EmployeeList() {
   const [employees, setEmployees] = useState<Employee[]>([])
-  const [employeeCompanies, setEmployeeCompanies] = useState<Record<string, EmployeeCompany[]>>({})
   const [loading, setLoading] = useState(true)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [employeeToDelete, setEmployeeToDelete] = useState<Employee | null>(null)
@@ -64,11 +62,6 @@ export function EmployeeList() {
         })) || []
 
       setEmployees(transformedData)
-
-      // Fetch company allocations for each employee
-      if (data && data.length > 0) {
-        await fetchEmployeeCompanies(data.map((emp) => emp.id.toString()))
-      }
     } catch (error) {
       console.error("Error fetching employees:", error)
       toast({
@@ -78,49 +71,6 @@ export function EmployeeList() {
       })
     } finally {
       setLoading(false)
-    }
-  }
-
-  const fetchEmployeeCompanies = async (employeeIds: string[]) => {
-    try {
-      const { data, error } = await supabase
-        .from("employee_companies")
-        .select(`
-          *,
-          companies:company_id(name),
-          branches:branch_id(name)
-        `)
-        .in("employee_id", employeeIds)
-        .order("is_primary", { ascending: false })
-
-      if (error) {
-        throw error
-      }
-
-      // Group company allocations by employee ID
-      const companiesByEmployee: Record<string, EmployeeCompany[]> = {}
-
-      data.forEach((allocation) => {
-        const employeeId = allocation.employee_id.toString()
-        if (!companiesByEmployee[employeeId]) {
-          companiesByEmployee[employeeId] = []
-        }
-
-        companiesByEmployee[employeeId].push({
-          ...allocation,
-          company_name: allocation.companies?.name || "Unknown",
-          branch_name: allocation.branches?.name || "Unknown",
-        })
-      })
-
-      setEmployeeCompanies(companiesByEmployee)
-    } catch (error) {
-      console.error("Error fetching employee companies:", error)
-      toast({
-        title: "Error",
-        description: "Failed to fetch company allocations. Some information may be missing.",
-        variant: "destructive",
-      })
     }
   }
 
@@ -159,29 +109,6 @@ export function EmployeeList() {
     setSelectAll(!selectAll)
   }
 
-  // Helper function to render company allocations
-  const renderCompanyAllocations = (employeeId: string) => {
-    const allocations = employeeCompanies[employeeId.toString()]
-    if (!allocations || allocations.length === 0) {
-      return <span className="text-muted-foreground text-sm">No allocations</span>
-    }
-
-    return (
-      <div className="space-y-1">
-        {allocations.map((allocation, index) => (
-          <div key={index} className="flex items-center text-sm">
-            <Badge variant={allocation.is_primary ? "default" : "outline"} className="mr-2">
-              {allocation.allocation_percentage}%
-            </Badge>
-            <span>
-              {allocation.company_name} ({allocation.branch_name})
-            </span>
-          </div>
-        ))}
-      </div>
-    )
-  }
-
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -211,7 +138,6 @@ export function EmployeeList() {
               <TableHead>Job Title</TableHead>
               <TableHead>Department</TableHead>
               <TableHead>Primary Company</TableHead>
-              <TableHead>Company Allocations</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-center">Actions</TableHead>
             </TableRow>
@@ -219,13 +145,13 @@ export function EmployeeList() {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={10} className="text-center py-4">
+                <TableCell colSpan={9} className="text-center py-4">
                   Loading employees...
                 </TableCell>
               </TableRow>
             ) : employees.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={10} className="text-center py-4">
+                <TableCell colSpan={9} className="text-center py-4">
                   No employees found. Add your first employee to get started.
                 </TableCell>
               </TableRow>
@@ -249,7 +175,6 @@ export function EmployeeList() {
                   <TableCell>{employee.job_title}</TableCell>
                   <TableCell>{employee.department}</TableCell>
                   <TableCell>{employee.primary_company}</TableCell>
-                  <TableCell>{renderCompanyAllocations(employee.id)}</TableCell>
                   <TableCell>
                     <Badge variant={employee.status === "Active" ? "default" : "secondary"}>{employee.status}</Badge>
                   </TableCell>
