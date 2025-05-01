@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -12,14 +12,14 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Plus, X, Trash2 } from "lucide-react"
+import { Plus, X, Trash2, Edit2, AlertCircle } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import type { Company, Branch } from "@/types/employee"
 import { getBranchesByCompany } from "@/actions/employee-actions"
 import { toast } from "@/components/ui/use-toast"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
 export interface AllocationFormData {
   company_id: number
@@ -48,12 +48,15 @@ export function AddEmployeeAllocations({
   primaryBranchId,
 }: AddEmployeeAllocationsProps) {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [editingIndex, setEditingIndex] = useState<number>(-1)
   const [branches, setBranches] = useState<Branch[]>(initialBranches)
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>("")
   const [selectedBranchId, setSelectedBranchId] = useState<string>("")
   const [allocationPercentage, setAllocationPercentage] = useState<number>(0)
   const [totalAllocation, setTotalAllocation] = useState(0)
   const [availableAllocation, setAvailableAllocation] = useState(100)
+  const dialogButtonRef = useRef<HTMLButtonElement>(null)
 
   // Calculate total allocation whenever allocations change
   useEffect(() => {
@@ -116,16 +119,11 @@ export function AddEmployeeAllocations({
   const handleAllocationChange = (value: string) => {
     const percentage = Number.parseInt(value)
     if (!isNaN(percentage)) {
-      if (percentage >= 1 && percentage <= availableAllocation) {
+      if (percentage >= 1 && percentage <= 100) {
         setAllocationPercentage(percentage)
-      } else if (percentage > availableAllocation) {
-        // Cap at maximum available
-        setAllocationPercentage(availableAllocation)
-        toast({
-          title: "Maximum allocation reached",
-          description: `The maximum available allocation is ${availableAllocation}%.`,
-          variant: "default",
-        })
+      } else if (percentage > 100) {
+        // Cap at maximum 100%
+        setAllocationPercentage(100)
       } else if (percentage < 1) {
         // Minimum allocation is 1%
         setAllocationPercentage(1)
@@ -143,19 +141,154 @@ export function AddEmployeeAllocations({
     const company = companies.find((c) => c.id.toString() === selectedCompanyId)
     const branch = branches.find((b) => b.id.toString() === selectedBranchId)
 
-    const newAllocation: AllocationFormData = {
-      company_id: Number.parseInt(selectedCompanyId),
-      branch_id: Number.parseInt(selectedBranchId),
-      allocation_percentage: allocationPercentage,
-      is_primary: false,
-      company_name: company?.name,
-      branch_name: branch?.name,
+    // Check if this company already has an allocation (regardless of branch)
+    // This is to prevent violating the unique constraint on employee_id and company_id
+    const existingCompanyIndex = allocations.findIndex((a) => a.company_id.toString() === selectedCompanyId)
+
+    if (existingCompanyIndex >= 0) {
+      toast({
+        title: "Company already allocated",
+        description:
+          "This company already has an allocation. Due to database constraints, an employee can only be allocated to a company once.",
+        variant: "destructive",
+      })
+      return
     }
 
-    setAllocations([...allocations, newAllocation])
+    // Check if adding this allocation would exceed 100%
+    const newTotal = totalAllocation + allocationPercentage
+    if (newTotal > 100) {
+      // Ask user if they want to adjust allocations
+      if (confirm(`Adding this allocation will exceed 100% (${newTotal}%). Would you like to adjust it to fit?`)) {
+        // Adjust the new allocation to fit within 100%
+        const adjustedPercentage = 100 - totalAllocation
+
+        if (adjustedPercentage <= 0) {
+          toast({
+            title: "Cannot add allocation",
+            description: "Total allocation is already at 100%. Please reduce other allocations first.",
+            variant: "destructive",
+          })
+          return
+        }
+
+        const newAllocation: AllocationFormData = {
+          company_id: Number.parseInt(selectedCompanyId),
+          branch_id: Number.parseInt(selectedBranchId),
+          allocation_percentage: adjustedPercentage,
+          is_primary: false,
+          company_name: company?.name,
+          branch_name: branch?.name,
+        }
+
+        setAllocations([...allocations, newAllocation])
+      } else {
+        // User chose not to adjust
+        return
+      }
+    } else {
+      // Add the allocation as is
+      const newAllocation: AllocationFormData = {
+        company_id: Number.parseInt(selectedCompanyId),
+        branch_id: Number.parseInt(selectedBranchId),
+        allocation_percentage: allocationPercentage,
+        is_primary: false,
+        company_name: company?.name,
+        branch_name: branch?.name,
+      }
+
+      setAllocations([...allocations, newAllocation])
+    }
+
     setIsAddDialogOpen(false)
 
     // Reset selection
+    setSelectedCompanyId("")
+    setSelectedBranchId("")
+    setAllocationPercentage(0)
+  }
+
+  // Handle editing an allocation
+  const handleEditAllocation = (index: number) => {
+    const allocation = allocations[index]
+    setEditingIndex(index)
+    setSelectedCompanyId(allocation.company_id.toString())
+    setSelectedBranchId(allocation.branch_id.toString())
+    setAllocationPercentage(allocation.allocation_percentage)
+    setIsEditDialogOpen(true)
+  }
+
+  // Handle saving edited allocation
+  const handleSaveEdit = () => {
+    if (editingIndex < 0 || !selectedCompanyId || !selectedBranchId || allocationPercentage <= 0) {
+      return
+    }
+
+    // Find company and branch names for display
+    const company = companies.find((c) => c.id.toString() === selectedCompanyId)
+    const branch = branches.find((b) => b.id.toString() === selectedBranchId)
+
+    // Check if changing to a different company that already has an allocation
+    if (allocations[editingIndex].company_id.toString() !== selectedCompanyId) {
+      const existingCompanyIndex = allocations.findIndex(
+        (a, i) => i !== editingIndex && a.company_id.toString() === selectedCompanyId,
+      )
+
+      if (existingCompanyIndex >= 0) {
+        toast({
+          title: "Company already allocated",
+          description:
+            "This company already has an allocation. Due to database constraints, an employee can only be allocated to a company once.",
+          variant: "destructive",
+        })
+        return
+      }
+    }
+
+    // Calculate what the new total would be
+    const oldPercentage = allocations[editingIndex].allocation_percentage
+    const newTotal = totalAllocation - oldPercentage + allocationPercentage
+
+    if (newTotal > 100) {
+      // Ask user if they want to adjust
+      if (confirm(`This change will exceed 100% (${newTotal}%). Would you like to adjust it to fit?`)) {
+        // Adjust to fit
+        const adjustedPercentage = oldPercentage + (100 - totalAllocation)
+
+        const updatedAllocation: AllocationFormData = {
+          ...allocations[editingIndex],
+          company_id: Number.parseInt(selectedCompanyId),
+          branch_id: Number.parseInt(selectedBranchId),
+          allocation_percentage: adjustedPercentage,
+          company_name: company?.name,
+          branch_name: branch?.name,
+        }
+
+        const newAllocations = [...allocations]
+        newAllocations[editingIndex] = updatedAllocation
+        setAllocations(newAllocations)
+      } else {
+        // User chose not to adjust
+        return
+      }
+    } else {
+      // Update the allocation
+      const updatedAllocation: AllocationFormData = {
+        ...allocations[editingIndex],
+        company_id: Number.parseInt(selectedCompanyId),
+        branch_id: Number.parseInt(selectedBranchId),
+        allocation_percentage: allocationPercentage,
+        company_name: company?.name,
+        branch_name: branch?.name,
+      }
+
+      const newAllocations = [...allocations]
+      newAllocations[editingIndex] = updatedAllocation
+      setAllocations(newAllocations)
+    }
+
+    setIsEditDialogOpen(false)
+    setEditingIndex(-1)
     setSelectedCompanyId("")
     setSelectedBranchId("")
     setAllocationPercentage(0)
@@ -201,6 +334,74 @@ export function AddEmployeeAllocations({
     }
   }, [primaryCompanyId, primaryBranchId, companies, initialBranches, allocations, setAllocations])
 
+  // Function to redistribute allocations to make room for a new one
+  const redistributeAllocations = (targetPercentage: number) => {
+    if (allocations.length === 0 || targetPercentage >= 100) return false
+
+    // Calculate how much we need to reduce
+    const reductionNeeded = targetPercentage
+
+    // Create a copy of allocations that we can modify
+    const newAllocations = [...allocations]
+
+    // Sort by allocation percentage (descending) and non-primary first
+    newAllocations.sort((a, b) => {
+      // Primary allocations last
+      if (a.is_primary && !b.is_primary) return 1
+      if (!a.is_primary && b.is_primary) return -1
+      // Then by percentage (descending)
+      return b.allocation_percentage - a.allocation_percentage
+    })
+
+    let totalReduced = 0
+
+    // Reduce each allocation proportionally
+    for (let i = 0; i < newAllocations.length; i++) {
+      if (totalReduced >= reductionNeeded) break
+
+      const allocation = newAllocations[i]
+      // Skip primary allocations initially if possible
+      if (allocation.is_primary && i < newAllocations.length - 1) continue
+
+      // Calculate reduction for this allocation (proportional to its size)
+      const reductionForThis = Math.min(
+        allocation.allocation_percentage - 1, // Don't go below 1%
+        reductionNeeded - totalReduced, // Don't reduce more than needed
+      )
+
+      if (reductionForThis <= 0) continue
+
+      // Apply reduction
+      allocation.allocation_percentage -= reductionForThis
+      totalReduced += reductionForThis
+    }
+
+    // If we couldn't reduce enough, try again including primary allocations
+    if (totalReduced < reductionNeeded) {
+      for (let i = 0; i < newAllocations.length; i++) {
+        if (totalReduced >= reductionNeeded) break
+
+        const allocation = newAllocations[i]
+        if (!allocation.is_primary) continue // Already processed non-primary
+
+        const reductionForThis = Math.min(allocation.allocation_percentage - 1, reductionNeeded - totalReduced)
+
+        if (reductionForThis <= 0) continue
+
+        allocation.allocation_percentage -= reductionForThis
+        totalReduced += reductionForThis
+      }
+    }
+
+    // If we managed to reduce enough, apply the changes
+    if (totalReduced >= reductionNeeded) {
+      setAllocations(newAllocations)
+      return true
+    }
+
+    return false
+  }
+
   // Validate total allocation
   const validateTotalAllocation = () => {
     const total = allocations.reduce((sum, allocation) => sum + allocation.allocation_percentage, 0)
@@ -229,6 +430,16 @@ export function AddEmployeeAllocations({
     }
   }, [allocations])
 
+  // Get available companies (those not already allocated)
+  const availableCompanies = companies.filter(
+    (company) =>
+      !allocations.some(
+        (allocation) =>
+          allocation.company_id === company.id &&
+          (editingIndex === -1 || allocations.indexOf(allocation) !== editingIndex),
+      ),
+  )
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -239,95 +450,127 @@ export function AddEmployeeAllocations({
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button type="button" disabled={availableAllocation <= 0} aria-label="Add company allocation">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Company
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Add Company Allocation</DialogTitle>
-                    <DialogDescription>
-                      Assign the employee to work at a company and branch with a specific allocation percentage.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="grid gap-4 py-4">
-                    <div className="grid gap-2">
-                      <Label htmlFor="company_id">Company</Label>
-                      <Select value={selectedCompanyId} onValueChange={handleCompanyChange}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select company" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {companies.map((company) => (
-                            <SelectItem key={company.id} value={company.id.toString()}>
-                              {company.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="grid gap-2">
-                      <Label htmlFor="branch_id">Branch</Label>
-                      <Select value={selectedBranchId} onValueChange={handleBranchChange} disabled={!selectedCompanyId}>
-                        <SelectTrigger>
-                          <SelectValue placeholder={selectedCompanyId ? "Select branch" : "Select company first"} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {branches.map((branch) => (
-                            <SelectItem key={branch.id} value={branch.id.toString()}>
-                              {branch.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="grid gap-2">
-                      <Label htmlFor="allocation_percentage">Allocation Percentage</Label>
-                      <Input
-                        id="allocation_percentage"
-                        type="number"
-                        min="1"
-                        max={availableAllocation}
-                        value={allocationPercentage}
-                        onChange={(e) => handleAllocationChange(e.target.value)}
-                      />
-                      <p className="text-xs text-muted-foreground">Maximum available: {availableAllocation}%</p>
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setIsAddDialogOpen(false)}
-                      className="flex items-center gap-2"
-                    >
-                      <X className="h-4 w-4" />
-                      Cancel
-                    </Button>
-                    <Button
-                      type="button"
-                      onClick={handleAddAllocation}
-                      disabled={!selectedCompanyId || !selectedBranchId || allocationPercentage <= 0}
-                      className="flex items-center gap-2"
-                    >
-                      <Plus className="h-4 w-4" />
-                      Add
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
+              <Button
+                type="button"
+                onClick={() => setIsAddDialogOpen(true)}
+                aria-label="Add company allocation"
+                ref={dialogButtonRef}
+                disabled={availableCompanies.length === 0}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Company
+              </Button>
             </TooltipTrigger>
             <TooltipContent>
-              <p>Add a new company allocation</p>
+              <p>
+                {availableCompanies.length === 0
+                  ? "No more companies available to allocate"
+                  : "Add a new company allocation"}
+              </p>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
       </div>
+
+      {availableCompanies.length === 0 && allocations.length > 0 && (
+        <Alert variant="info" className="mt-2">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            All available companies have been allocated. Due to database constraints, an employee can only be allocated
+            to a company once.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Add Company Dialog */}
+      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Company Allocation</DialogTitle>
+            <DialogDescription>
+              Assign the employee to work at a company and branch with a specific allocation percentage.
+              {availableAllocation <= 0 && (
+                <p className="text-amber-500 mt-2">
+                  Note: Adding this allocation will require adjusting existing allocations.
+                </p>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="company_id">Company</Label>
+              <Select value={selectedCompanyId} onValueChange={handleCompanyChange}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select company" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableCompanies.map((company) => (
+                    <SelectItem key={company.id} value={company.id.toString()}>
+                      {company.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {availableCompanies.length === 0 && (
+                <p className="text-xs text-destructive">No more companies available to allocate.</p>
+              )}
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="branch_id">Branch</Label>
+              <Select value={selectedBranchId} onValueChange={handleBranchChange} disabled={!selectedCompanyId}>
+                <SelectTrigger>
+                  <SelectValue placeholder={selectedCompanyId ? "Select branch" : "Select company first"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {branches.map((branch) => (
+                    <SelectItem key={branch.id} value={branch.id.toString()}>
+                      {branch.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="allocation_percentage">Allocation Percentage</Label>
+              <Input
+                id="allocation_percentage"
+                type="number"
+                min="1"
+                max="100"
+                value={allocationPercentage}
+                onChange={(e) => handleAllocationChange(e.target.value)}
+              />
+              {availableAllocation <= 0 ? (
+                <p className="text-xs text-amber-500">Adding this allocation will redistribute existing allocations.</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">Recommended maximum: {availableAllocation}%</p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsAddDialogOpen(false)}
+              className="flex items-center gap-2"
+            >
+              <X className="h-4 w-4" />
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleAddAllocation}
+              disabled={!selectedCompanyId || !selectedBranchId || allocationPercentage <= 0}
+              className="flex items-center gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              Add
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="rounded-md border">
         <Table>
@@ -361,7 +604,25 @@ export function AddEmployeeAllocations({
                     ) : null}
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center justify-center">
+                    <div className="flex items-center justify-center gap-2">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleEditAllocation(index)}
+                              aria-label="Edit company allocation"
+                            >
+                              <Edit2 className="h-4 w-4 text-blue-500" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Edit allocation</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -369,14 +630,18 @@ export function AddEmployeeAllocations({
                               variant="ghost"
                               size="icon"
                               onClick={() => handleRemoveAllocation(index)}
-                              disabled={allocation.is_primary}
+                              disabled={allocation.is_primary && allocations.length > 1}
                               aria-label="Delete company allocation"
                             >
                               <Trash2 className="h-4 w-4 text-red-500" />
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p>{allocation.is_primary ? "Cannot delete primary company" : "Delete allocation"}</p>
+                            <p>
+                              {allocation.is_primary && allocations.length > 1
+                                ? "Cannot delete primary company when other allocations exist"
+                                : "Delete allocation"}
+                            </p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -388,6 +653,107 @@ export function AddEmployeeAllocations({
           </TableBody>
         </Table>
       </div>
+
+      {/* Edit Allocation Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Company Allocation</DialogTitle>
+            <DialogDescription>Update the allocation percentage for this company and branch.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="edit_company_id">Company</Label>
+              <Select
+                value={selectedCompanyId}
+                onValueChange={handleCompanyChange}
+                disabled={editingIndex >= 0 && allocations[editingIndex]?.is_primary}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select company" />
+                </SelectTrigger>
+                <SelectContent>
+                  {companies
+                    .filter(
+                      (company) =>
+                        company.id.toString() ===
+                          (editingIndex >= 0 ? allocations[editingIndex].company_id.toString() : "") ||
+                        !allocations.some(
+                          (allocation) =>
+                            allocation.company_id === company.id && allocations.indexOf(allocation) !== editingIndex,
+                        ),
+                    )
+                    .map((company) => (
+                      <SelectItem key={company.id} value={company.id.toString()}>
+                        {company.name}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="edit_branch_id">Branch</Label>
+              <Select
+                value={selectedBranchId}
+                onValueChange={handleBranchChange}
+                disabled={!selectedCompanyId || (editingIndex >= 0 && allocations[editingIndex]?.is_primary)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={selectedCompanyId ? "Select branch" : "Select company first"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {branches.map((branch) => (
+                    <SelectItem key={branch.id} value={branch.id.toString()}>
+                      {branch.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="edit_allocation_percentage">Allocation Percentage</Label>
+              <Input
+                id="edit_allocation_percentage"
+                type="number"
+                min="1"
+                max="100"
+                value={allocationPercentage}
+                onChange={(e) => handleAllocationChange(e.target.value)}
+              />
+              {editingIndex >= 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Current: {allocations[editingIndex]?.allocation_percentage}%
+                </p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setIsEditDialogOpen(false)
+                setEditingIndex(-1)
+              }}
+              className="flex items-center gap-2"
+            >
+              <X className="h-4 w-4" />
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleSaveEdit}
+              disabled={!selectedCompanyId || !selectedBranchId || allocationPercentage <= 0}
+              className="flex items-center gap-2"
+            >
+              <Edit2 className="h-4 w-4" />
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

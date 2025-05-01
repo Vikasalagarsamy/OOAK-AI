@@ -114,7 +114,6 @@ export interface EmployeeFormData {
   state: string | null
   zip_code: string | null
   country: string | null
-  hire_date: string | null
   termination_date: string | null
   status: string
   department_id: number | null

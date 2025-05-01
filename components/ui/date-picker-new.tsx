@@ -1,6 +1,9 @@
 "use client"
+
+import * as React from "react"
 import { format } from "date-fns"
 import { CalendarIcon } from "lucide-react"
+
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
@@ -14,24 +17,33 @@ export interface DatePickerProps {
   disabled?: boolean
 }
 
-export function DatePicker({
+export function DatePickerNew({
   date,
   setDate,
   className,
   placeholder = "Select date",
   disabled = false,
 }: DatePickerProps) {
+  const [open, setOpen] = React.useState(false)
+
+  // Handle date selection
+  const handleSelect = (selectedDate: Date | undefined) => {
+    setDate(selectedDate)
+    setOpen(false)
+  }
+
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
-          variant={"outline"}
+          variant="outline"
           className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground", className)}
           disabled={disabled}
           type="button"
           onClick={(e) => {
-            // Prevent event propagation to avoid form submission
+            e.preventDefault()
             e.stopPropagation()
+            setOpen(true)
           }}
         >
           <CalendarIcon className="mr-2 h-4 w-4" />
@@ -39,16 +51,7 @@ export function DatePicker({
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="start">
-        <Calendar
-          mode="single"
-          selected={date}
-          onSelect={(newDate) => {
-            setDate(newDate)
-            // Close the popover after selection
-            document.body.click()
-          }}
-          initialFocus
-        />
+        <Calendar mode="single" selected={date} onSelect={handleSelect} initialFocus disabled={disabled} />
       </PopoverContent>
     </Popover>
   )

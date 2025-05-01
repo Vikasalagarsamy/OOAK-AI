@@ -93,7 +93,6 @@ export async function createEmployee(formData: FormData): Promise<any> {
     const state = formData.get("state") as string
     const zip_code = formData.get("zip_code") as string
     const country = formData.get("country") as string
-    const hire_date = formData.get("hire_date") as string
     const job_title = formData.get("job_title") as string
     const department_id = formData.get("department_id") as string
     const designation_id = formData.get("designation_id") as string
@@ -169,7 +168,6 @@ export async function createEmployee(formData: FormData): Promise<any> {
       state: state || null,
       zip_code: zip_code || null,
       country: country || null,
-      hire_date: hire_date || null,
       job_title: job_title || null,
       status: "active",
     }
@@ -218,6 +216,23 @@ export async function createEmployee(formData: FormData): Promise<any> {
         throw new Error(`Total allocation percentage must equal 100%. Current total: ${totalPercentage}%`)
       }
 
+      // Check for duplicate company allocations
+      const companyIds = new Set()
+      const duplicateCompanies = []
+
+      for (const allocation of allocations) {
+        if (companyIds.has(allocation.company_id)) {
+          duplicateCompanies.push(allocation.company_id)
+        }
+        companyIds.add(allocation.company_id)
+      }
+
+      if (duplicateCompanies.length > 0) {
+        // Delete the employee since allocations are invalid
+        await supabase.from("employees").delete().eq("id", data.id)
+        throw new Error(`Duplicate company allocations detected. An employee can only be allocated to a company once.`)
+      }
+
       // Prepare allocations data
       const allocationData = allocations.map((allocation: any) => ({
         employee_id: data.id,
@@ -234,6 +249,17 @@ export async function createEmployee(formData: FormData): Promise<any> {
         console.error("Error creating employee company allocations:", allocationError)
         // Delete the employee since allocations failed
         await supabase.from("employees").delete().eq("id", data.id)
+
+        // Provide a more specific error message for the unique constraint violation
+        if (
+          allocationError.code === "23505" &&
+          allocationError.message.includes("employee_companies_employee_id_company_id_key")
+        ) {
+          throw new Error(
+            `Failed to create employee company allocations: An employee can only be allocated to a company once.`,
+          )
+        }
+
         throw new Error(`Failed to create employee company allocations: ${allocationError.message}`)
       }
     }
@@ -251,6 +277,17 @@ export async function createEmployee(formData: FormData): Promise<any> {
         console.error("Error creating employee company allocation:", allocationError)
         // Delete the employee since allocation failed
         await supabase.from("employees").delete().eq("id", data.id)
+
+        // Provide a more specific error message for the unique constraint violation
+        if (
+          allocationError.code === "23505" &&
+          allocationError.message.includes("employee_companies_employee_id_company_id_key")
+        ) {
+          throw new Error(
+            `Failed to create employee company allocation: An employee can only be allocated to a company once.`,
+          )
+        }
+
         throw new Error(`Failed to create employee company allocation: ${allocationError.message}`)
       }
     }
@@ -583,14 +620,22 @@ export async function deleteEmployeeCompany(id: string, employeeId: string): Pro
 export async function getDepartments(): Promise<Department[]> {
   const supabase = createClient()
 
-  const { data, error } = await supabase.from("departments").select("*").order("name")
+  try {
+    console.log("Fetching departments from database...")
+    const { data, error } = await supabase.from("departments").select("*").order("name")
 
-  if (error) {
-    console.error("Error fetching departments:", error)
-    throw new Error("Failed to fetch departments")
+    if (error) {
+      console.error("Error fetching departments:", error)
+      throw new Error(`Failed to fetch departments: ${error.message}`)
+    }
+
+    console.log(`Successfully fetched ${data?.length || 0} departments`)
+    return data || []
+  } catch (error) {
+    console.error("Exception in getDepartments:", error)
+    // Return empty array instead of throwing to prevent UI from breaking
+    return []
   }
-
-  return data
 }
 
 // Get designations

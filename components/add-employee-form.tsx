@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -12,7 +14,6 @@ import { useToast } from "@/components/ui/use-toast"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { DatePicker } from "@/components/ui/date-picker"
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -32,7 +33,6 @@ const employeeFormSchema = z.object({
   state: z.string().optional(),
   zip_code: z.string().optional(),
   country: z.string().optional(),
-  hire_date: z.date().optional(),
   job_title: z.string().optional(),
   department_id: z.string().optional(),
   designation_id: z.string().optional(),
@@ -115,6 +115,7 @@ export function AddEmployeeForm({
 
   // Update filtered designations when department changes
   const handleDepartmentChange = (value: string) => {
+    console.log(`Department selected: ${value}`)
     setSelectedDepartmentId(value)
     form.setValue("department_id", value)
 
@@ -126,9 +127,10 @@ export function AddEmployeeForm({
       // Filter designations by department_id
       const filtered = designations.filter((designation) => designation.department_id === departmentId)
       setFilteredDesignations(filtered)
+      console.log(`Filtered ${filtered.length} designations for department ${departmentId}`)
     } else {
-      // If no department is selected, show all designations
-      setFilteredDesignations(designations)
+      // If no department is selected, show no designations
+      setFilteredDesignations([])
     }
   }
 
@@ -197,6 +199,7 @@ export function AddEmployeeForm({
 
   // Handle form submission
   const onSubmit = async (data: EmployeeFormValues) => {
+    console.log("Form submission triggered with data:", data)
     setIsSubmitting(true)
     setFormError(null)
 
@@ -226,6 +229,7 @@ export function AddEmployeeForm({
       // Include allocations data
       formData.append("allocations_json", JSON.stringify(allocations))
 
+      console.log("Submitting employee data to server...")
       const result = await addEmployee(formData)
 
       if (result?.success) {
@@ -247,41 +251,29 @@ export function AddEmployeeForm({
     }
   }
 
-  // Add company allocations to form data
-  const addCompanyAllocationsToFormData = (formData: FormData, employeeId: string) => {
-    allocations.forEach((allocation, index) => {
-      formData.append(`allocations[${index}][employee_id]`, employeeId)
-      formData.append(`allocations[${index}][company_id]`, allocation.company_id.toString())
-      formData.append(`allocations[${index}][branch_id]`, allocation.branch_id.toString())
-      formData.append(`allocations[${index}][allocation_percentage]`, allocation.allocation_percentage.toString())
-      formData.append(`allocations[${index}][is_primary]`, allocation.is_primary.toString())
-    })
-
-    return formData
-  }
-
   // Navigate between tabs
   const navigateToTab = (tab: string) => {
     setActiveTab(tab)
   }
 
-  // Get tab icon
-  const getTabIcon = (tab: string) => {
-    switch (tab) {
-      case "personal":
-        return <User className="h-4 w-4" />
-      case "address":
-        return <Building className="h-4 w-4" />
-      case "employment":
-        return <Briefcase className="h-4 w-4" />
-      default:
-        return null
+  // Prevent form submission on enter key
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault()
+      console.log("Enter key pressed, preventing default submission")
     }
   }
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form
+        onSubmit={(e) => {
+          console.log("Form submit event triggered")
+          form.handleSubmit(onSubmit)(e)
+        }}
+        className="space-y-6"
+        onKeyDown={handleKeyDown}
+      >
         {formError && (
           <div className="bg-destructive/10 text-destructive p-3 rounded-md mb-4">
             <p className="font-medium">Error</p>
@@ -506,7 +498,7 @@ export function AddEmployeeForm({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Department</FormLabel>
-                        <Select onValueChange={(value) => handleDepartmentChange(value)} value={field.value}>
+                        <Select onValueChange={(value) => handleDepartmentChange(value)} value={field.value || ""}>
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Select department" />
@@ -514,13 +506,22 @@ export function AddEmployeeForm({
                           </FormControl>
                           <SelectContent>
                             <SelectItem value="none">None</SelectItem>
-                            {departments.map((department) => (
-                              <SelectItem key={department.id} value={department.id.toString()}>
-                                {department.name}
-                              </SelectItem>
-                            ))}
+                            {departments && departments.length > 0 ? (
+                              departments.map((department) => (
+                                <SelectItem key={department.id} value={department.id.toString()}>
+                                  {department.name}
+                                </SelectItem>
+                              ))
+                            ) : (
+                              <div className="p-2 text-muted-foreground text-sm">No departments available</div>
+                            )}
                           </SelectContent>
                         </Select>
+                        {departments.length === 0 && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            No departments available. Please create departments first.
+                          </p>
+                        )}
                         <FormMessage />
                       </FormItem>
                     )}
@@ -586,18 +587,6 @@ export function AddEmployeeForm({
                         <FormControl>
                           <Input placeholder="Software Engineer" {...field} />
                         </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="hire_date"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-col">
-                        <FormLabel>Hire Date</FormLabel>
-                        <DatePicker date={field.value} setDate={field.onChange} />
                         <FormMessage />
                       </FormItem>
                     )}
