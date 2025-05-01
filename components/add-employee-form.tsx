@@ -72,6 +72,7 @@ export function AddEmployeeForm({
     employment: false,
     allocations: false,
   })
+  const [formError, setFormError] = useState<string | null>(null)
 
   // Initialize form with default values
   const form = useForm<EmployeeFormValues>({
@@ -117,16 +118,29 @@ export function AddEmployeeForm({
     setSelectedDepartmentId(value)
     form.setValue("department_id", value)
 
-    if (value) {
+    // Clear designation when department changes
+    form.setValue("designation_id", "")
+
+    if (value && value !== "none") {
       const departmentId = Number.parseInt(value)
-      setFilteredDesignations(designations.filter((designation) => designation.department_id === departmentId))
+      // Filter designations by department_id
+      const filtered = designations.filter((designation) => designation.department_id === departmentId)
+      setFilteredDesignations(filtered)
     } else {
+      // If no department is selected, show all designations
       setFilteredDesignations(designations)
     }
-
-    // Clear designation if department changes
-    form.setValue("designation_id", "")
   }
+
+  // Initialize filtered designations based on selected department
+  useEffect(() => {
+    if (departments.length > 0 && designations.length > 0) {
+      const deptId = form.getValues("department_id")
+      if (deptId && deptId !== "none") {
+        handleDepartmentChange(deptId)
+      }
+    }
+  }, [departments, designations])
 
   // Update filtered branches when company changes
   const handleCompanyChange = (value: string) => {
@@ -184,8 +198,19 @@ export function AddEmployeeForm({
   // Handle form submission
   const onSubmit = async (data: EmployeeFormValues) => {
     setIsSubmitting(true)
+    setFormError(null)
 
     try {
+      // Validate allocations if any exist
+      if (allocations.length > 0) {
+        const totalAllocation = allocations.reduce((sum, allocation) => sum + allocation.allocation_percentage, 0)
+        if (totalAllocation !== 100) {
+          setFormError(`Total allocation percentage must equal 100%. Current total: ${totalAllocation}%`)
+          setIsSubmitting(false)
+          return
+        }
+      }
+
       // Convert form data to FormData
       const formData = new FormData()
 
@@ -211,14 +236,13 @@ export function AddEmployeeForm({
         })
 
         router.push("/people/employees")
+      } else {
+        setFormError(result?.error || "Failed to add employee. Please try again.")
+        setIsSubmitting(false)
       }
     } catch (error) {
       console.error("Error adding employee:", error)
-      toast({
-        title: "Error adding employee",
-        description: error instanceof Error ? error.message : "An unknown error occurred",
-        variant: "destructive",
-      })
+      setFormError(error instanceof Error ? error.message : "An unknown error occurred")
       setIsSubmitting(false)
     }
   }
@@ -258,6 +282,12 @@ export function AddEmployeeForm({
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        {formError && (
+          <div className="bg-destructive/10 text-destructive p-3 rounded-md mb-4">
+            <p className="font-medium">Error</p>
+            <p className="text-sm">{formError}</p>
+          </div>
+        )}
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -502,23 +532,46 @@ export function AddEmployeeForm({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Designation</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value} disabled={!selectedDepartmentId}>
+                        <Select
+                          onValueChange={field.onChange}
+                          value={field.value}
+                          disabled={!selectedDepartmentId || selectedDepartmentId === "none"}
+                        >
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue
-                                placeholder={selectedDepartmentId ? "Select designation" : "Select department first"}
+                                placeholder={
+                                  selectedDepartmentId && selectedDepartmentId !== "none"
+                                    ? "Select designation"
+                                    : "Select department first"
+                                }
                               />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
                             <SelectItem value="none">None</SelectItem>
-                            {filteredDesignations.map((designation) => (
-                              <SelectItem key={designation.id} value={designation.id.toString()}>
-                                {designation.name}
-                              </SelectItem>
-                            ))}
+                            {filteredDesignations.length > 0
+                              ? filteredDesignations.map((designation) => (
+                                  <SelectItem key={designation.id} value={designation.id.toString()}>
+                                    {designation.name}
+                                  </SelectItem>
+                                ))
+                              : selectedDepartmentId &&
+                                selectedDepartmentId !== "none" && (
+                                  <div className="p-2 text-muted-foreground text-sm">
+                                    No designations available for this department
+                                  </div>
+                                )}
                           </SelectContent>
                         </Select>
+                        {selectedDepartmentId &&
+                          selectedDepartmentId !== "none" &&
+                          filteredDesignations.length === 0 && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              This department has no designations. Select a different department or create a designation
+                              first.
+                            </p>
+                          )}
                         <FormMessage />
                       </FormItem>
                     )}

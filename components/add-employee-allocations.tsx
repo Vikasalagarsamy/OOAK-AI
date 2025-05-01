@@ -19,6 +19,7 @@ import { Plus, X, Trash2 } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import type { Company, Branch } from "@/types/employee"
 import { getBranchesByCompany } from "@/actions/employee-actions"
+import { toast } from "@/components/ui/use-toast"
 
 export interface AllocationFormData {
   company_id: number
@@ -71,14 +72,34 @@ export function AddEmployeeAllocations({
 
       try {
         const data = await getBranchesByCompany(Number.parseInt(selectedCompanyId))
-        setBranches(data)
+        if (data && data.length > 0) {
+          setBranches(data)
+          // Auto-select the first branch if none is selected
+          if (!selectedBranchId) {
+            setSelectedBranchId(data[0].id.toString())
+          }
+        } else {
+          setBranches([])
+          // Show toast notification if no branches found
+          toast({
+            title: "No branches found",
+            description: "This company has no branches. Please add a branch first.",
+            variant: "destructive",
+          })
+        }
       } catch (error) {
         console.error("Error fetching branches:", error)
+        setBranches([])
+        toast({
+          title: "Error fetching branches",
+          description: "Failed to load branches for this company.",
+          variant: "destructive",
+        })
       }
     }
 
     fetchBranches()
-  }, [selectedCompanyId, initialBranches])
+  }, [selectedCompanyId, initialBranches, selectedBranchId])
 
   // Handle company change in the add dialog
   const handleCompanyChange = (value: string) => {
@@ -94,8 +115,21 @@ export function AddEmployeeAllocations({
   // Handle allocation percentage change in the add dialog
   const handleAllocationChange = (value: string) => {
     const percentage = Number.parseInt(value)
-    if (percentage >= 0 && percentage <= availableAllocation) {
-      setAllocationPercentage(percentage)
+    if (!isNaN(percentage)) {
+      if (percentage >= 1 && percentage <= availableAllocation) {
+        setAllocationPercentage(percentage)
+      } else if (percentage > availableAllocation) {
+        // Cap at maximum available
+        setAllocationPercentage(availableAllocation)
+        toast({
+          title: "Maximum allocation reached",
+          description: `The maximum available allocation is ${availableAllocation}%.`,
+          variant: "default",
+        })
+      } else if (percentage < 1) {
+        // Minimum allocation is 1%
+        setAllocationPercentage(1)
+      }
     }
   }
 
@@ -143,7 +177,10 @@ export function AddEmployeeAllocations({
           a.company_id.toString() === primaryCompanyId && a.branch_id.toString() === primaryBranchId && a.is_primary,
       )
 
-      if (!hasPrimaryAllocation) {
+      // Check if we have any primary allocation
+      const hasAnyPrimaryAllocation = allocations.some((a) => a.is_primary)
+
+      if (!hasPrimaryAllocation && !hasAnyPrimaryAllocation) {
         // Find company and branch names for display
         const company = companies.find((c) => c.id.toString() === primaryCompanyId)
         const branch = initialBranches.find((b) => b.id.toString() === primaryBranchId)
@@ -164,6 +201,34 @@ export function AddEmployeeAllocations({
     }
   }, [primaryCompanyId, primaryBranchId, companies, initialBranches, allocations, setAllocations])
 
+  // Validate total allocation
+  const validateTotalAllocation = () => {
+    const total = allocations.reduce((sum, allocation) => sum + allocation.allocation_percentage, 0)
+    if (total !== 100) {
+      toast({
+        title: "Invalid allocation",
+        description: `Total allocation must be exactly 100%. Current total: ${total}%`,
+        variant: "destructive",
+      })
+      return false
+    }
+    return true
+  }
+
+  // Export the validation function for use in the parent component
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      // @ts-ignore - Add validation function to window for parent component access
+      window.validateEmployeeAllocations = validateTotalAllocation
+    }
+    return () => {
+      if (typeof window !== "undefined") {
+        // @ts-ignore - Clean up
+        delete window.validateEmployeeAllocations
+      }
+    }
+  }, [allocations])
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -176,7 +241,7 @@ export function AddEmployeeAllocations({
             <TooltipTrigger asChild>
               <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button disabled={availableAllocation <= 0} aria-label="Add company allocation">
+                  <Button type="button" disabled={availableAllocation <= 0} aria-label="Add company allocation">
                     <Plus className="h-4 w-4 mr-2" />
                     Add Company
                   </Button>

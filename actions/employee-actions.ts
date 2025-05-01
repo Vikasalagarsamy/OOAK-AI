@@ -78,288 +78,362 @@ export async function getEmployee(id: string): Promise<Employee | null> {
 }
 
 // Create a new employee
-export async function createEmployee(formData: FormData): Promise<void> {
+export async function createEmployee(formData: FormData): Promise<any> {
   const supabase = createClient()
 
-  // Extract form data
-  let employee_id = formData.get("employee_id") as string
-  const first_name = formData.get("first_name") as string
-  const last_name = formData.get("last_name") as string
-  const email = formData.get("email") as string
-  const phone = formData.get("phone") as string
-  const address = formData.get("address") as string
-  const city = formData.get("city") as string
-  const state = formData.get("state") as string
-  const zip_code = formData.get("zip_code") as string
-  const country = formData.get("country") as string
-  const hire_date = formData.get("hire_date") as string
-  const job_title = formData.get("job_title") as string
-  const department_id = formData.get("department_id") as string
-  const designation_id = formData.get("designation_id") as string
-  const primary_company_id = formData.get("primary_company_id") as string
-  const home_branch_id = formData.get("home_branch_id") as string
-  const allocations_json = formData.get("allocations_json") as string
+  try {
+    // Extract form data
+    let employee_id = formData.get("employee_id") as string
+    const first_name = formData.get("first_name") as string
+    const last_name = formData.get("last_name") as string
+    const email = formData.get("email") as string
+    const phone = formData.get("phone") as string
+    const address = formData.get("address") as string
+    const city = formData.get("city") as string
+    const state = formData.get("state") as string
+    const zip_code = formData.get("zip_code") as string
+    const country = formData.get("country") as string
+    const hire_date = formData.get("hire_date") as string
+    const job_title = formData.get("job_title") as string
+    const department_id = formData.get("department_id") as string
+    const designation_id = formData.get("designation_id") as string
+    const primary_company_id = formData.get("primary_company_id") as string
+    const home_branch_id = formData.get("home_branch_id") as string
+    const allocations_json = formData.get("allocations_json") as string
 
-  let allocations = []
-  if (allocations_json) {
-    try {
-      allocations = JSON.parse(allocations_json)
-    } catch (error) {
-      console.error("Error parsing allocations JSON:", error)
-    }
-  }
-
-  // Check if employee ID already exists
-  const { data: existingEmployeeWithId } = await supabase
-    .from("employees")
-    .select("id")
-    .eq("employee_id", employee_id)
-    .single()
-
-  // If employee ID already exists, generate a new one
-  if (existingEmployeeWithId) {
-    console.log("Employee ID already exists, generating a new one")
-    // Generate a new ID (implementation depends on your ID generation logic)
-    const timestamp = new Date().getTime().toString().slice(-6)
-    employee_id = `EMP-${timestamp}`
-  }
-
-  // Check if email already exists (only if email is provided)
-  if (email && email.trim() !== "") {
-    const { data: existingEmployeeWithEmail } = await supabase
-      .from("employees")
-      .select("id, email")
-      .eq("email", email)
-      .single()
-
-    if (existingEmployeeWithEmail) {
-      throw new Error(`Email ${email} is already in use by another employee. Please use a different email address.`)
-    }
-  }
-
-  // Prepare employee data
-  const employeeData: any = {
-    employee_id,
-    first_name,
-    last_name,
-    email: email && email.trim() !== "" ? email : null, // Set to null if empty
-    phone: phone || null,
-    address: address || null,
-    city: city || null,
-    state: state || null,
-    zip_code: zip_code || null,
-    country: country || null,
-    hire_date: hire_date || null,
-    job_title: job_title || null,
-    status: "active",
-  }
-
-  // Add optional fields if they exist
-  if (department_id && department_id !== "none") {
-    employeeData.department_id = Number.parseInt(department_id)
-  }
-  if (designation_id && designation_id !== "none") {
-    employeeData.designation_id = Number.parseInt(designation_id)
-  }
-  if (primary_company_id && primary_company_id !== "none") {
-    employeeData.primary_company_id = Number.parseInt(primary_company_id)
-  }
-  if (home_branch_id && home_branch_id !== "none") {
-    employeeData.home_branch_id = Number.parseInt(home_branch_id)
-  }
-
-  // Insert employee
-  const { data, error } = await supabase.from("employees").insert(employeeData).select().single()
-
-  if (error) {
-    console.error("Error creating employee:", error)
-
-    // Handle specific error cases
-    if (error.code === "23505") {
-      // Unique constraint violation
-      if (error.message.includes("employees_email_key")) {
-        throw new Error("This email address is already in use. Please use a different email.")
-      } else if (error.message.includes("employees_employee_id_key")) {
-        throw new Error("Employee ID is already in use. Please try again.")
+    let allocations = []
+    if (allocations_json) {
+      try {
+        allocations = JSON.parse(allocations_json)
+      } catch (error) {
+        console.error("Error parsing allocations JSON:", error)
+        throw new Error("Invalid allocations data format")
       }
     }
 
-    throw new Error(`Failed to create employee: ${error.message}`)
-  }
-
-  // Handle company allocations
-  if (allocations && allocations.length > 0) {
-    // Prepare allocations data
-    const allocationData = allocations.map((allocation: any) => ({
-      employee_id: data.id,
-      company_id: allocation.company_id,
-      branch_id: allocation.branch_id,
-      allocation_percentage: allocation.allocation_percentage,
-      is_primary: allocation.is_primary,
-    }))
-
-    // Insert allocations
-    const { error: allocationError } = await supabase.from("employee_companies").insert(allocationData)
-
-    if (allocationError) {
-      console.error("Error creating employee company allocations:", allocationError)
-      // Continue anyway, as the employee was created successfully
+    // Validate required fields
+    if (!first_name || !last_name) {
+      throw new Error("First name and last name are required")
     }
-  }
-  // If no allocations were provided but primary company and branch are set
-  else if (primary_company_id && primary_company_id !== "none" && home_branch_id && home_branch_id !== "none") {
-    const { error: allocationError } = await supabase.from("employee_companies").insert({
-      employee_id: data.id,
-      company_id: Number.parseInt(primary_company_id),
-      branch_id: Number.parseInt(home_branch_id),
-      allocation_percentage: 100,
-      is_primary: true,
-    })
 
-    if (allocationError) {
-      console.error("Error creating employee company allocation:", allocationError)
-      // Continue anyway, as the employee was created successfully
-    }
-  }
-
-  revalidatePath("/people/employees")
-  return { success: true }
-}
-
-// Update an employee
-export async function updateEmployee(id: string, formData: FormData): Promise<void> {
-  const supabase = createClient()
-
-  // Extract form data
-  const first_name = formData.get("first_name") as string
-  const last_name = formData.get("last_name") as string
-  const email = formData.get("email") as string
-  const phone = formData.get("phone") as string
-  const address = formData.get("address") as string
-  const city = formData.get("city") as string
-  const state = formData.get("state") as string
-  const zip_code = formData.get("zip_code") as string
-  const country = formData.get("country") as string
-  const hire_date = formData.get("hire_date") as string
-  const termination_date = formData.get("termination_date") as string
-  const status = formData.get("status") as string
-  const job_title = formData.get("job_title") as string
-  const department_id = formData.get("department_id") as string
-  const designation_id = formData.get("designation_id") as string
-  const primary_company_id = formData.get("primary_company_id") as string
-  const home_branch_id = formData.get("home_branch_id") as string
-
-  // Check if email already exists for a different employee (only if email is provided)
-  if (email && email.trim() !== "") {
-    const { data: existingEmployeeWithEmail } = await supabase
+    // Check if employee ID already exists
+    const { data: existingEmployeeWithId } = await supabase
       .from("employees")
-      .select("id, email")
-      .eq("email", email)
-      .neq("id", id) // Exclude the current employee
+      .select("id")
+      .eq("employee_id", employee_id)
       .single()
 
-    if (existingEmployeeWithEmail) {
-      throw new Error(`Email ${email} is already in use by another employee. Please use a different email address.`)
-    }
-  }
-
-  // Prepare employee data
-  const employeeData: any = {
-    first_name,
-    last_name,
-    email: email && email.trim() !== "" ? email : null, // Set to null if empty
-    phone: phone || null,
-    address: address || null,
-    city: city || null,
-    state: state || null,
-    zip_code: zip_code || null,
-    country: country || null,
-    hire_date: hire_date || null,
-    termination_date: termination_date || null,
-    status,
-    job_title: job_title || null,
-  }
-
-  // Handle optional fields
-  if (department_id === "none") {
-    employeeData.department_id = null
-  } else if (department_id) {
-    employeeData.department_id = Number.parseInt(department_id)
-  }
-
-  if (designation_id === "none") {
-    employeeData.designation_id = null
-  } else if (designation_id) {
-    employeeData.designation_id = Number.parseInt(designation_id)
-  }
-
-  if (primary_company_id === "none") {
-    employeeData.primary_company_id = null
-  } else if (primary_company_id) {
-    employeeData.primary_company_id = Number.parseInt(primary_company_id)
-  }
-
-  if (home_branch_id === "none") {
-    employeeData.home_branch_id = null
-  } else if (home_branch_id) {
-    employeeData.home_branch_id = Number.parseInt(home_branch_id)
-  }
-
-  // Update employee
-  const { error } = await supabase.from("employees").update(employeeData).eq("id", id)
-
-  if (error) {
-    console.error("Error updating employee:", error)
-
-    // Handle specific error cases
-    if (error.code === "23505" && error.message.includes("employees_email_key")) {
-      throw new Error("This email address is already in use. Please use a different email.")
+    // If employee ID already exists, generate a new one
+    if (existingEmployeeWithId) {
+      console.log("Employee ID already exists, generating a new one")
+      // Generate a new ID (implementation depends on your ID generation logic)
+      const timestamp = new Date().getTime().toString().slice(-6)
+      employee_id = `EMP-${timestamp}`
     }
 
-    throw new Error("Failed to update employee")
-  }
+    // Check if email already exists (only if email is provided)
+    if (email && email.trim() !== "") {
+      const { data: existingEmployeeWithEmail } = await supabase
+        .from("employees")
+        .select("id, email")
+        .eq("email", email)
+        .single()
 
-  // If primary company and home branch are set, update or create the primary company allocation
-  if (primary_company_id && primary_company_id !== "none" && home_branch_id && home_branch_id !== "none") {
-    // First, check if a primary allocation exists
-    const { data: existingAllocation } = await supabase
-      .from("employee_companies")
-      .select("*")
-      .eq("employee_id", id)
-      .eq("is_primary", true)
-      .maybeSingle()
-
-    if (existingAllocation) {
-      // Update existing primary allocation
-      const { error: updateError } = await supabase
-        .from("employee_companies")
-        .update({
-          company_id: Number.parseInt(primary_company_id),
-          branch_id: Number.parseInt(home_branch_id),
-        })
-        .eq("id", existingAllocation.id)
-
-      if (updateError) {
-        console.error("Error updating primary company allocation:", updateError)
+      if (existingEmployeeWithEmail) {
+        throw new Error(`Email ${email} is already in use by another employee. Please use a different email address.`)
       }
-    } else {
-      // Create new primary allocation
-      const { error: insertError } = await supabase.from("employee_companies").insert({
-        employee_id: Number.parseInt(id),
+    }
+
+    // Validate department and designation relationship
+    if (department_id && department_id !== "none" && designation_id && designation_id !== "none") {
+      const { data: designation } = await supabase
+        .from("designations")
+        .select("department_id")
+        .eq("id", designation_id)
+        .single()
+
+      if (designation && designation.department_id !== Number.parseInt(department_id)) {
+        throw new Error("The selected designation does not belong to the selected department")
+      }
+    }
+
+    // Prepare employee data
+    const employeeData: any = {
+      employee_id,
+      first_name,
+      last_name,
+      email: email && email.trim() !== "" ? email : null, // Set to null if empty
+      phone: phone || null,
+      address: address || null,
+      city: city || null,
+      state: state || null,
+      zip_code: zip_code || null,
+      country: country || null,
+      hire_date: hire_date || null,
+      job_title: job_title || null,
+      status: "active",
+    }
+
+    // Add optional fields if they exist
+    if (department_id && department_id !== "none") {
+      employeeData.department_id = Number.parseInt(department_id)
+    }
+    if (designation_id && designation_id !== "none") {
+      employeeData.designation_id = Number.parseInt(designation_id)
+    }
+    if (primary_company_id && primary_company_id !== "none") {
+      employeeData.primary_company_id = Number.parseInt(primary_company_id)
+    }
+    if (home_branch_id && home_branch_id !== "none") {
+      employeeData.home_branch_id = Number.parseInt(home_branch_id)
+    }
+
+    // Insert employee
+    const { data, error } = await supabase.from("employees").insert(employeeData).select().single()
+
+    if (error) {
+      console.error("Error creating employee:", error)
+
+      // Handle specific error cases
+      if (error.code === "23505") {
+        // Unique constraint violation
+        if (error.message.includes("employees_email_key")) {
+          throw new Error("This email address is already in use. Please use a different email.")
+        } else if (error.message.includes("employees_employee_id_key")) {
+          throw new Error("Employee ID is already in use. Please try again.")
+        }
+      }
+
+      throw new Error(`Failed to create employee: ${error.message}`)
+    }
+
+    // Handle company allocations
+    if (allocations && allocations.length > 0) {
+      // Validate total allocation percentage
+      const totalPercentage = allocations.reduce((sum, allocation) => sum + allocation.allocation_percentage, 0)
+
+      if (totalPercentage !== 100) {
+        // Delete the employee since allocations are invalid
+        await supabase.from("employees").delete().eq("id", data.id)
+        throw new Error(`Total allocation percentage must equal 100%. Current total: ${totalPercentage}%`)
+      }
+
+      // Prepare allocations data
+      const allocationData = allocations.map((allocation: any) => ({
+        employee_id: data.id,
+        company_id: allocation.company_id,
+        branch_id: allocation.branch_id,
+        allocation_percentage: allocation.allocation_percentage,
+        is_primary: allocation.is_primary,
+      }))
+
+      // Insert allocations
+      const { error: allocationError } = await supabase.from("employee_companies").insert(allocationData)
+
+      if (allocationError) {
+        console.error("Error creating employee company allocations:", allocationError)
+        // Delete the employee since allocations failed
+        await supabase.from("employees").delete().eq("id", data.id)
+        throw new Error(`Failed to create employee company allocations: ${allocationError.message}`)
+      }
+    }
+    // If no allocations were provided but primary company and branch are set
+    else if (primary_company_id && primary_company_id !== "none" && home_branch_id && home_branch_id !== "none") {
+      const { error: allocationError } = await supabase.from("employee_companies").insert({
+        employee_id: data.id,
         company_id: Number.parseInt(primary_company_id),
         branch_id: Number.parseInt(home_branch_id),
         allocation_percentage: 100,
         is_primary: true,
       })
 
-      if (insertError) {
-        console.error("Error creating primary company allocation:", insertError)
+      if (allocationError) {
+        console.error("Error creating employee company allocation:", allocationError)
+        // Delete the employee since allocation failed
+        await supabase.from("employees").delete().eq("id", data.id)
+        throw new Error(`Failed to create employee company allocation: ${allocationError.message}`)
       }
     }
-  }
 
-  revalidatePath(`/people/employees/${id}`)
-  revalidatePath("/people/employees")
+    revalidatePath("/people/employees")
+    return { success: true, data }
+  } catch (error) {
+    console.error("Error creating employee:", error)
+
+    // Return structured error
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "An unknown error occurred",
+    }
+  }
+}
+
+// Update an employee
+export async function updateEmployee(id: string, formData: FormData): Promise<any> {
+  const supabase = createClient()
+
+  try {
+    // Extract form data
+    const first_name = formData.get("first_name") as string
+    const last_name = formData.get("last_name") as string
+    const email = formData.get("email") as string
+    const phone = formData.get("phone") as string
+    const address = formData.get("address") as string
+    const city = formData.get("city") as string
+    const state = formData.get("state") as string
+    const zip_code = formData.get("zip_code") as string
+    const country = formData.get("country") as string
+    const hire_date = formData.get("hire_date") as string
+    const termination_date = formData.get("termination_date") as string
+    const status = formData.get("status") as string
+    const job_title = formData.get("job_title") as string
+    const department_id = formData.get("department_id") as string
+    const designation_id = formData.get("designation_id") as string
+    const primary_company_id = formData.get("primary_company_id") as string
+    const home_branch_id = formData.get("home_branch_id") as string
+
+    // Validate required fields
+    if (!first_name || !last_name) {
+      throw new Error("First name and last name are required")
+    }
+
+    // Check if email already exists for a different employee (only if email is provided)
+    if (email && email.trim() !== "") {
+      const { data: existingEmployeeWithEmail } = await supabase
+        .from("employees")
+        .select("id, email")
+        .eq("email", email)
+        .neq("id", id) // Exclude the current employee
+        .single()
+
+      if (existingEmployeeWithEmail) {
+        throw new Error(`Email ${email} is already in use by another employee. Please use a different email address.`)
+      }
+    }
+
+    // Validate department and designation relationship
+    if (department_id && department_id !== "none" && designation_id && designation_id !== "none") {
+      const { data: designation } = await supabase
+        .from("designations")
+        .select("department_id")
+        .eq("id", designation_id)
+        .single()
+
+      if (designation && designation.department_id !== Number.parseInt(department_id)) {
+        throw new Error("The selected designation does not belong to the selected department")
+      }
+    }
+
+    // Prepare employee data
+    const employeeData: any = {
+      first_name,
+      last_name,
+      email: email && email.trim() !== "" ? email : null, // Set to null if empty
+      phone: phone || null,
+      address: address || null,
+      city: city || null,
+      state: state || null,
+      zip_code: zip_code || null,
+      country: country || null,
+      hire_date: hire_date || null,
+      termination_date: termination_date || null,
+      status,
+      job_title: job_title || null,
+    }
+
+    // Handle optional fields
+    if (department_id === "none") {
+      employeeData.department_id = null
+    } else if (department_id) {
+      employeeData.department_id = Number.parseInt(department_id)
+    }
+
+    if (designation_id === "none") {
+      employeeData.designation_id = null
+    } else if (designation_id) {
+      employeeData.designation_id = Number.parseInt(designation_id)
+    }
+
+    if (primary_company_id === "none") {
+      employeeData.primary_company_id = null
+    } else if (primary_company_id) {
+      employeeData.primary_company_id = Number.parseInt(primary_company_id)
+    }
+
+    if (home_branch_id === "none") {
+      employeeData.home_branch_id = null
+    } else if (home_branch_id) {
+      employeeData.home_branch_id = Number.parseInt(home_branch_id)
+    }
+
+    // Update employee
+    const { error } = await supabase.from("employees").update(employeeData).eq("id", id)
+
+    if (error) {
+      console.error("Error updating employee:", error)
+
+      // Handle specific error cases
+      if (error.code === "23505" && error.message.includes("employees_email_key")) {
+        throw new Error("This email address is already in use. Please use a different email.")
+      }
+
+      throw new Error(`Failed to update employee: ${error.message}`)
+    }
+
+    // If primary company and home branch are set, update or create the primary company allocation
+    if (primary_company_id && primary_company_id !== "none" && home_branch_id && home_branch_id !== "none") {
+      // First, check if a primary allocation exists
+      const { data: existingAllocation } = await supabase
+        .from("employee_companies")
+        .select("*")
+        .eq("employee_id", id)
+        .eq("is_primary", true)
+        .maybeSingle()
+
+      if (existingAllocation) {
+        // Update existing primary allocation
+        const { error: updateError } = await supabase
+          .from("employee_companies")
+          .update({
+            company_id: Number.parseInt(primary_company_id),
+            branch_id: Number.parseInt(home_branch_id),
+          })
+          .eq("id", existingAllocation.id)
+
+        if (updateError) {
+          console.error("Error updating primary company allocation:", updateError)
+          throw new Error(`Failed to update primary company allocation: ${updateError.message}`)
+        }
+      } else {
+        // Create new primary allocation
+        const { error: insertError } = await supabase.from("employee_companies").insert({
+          employee_id: Number.parseInt(id),
+          company_id: Number.parseInt(primary_company_id),
+          branch_id: Number.parseInt(home_branch_id),
+          allocation_percentage: 100,
+          is_primary: true,
+        })
+
+        if (insertError) {
+          console.error("Error creating primary company allocation:", insertError)
+          throw new Error(`Failed to create primary company allocation: ${insertError.message}`)
+        }
+      }
+    }
+
+    revalidatePath(`/people/employees/${id}`)
+    revalidatePath("/people/employees")
+
+    return { success: true }
+  } catch (error) {
+    console.error("Error updating employee:", error)
+
+    // Return structured error
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "An unknown error occurred",
+    }
+  }
 }
 
 // Delete an employee

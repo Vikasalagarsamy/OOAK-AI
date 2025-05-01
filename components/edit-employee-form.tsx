@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent } from "@/components/ui/card"
+import { toast } from "@/components/ui/use-toast"
 import {
   updateEmployee,
   getDepartments,
@@ -37,6 +38,11 @@ export function EditEmployeeForm({ employee }: EditEmployeeFormProps) {
   )
   const [isLoading, setIsLoading] = useState(true)
   const [employeeCompanies, setEmployeeCompanies] = useState<EmployeeCompany[]>([])
+  const [selectedDepartmentId, setSelectedDepartmentId] = useState<string>(
+    employee.department_id ? employee.department_id.toString() : "",
+  )
+  const [filteredDesignations, setFilteredDesignations] = useState<Designation[]>([])
+  const [formError, setFormError] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchData = async () => {
@@ -86,19 +92,53 @@ export function EditEmployeeForm({ employee }: EditEmployeeFormProps) {
     fetchBranches()
   }, [selectedCompanyId])
 
+  useEffect(() => {
+    if (employee.department_id && designations.length > 0) {
+      const filtered = designations.filter((designation) => designation.department_id === employee.department_id)
+      setFilteredDesignations(filtered)
+    } else {
+      setFilteredDesignations(designations)
+    }
+  }, [employee.department_id, designations])
+
   const handleCompanyChange = (value: string) => {
     setSelectedCompanyId(value)
+  }
+
+  const handleDepartmentChange = (value: string) => {
+    setSelectedDepartmentId(value)
+
+    if (value && value !== "none") {
+      const departmentId = Number.parseInt(value)
+      const filtered = designations.filter((designation) => designation.department_id === departmentId)
+      setFilteredDesignations(filtered)
+    } else {
+      setFilteredDesignations(designations)
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setIsSubmitting(true)
+    setFormError(null)
 
     try {
-      await updateEmployee(employee.id.toString(), new FormData(e.currentTarget))
-      router.push(`/people/employees/${employee.id}`)
+      const result = await updateEmployee(employee.id.toString(), new FormData(e.currentTarget))
+
+      if (result?.success) {
+        toast({
+          title: "Employee updated successfully",
+          description: `${employee.first_name} ${employee.last_name}'s information has been updated.`,
+          variant: "default",
+        })
+        router.push(`/people/employees/${employee.id}`)
+      } else {
+        setFormError(result?.error || "Failed to update employee. Please try again.")
+        setIsSubmitting(false)
+      }
     } catch (error) {
       console.error("Error updating employee:", error)
+      setFormError(error instanceof Error ? error.message : "An unknown error occurred")
       setIsSubmitting(false)
     }
   }
@@ -116,6 +156,13 @@ export function EditEmployeeForm({ employee }: EditEmployeeFormProps) {
 
   return (
     <form onSubmit={handleSubmit}>
+      {formError && (
+        <div className="bg-destructive/10 text-destructive p-3 rounded-md mb-4">
+          <p className="font-medium">Error</p>
+          <p className="text-sm">{formError}</p>
+        </div>
+      )}
+
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardContent className="pt-6">
@@ -197,7 +244,11 @@ export function EditEmployeeForm({ employee }: EditEmployeeFormProps) {
 
               <div className="grid gap-2">
                 <Label htmlFor="department_id">Department</Label>
-                <Select name="department_id" defaultValue={employee.department_id?.toString() || ""}>
+                <Select
+                  name="department_id"
+                  defaultValue={employee.department_id?.toString() || ""}
+                  onValueChange={handleDepartmentChange}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select department" />
                   </SelectTrigger>
@@ -214,19 +265,41 @@ export function EditEmployeeForm({ employee }: EditEmployeeFormProps) {
 
               <div className="grid gap-2">
                 <Label htmlFor="designation_id">Designation</Label>
-                <Select name="designation_id" defaultValue={employee.designation_id?.toString() || ""}>
+                <Select
+                  name="designation_id"
+                  defaultValue={employee.designation_id?.toString() || ""}
+                  disabled={!selectedDepartmentId || selectedDepartmentId === "none"}
+                >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select designation" />
+                    <SelectValue
+                      placeholder={
+                        selectedDepartmentId && selectedDepartmentId !== "none"
+                          ? "Select designation"
+                          : "Select department first"
+                      }
+                    />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">None</SelectItem>
-                    {designations.map((desig) => (
-                      <SelectItem key={desig.id} value={desig.id.toString()}>
-                        {desig.name}
-                      </SelectItem>
-                    ))}
+                    {filteredDesignations.length > 0
+                      ? filteredDesignations.map((desig) => (
+                          <SelectItem key={desig.id} value={desig.id.toString()}>
+                            {desig.name}
+                          </SelectItem>
+                        ))
+                      : selectedDepartmentId &&
+                        selectedDepartmentId !== "none" && (
+                          <div className="p-2 text-muted-foreground text-sm">
+                            No designations available for this department
+                          </div>
+                        )}
                   </SelectContent>
                 </Select>
+                {selectedDepartmentId && selectedDepartmentId !== "none" && filteredDesignations.length === 0 && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    This department has no designations. Select a different department or create a designation first.
+                  </p>
+                )}
               </div>
 
               <div className="grid gap-2">
