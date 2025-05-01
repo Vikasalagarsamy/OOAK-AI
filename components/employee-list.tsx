@@ -40,13 +40,28 @@ export function EmployeeList() {
   const fetchEmployees = async () => {
     try {
       setLoading(true)
-      const { data, error } = await supabase.from("employees").select("*").order("created_at", { ascending: false })
+      const { data, error } = await supabase
+        .from("employees")
+        .select(`
+          *,
+          departments(name),
+          companies:primary_company_id(name)
+        `)
+        .order("created_at", { ascending: false })
 
       if (error) {
         throw error
       }
 
-      setEmployees(data || [])
+      // Transform the data to include department and company names
+      const transformedData =
+        data?.map((employee) => ({
+          ...employee,
+          department: employee.departments?.name || "Not Assigned",
+          primary_company: employee.companies?.name || "Not Assigned",
+        })) || []
+
+      setEmployees(transformedData)
     } catch (error) {
       console.error("Error fetching employees:", error)
       toast({
@@ -154,7 +169,9 @@ export function EmployeeList() {
                   <TableCell>
                     {employee.first_name} {employee.last_name}
                   </TableCell>
-                  <TableCell>{employee.email}</TableCell>
+                  <TableCell className="max-w-[200px] truncate" title={employee.email || ""}>
+                    {employee.email}
+                  </TableCell>
                   <TableCell>{employee.job_title}</TableCell>
                   <TableCell>{employee.department}</TableCell>
                   <TableCell>{employee.primary_company}</TableCell>
