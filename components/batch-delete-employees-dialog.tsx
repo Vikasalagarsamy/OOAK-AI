@@ -42,78 +42,48 @@ export function BatchDeleteEmployeesDialog({
     setResults(null)
 
     try {
-      // Get the IDs of the selected employees
-      const employeeIds = selectedEmployees.map((employee) => employee.id.toString())
-
-      // Call the batch delete function
-      const { data, error } = await supabase.rpc("batch_delete_employees", {
-        employee_ids: employeeIds,
-      })
-
-      if (error) {
-        throw error
-      }
-
-      // Process the results
+      // Process employees in batches for better performance
+      const batchSize = 5
       const successfulDeletes: Employee[] = []
       const failedDeletes: { employee: Employee; reason: string }[] = []
 
-      // If we have results from the RPC function
-      if (data && Array.isArray(data)) {
-        data.forEach((result) => {
-          const employee = selectedEmployees.find((emp) => emp.id.toString() === result.deleted_id.toString())
-          if (!employee) return
+      // Process employees in batches
+      for (let i = 0; i < selectedEmployees.length; i += batchSize) {
+        const batch = selectedEmployees.slice(i, i + batchSize)
 
-          if (result.success) {
-            successfulDeletes.push(employee)
+        // Process each employee in the current batch
+        await Promise.all(
+          batch.map(async (employee) => {
+            try {
+              // Try to delete the employee
+              const { error } = await supabase.from("employees").delete().eq("id", employee.id)
 
-            // Log the activity for each successful deletion
-            logActivity({
-              actionType: "delete",
-              entityType: "employee",
-              entityId: employee.id.toString(),
-              entityName: `${employee.first_name} ${employee.last_name}`,
-              description: `Employee ${employee.first_name} ${employee.last_name} (${employee.employee_id}) was deleted in batch operation`,
-              userName: "Current User", // Replace with actual user name when available
-            }).catch((err) => console.error("Error logging activity:", err))
-          } else {
-            failedDeletes.push({
-              employee,
-              reason: result.error_message || "Unknown error",
-            })
-          }
-        })
-      } else {
-        // Fallback to individual deletions if the RPC function doesn't return expected results
-        for (const employee of selectedEmployees) {
-          try {
-            const { error: deleteError } = await supabase.from("employees").delete().eq("id", employee.id)
+              if (error) {
+                failedDeletes.push({
+                  employee,
+                  reason: error.message || "Unknown error",
+                })
+              } else {
+                successfulDeletes.push(employee)
 
-            if (deleteError) {
+                // Log the activity
+                await logActivity({
+                  actionType: "delete",
+                  entityType: "employee",
+                  entityId: employee.id.toString(),
+                  entityName: `${employee.first_name} ${employee.last_name}`,
+                  description: `Employee ${employee.first_name} ${employee.last_name} (${employee.employee_id}) was deleted in batch operation`,
+                  userName: "Current User", // Replace with actual user name when available
+                })
+              }
+            } catch (err) {
               failedDeletes.push({
                 employee,
-                reason: deleteError.message || "Unknown error",
-              })
-            } else {
-              successfulDeletes.push(employee)
-
-              // Log the activity
-              await logActivity({
-                actionType: "delete",
-                entityType: "employee",
-                entityId: employee.id.toString(),
-                entityName: `${employee.first_name} ${employee.last_name}`,
-                description: `Employee ${employee.first_name} ${employee.last_name} (${employee.employee_id}) was deleted in batch operation`,
-                userName: "Current User", // Replace with actual user name when available
+                reason: err instanceof Error ? err.message : "Unknown error",
               })
             }
-          } catch (err) {
-            failedDeletes.push({
-              employee,
-              reason: err instanceof Error ? err.message : "Unknown error",
-            })
-          }
-        }
+          }),
+        )
       }
 
       // Set results for display
