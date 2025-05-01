@@ -506,26 +506,34 @@ export async function getBranches() {
   }))
 }
 
+// Update the generateEmployeeId function to be more robust
 export async function generateEmployeeId() {
   const supabase = createClient()
 
-  // Get the current year
-  const currentYear = new Date().getFullYear().toString().slice(-2)
+  try {
+    // Get the current year
+    const currentYear = new Date().getFullYear().toString().slice(-2)
 
-  // Get the count of employees for this year
-  const { count, error } = await supabase
-    .from("employees")
-    .select("*", { count: "exact", head: true })
-    .like("employee_id", `EMP-${currentYear}%`)
+    // Get the count of employees for this year
+    const { count, error } = await supabase
+      .from("employees")
+      .select("*", { count: "exact", head: true })
+      .like("employee_id", `EMP-${currentYear}%`)
 
-  if (error) {
-    console.error("Error counting employees:", error)
-    return `EMP-${currentYear}-0001`
+    if (error) {
+      console.error("Error counting employees:", error)
+      return `EMP-${currentYear}-0001`
+    }
+
+    // Generate the next employee ID
+    const nextNumber = (count || 0) + 1
+    const paddedNumber = nextNumber.toString().padStart(4, "0")
+
+    return `EMP-${currentYear}-${paddedNumber}`
+  } catch (error) {
+    console.error("Error generating employee ID:", error)
+    // Fallback to a timestamp-based ID if there's an error
+    const timestamp = new Date().getTime().toString().slice(-6)
+    return `EMP-${timestamp}`
   }
-
-  // Generate the next employee ID
-  const nextNumber = (count || 0) + 1
-  const paddedNumber = nextNumber.toString().padStart(4, "0")
-
-  return `EMP-${currentYear}-${paddedNumber}`
 }
