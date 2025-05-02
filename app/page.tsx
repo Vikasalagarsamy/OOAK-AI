@@ -18,7 +18,6 @@ export default async function DashboardPage() {
 
   try {
     dashboardData = await getDashboardStats()
-    activities = await getRecentActivities(5)
   } catch (error) {
     console.error("Error loading dashboard data:", error)
     // Set default data
@@ -53,6 +52,13 @@ export default async function DashboardPage() {
       ],
       recentActivities: [],
     }
+  }
+
+  try {
+    activities = await getRecentActivities(5)
+  } catch (error) {
+    console.error("Error loading activities:", error)
+    activities = []
   }
 
   return (

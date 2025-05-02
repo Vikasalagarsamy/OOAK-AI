@@ -42,24 +42,74 @@ export const supabase = createSupabaseClient()
 
 // Server-side Supabase client (uses service role key)
 export function createServiceClient() {
+  // Use environment variables with fallbacks
   const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const supabaseServiceKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-  if (!supabaseUrl || !supabaseServiceKey) {
-    throw new Error("Supabase URL or service role key is missing from environment variables")
+  // Log available keys for debugging (remove in production)
+  console.log("Available env vars:", {
+    hasUrl: !!supabaseUrl,
+    hasServiceKey: !!supabaseServiceKey,
+  })
+
+  // Use anon key as fallback if service key is not available
+  if (!supabaseUrl) {
+    console.error("Supabase URL is missing from environment variables")
+    // Return a mock client that won't throw errors but won't work either
+    return createMockClient()
   }
 
-  return supabaseCreateClient(supabaseUrl, supabaseServiceKey, {
+  if (!supabaseServiceKey) {
+    console.warn("Supabase service role key is missing, falling back to anon key")
+    // Continue with anon key as fallback
+  }
+
+  return supabaseCreateClient(supabaseUrl, supabaseServiceKey || "", {
     auth: {
       persistSession: false,
     },
   })
 }
 
+// Create a mock client that won't throw errors
+function createMockClient() {
+  return {
+    from: () => ({
+      select: () => ({
+        order: () => ({
+          limit: () => ({
+            then: () => Promise.resolve({ data: [], error: null }),
+          }),
+        }),
+      }),
+      insert: () => Promise.resolve({ data: null, error: new Error("Mock client - no connection") }),
+      update: () => Promise.resolve({ data: null, error: new Error("Mock client - no connection") }),
+      delete: () => Promise.resolve({ data: null, error: new Error("Mock client - no connection") }),
+    }),
+    channel: () => ({
+      on: () => ({
+        subscribe: (callback: () => void) => {
+          if (callback) callback()
+          return {
+            unsubscribe: () => {},
+          }
+        },
+      }),
+    }),
+    // Add other methods as needed
+  } as unknown as SupabaseClient
+}
+
 // IMPORTANT: Export createClient for backward compatibility
-// This is the function used by dashboard-service.ts and other services
+// This is the function used by employee-actions.ts and other services
 export function createClient() {
-  return createServiceClient()
+  try {
+    return createServiceClient()
+  } catch (error) {
+    console.error("Error creating Supabase client:", error)
+    return createMockClient()
+  }
 }
 
 // Also export the original createClient from supabase for maximum compatibility

@@ -49,6 +49,7 @@ export function AddEmployeeForm() {
   const [employeeId, setEmployeeId] = useState<string>("")
   const [formError, setFormError] = useState<string | null>(null)
   const [allocations, setAllocations] = useState<CompanyAllocation[]>([])
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
 
   useEffect(() => {
     const fetchData = async () => {
@@ -82,7 +83,7 @@ export function AddEmployeeForm() {
 
   useEffect(() => {
     const fetchBranches = async () => {
-      if (!selectedCompanyId) {
+      if (!selectedCompanyId || selectedCompanyId === "none") {
         setBranches([])
         return
       }
@@ -127,20 +128,61 @@ export function AddEmployeeForm() {
 
   const handleAllocationsChange = (newAllocations: CompanyAllocation[]) => {
     setAllocations(newAllocations)
+
+    // Validate allocations whenever they change
+    if (newAllocations.length > 0) {
+      const totalAllocation = newAllocations.reduce((sum, allocation) => sum + allocation.allocation_percentage, 0)
+      if (totalAllocation !== 100) {
+        setValidationErrors({
+          ...validationErrors,
+          allocations: `Total allocation must equal 100%. Current total: ${totalAllocation}%`,
+        })
+      } else {
+        // Clear the allocation error if it's fixed
+        const { allocations, ...restErrors } = validationErrors
+        setValidationErrors(restErrors)
+      }
+    }
+  }
+
+  const validateForm = () => {
+    const errors: Record<string, string> = {}
+
+    // Check required fields
+    const firstNameInput = document.getElementById("first_name") as HTMLInputElement
+    const lastNameInput = document.getElementById("last_name") as HTMLInputElement
+
+    if (!firstNameInput?.value.trim()) {
+      errors.firstName = "First name is required"
+    }
+
+    if (!lastNameInput?.value.trim()) {
+      errors.lastName = "Last name is required"
+    }
+
+    // Validate allocation percentages
+    if (allocations.length > 0) {
+      const totalAllocation = allocations.reduce((sum, allocation) => sum + allocation.allocation_percentage, 0)
+      if (totalAllocation !== 100) {
+        errors.allocations = `Total allocation must equal 100%. Current total: ${totalAllocation}%`
+      }
+    }
+
+    setValidationErrors(errors)
+    return Object.keys(errors).length === 0
   }
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    setIsSubmitting(true)
-    setFormError(null)
 
-    // Validate allocations
-    const totalAllocation = allocations.reduce((sum, allocation) => sum + allocation.allocation_percentage, 0)
-    if (allocations.length > 0 && totalAllocation !== 100) {
-      setFormError(`Total allocation must equal 100%. Current total: ${totalAllocation}%`)
-      setIsSubmitting(false)
+    // Client-side validation
+    if (!validateForm()) {
+      setFormError("Please correct the errors before submitting.")
       return
     }
+
+    setIsSubmitting(true)
+    setFormError(null)
 
     try {
       const formData = new FormData(e.currentTarget)
@@ -156,6 +198,7 @@ export function AddEmployeeForm() {
           description: "The new employee has been added to the system.",
           variant: "default",
         })
+        // Redirect to employee list page
         router.push("/people/employees")
       } else {
         setFormError(result?.error || "Failed to add employee. Please try again.")
@@ -199,13 +242,29 @@ export function AddEmployeeForm() {
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="first_name">First Name</Label>
-              <Input id="first_name" name="first_name" required />
+              <Label htmlFor="first_name" className={validationErrors.firstName ? "text-destructive" : ""}>
+                First Name *
+              </Label>
+              <Input
+                id="first_name"
+                name="first_name"
+                required
+                className={validationErrors.firstName ? "border-destructive" : ""}
+              />
+              {validationErrors.firstName && <p className="text-destructive text-sm">{validationErrors.firstName}</p>}
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="last_name">Last Name</Label>
-              <Input id="last_name" name="last_name" required />
+              <Label htmlFor="last_name" className={validationErrors.lastName ? "text-destructive" : ""}>
+                Last Name *
+              </Label>
+              <Input
+                id="last_name"
+                name="last_name"
+                required
+                className={validationErrors.lastName ? "border-destructive" : ""}
+              />
+              {validationErrors.lastName && <p className="text-destructive text-sm">{validationErrors.lastName}</p>}
             </div>
 
             <div className="grid gap-2">
@@ -233,7 +292,7 @@ export function AddEmployeeForm() {
             <div className="grid gap-2">
               <Label htmlFor="department_id">Department</Label>
               <Select name="department_id" onValueChange={handleDepartmentChange}>
-                <SelectTrigger>
+                <SelectTrigger id="department_id">
                   <SelectValue placeholder="Select department" />
                 </SelectTrigger>
                 <SelectContent>
@@ -250,7 +309,7 @@ export function AddEmployeeForm() {
             <div className="grid gap-2">
               <Label htmlFor="designation_id">Designation</Label>
               <Select name="designation_id" disabled={!selectedDepartmentId || selectedDepartmentId === "none"}>
-                <SelectTrigger>
+                <SelectTrigger id="designation_id">
                   <SelectValue
                     placeholder={
                       selectedDepartmentId && selectedDepartmentId !== "none"
@@ -285,7 +344,7 @@ export function AddEmployeeForm() {
             <div className="grid gap-2">
               <Label htmlFor="primary_company_id">Primary Company</Label>
               <Select name="primary_company_id" value={selectedCompanyId} onValueChange={handleCompanyChange}>
-                <SelectTrigger>
+                <SelectTrigger id="primary_company_id">
                   <SelectValue placeholder="Select company" />
                 </SelectTrigger>
                 <SelectContent>
@@ -305,7 +364,7 @@ export function AddEmployeeForm() {
             <div className="grid gap-2">
               <Label htmlFor="home_branch_id">Home Branch</Label>
               <Select name="home_branch_id" disabled={!selectedCompanyId || selectedCompanyId === "none"}>
-                <SelectTrigger>
+                <SelectTrigger id="home_branch_id">
                   <SelectValue placeholder={selectedCompanyId ? "Select branch" : "Select company first"} />
                 </SelectTrigger>
                 <SelectContent>
@@ -356,11 +415,43 @@ export function AddEmployeeForm() {
         </Card>
 
         <div className="md:col-span-2">
+          {validationErrors.allocations && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{validationErrors.allocations}</AlertDescription>
+            </Alert>
+          )}
+
+          <div className="bg-amber-50 border border-amber-200 p-3 rounded-md mb-4">
+            <p className="text-amber-800 text-sm font-medium">Important</p>
+            <p className="text-amber-700 text-sm">
+              Total allocation percentage must equal exactly 100% for all companies combined.
+            </p>
+          </div>
+
           <CompanyAllocationForm
             allocations={allocations}
             onChange={handleAllocationsChange}
             onPrimaryChange={handlePrimaryCompanyChange}
           />
+
+          {allocations.length > 0 && (
+            <div className="mt-4 text-sm">
+              <p className="font-medium">
+                Total Allocation:
+                <span
+                  className={
+                    allocations.reduce((sum, allocation) => sum + allocation.allocation_percentage, 0) === 100
+                      ? " text-green-600"
+                      : " text-destructive"
+                  }
+                >
+                  {" "}
+                  {allocations.reduce((sum, allocation) => sum + allocation.allocation_percentage, 0)}%
+                </span>
+              </p>
+            </div>
+          )}
         </div>
       </div>
 

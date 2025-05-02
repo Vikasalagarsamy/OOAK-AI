@@ -6,6 +6,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { createClient } from "@/lib/supabase"
 import type { ActivityType } from "@/services/activity-service"
+import { useToast } from "@/components/ui/use-toast"
 
 interface ActivityItem {
   id: string
@@ -26,55 +27,88 @@ interface RecentActivityProps {
 export function RecentActivity({ activities: initialActivities }: RecentActivityProps) {
   const [activities, setActivities] = useState<ActivityItem[]>(initialActivities || [])
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const { toast } = useToast()
 
   useEffect(() => {
     // Initialize with the server-provided activities
     setActivities(initialActivities || [])
 
     // Set up real-time subscription
-    const supabase = createClient()
+    let supabase
+    try {
+      supabase = createClient()
+    } catch (err) {
+      console.error("Failed to create Supabase client:", err)
+      setError("Could not connect to the database for real-time updates")
+      toast({
+        title: "Connection Error",
+        description: "Could not connect to the database for real-time updates",
+        variant: "destructive",
+      })
+      return
+    }
 
     setLoading(true)
 
     // Subscribe to new activities
-    const subscription = supabase
-      .channel("activities-changes")
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "activities",
-        },
-        (payload) => {
-          // Format the new activity
-          const newActivity = {
-            id: payload.new.id,
-            title: `${formatActionType(payload.new.action_type)} ${payload.new.entity_type}`,
-            description: payload.new.description,
-            timestamp: formatTimestamp(payload.new.created_at),
-            type: payload.new.entity_type as ActivityType,
-            user: payload.new.user_name
-              ? {
-                  name: payload.new.user_name,
-                  initials: getInitials(payload.new.user_name),
-                }
-              : undefined,
-          }
+    try {
+      const subscription = supabase
+        .channel("activities-changes")
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "activities",
+          },
+          (payload) => {
+            try {
+              // Format the new activity
+              const newActivity = {
+                id: payload.new.id,
+                title: `${formatActionType(payload.new.action_type)} ${payload.new.entity_type}`,
+                description: payload.new.description,
+                timestamp: formatTimestamp(payload.new.created_at),
+                type: payload.new.entity_type as ActivityType,
+                user: payload.new.user_name
+                  ? {
+                      name: payload.new.user_name,
+                      initials: getInitials(payload.new.user_name),
+                    }
+                  : undefined,
+              }
 
-          // Add the new activity to the top of the list
-          setActivities((prev) => [newActivity, ...prev.slice(0, 9)])
-        },
-      )
-      .subscribe(() => {
-        setLoading(false)
-      })
+              // Add the new activity to the top of the list
+              setActivities((prev) => [newActivity, ...prev.slice(0, 9)])
+            } catch (err) {
+              console.error("Error processing new activity:", err)
+            }
+          },
+        )
+        .subscribe(
+          () => {
+            setLoading(false)
+            setError(null)
+          },
+          (err) => {
+            console.error("Subscription error:", err)
+            setLoading(false)
+            setError("Failed to subscribe to real-time updates")
+          },
+        )
 
-    // Clean up subscription on unmount
-    return () => {
-      subscription.unsubscribe()
+      // Clean up subscription on unmount
+      return () => {
+        subscription.unsubscribe()
+      }
+    } catch (err) {
+      console.error("Error setting up subscription:", err)
+      setLoading(false)
+      setError("Failed to set up real-time updates")
+      return () => {}
     }
-  }, [initialActivities])
+  }, [initialActivities, toast])
 
   const getActivityIcon = (type?: ActivityItem["type"]) => {
     // Return a default value if type is undefined
@@ -141,6 +175,7 @@ export function RecentActivity({ activities: initialActivities }: RecentActivity
             <CardDescription>Latest actions across your organization</CardDescription>
           </div>
           {loading && <div className="animate-pulse px-2 py-1 rounded bg-muted text-xs">Listening for updates...</div>}
+          {error && <div className="px-2 py-1 rounded bg-red-100 text-red-700 text-xs">{error}</div>}
         </div>
       </CardHeader>
       <CardContent>

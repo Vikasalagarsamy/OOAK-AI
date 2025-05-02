@@ -68,7 +68,7 @@ export async function getRecentActivities(limit = 5) {
     // Transform the data to match the expected format
     return data.map((activity) => ({
       id: activity.id,
-      title: activity.entity_name,
+      title: `${formatActionType(activity.action_type)} ${activity.entity_type}`,
       description: activity.description,
       timestamp: formatTimeAgo(new Date(activity.created_at)),
       type: activity.entity_type as ActivityType,
@@ -79,7 +79,38 @@ export async function getRecentActivities(limit = 5) {
     }))
   } catch (error) {
     console.error("Error in getRecentActivities:", error)
-    return []
+    // Return mock data if there's an error
+    return [
+      {
+        id: "mock-1",
+        title: "System Status",
+        description: "Database connection is currently unavailable",
+        timestamp: "just now",
+        type: "company",
+        user: {
+          name: "System",
+          initials: "SY",
+        },
+      },
+    ]
+  }
+}
+
+// Helper function to format action type
+function formatActionType(actionType: string): string {
+  switch (actionType) {
+    case "create":
+      return "New"
+    case "update":
+      return "Updated"
+    case "delete":
+      return "Deleted"
+    case "status_change":
+      return "Status Changed"
+    case "assignment":
+      return "Assigned"
+    default:
+      return "Modified"
   }
 }
 

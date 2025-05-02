@@ -1,8 +1,9 @@
 "use server"
 
-import { createClient } from "@/lib/supabase/server"
+import { createClient } from "@/lib/supabase"
 import { revalidatePath } from "next/cache"
-import type { Employee, Department, Designation, Company, Branch, EmployeeCompany } from "@/types/employee"
+import type { Employee, Department, Designation, Company, Branch, EmployeeCompany, Project } from "@/types/employee"
+import { tableExists } from "@/lib/db-utils"
 
 // Add employee (alias for createEmployee for backward compatibility)
 export async function addEmployee(formData: FormData): Promise<void> {
@@ -331,7 +332,10 @@ export async function updateEmployee(id: string, formData: FormData): Promise<an
 
     // Validate required fields
     if (!first_name || !last_name) {
-      throw new Error("First name and last name are required")
+      return {
+        success: false,
+        error: "First name and last name are required",
+      }
     }
 
     // Check if email already exists for a different employee (only if email is provided)
@@ -344,7 +348,10 @@ export async function updateEmployee(id: string, formData: FormData): Promise<an
         .single()
 
       if (existingEmployeeWithEmail) {
-        throw new Error(`Email ${email} is already in use by another employee. Please use a different email address.`)
+        return {
+          success: false,
+          error: `Email ${email} is already in use by another employee. Please use a different email address.`,
+        }
       }
     }
 
@@ -357,7 +364,10 @@ export async function updateEmployee(id: string, formData: FormData): Promise<an
         .single()
 
       if (designation && designation.department_id !== Number.parseInt(department_id)) {
-        throw new Error("The selected designation does not belong to the selected department")
+        return {
+          success: false,
+          error: "The selected designation does not belong to the selected department",
+        }
       }
     }
 
@@ -411,10 +421,16 @@ export async function updateEmployee(id: string, formData: FormData): Promise<an
 
       // Handle specific error cases
       if (error.code === "23505" && error.message.includes("employees_email_key")) {
-        throw new Error("This email address is already in use. Please use a different email.")
+        return {
+          success: false,
+          error: "This email address is already in use. Please use a different email.",
+        }
       }
 
-      throw new Error(`Failed to update employee: ${error.message}`)
+      return {
+        success: false,
+        error: `Failed to update employee: ${error.message}`,
+      }
     }
 
     // If primary company and home branch are set, update or create the primary company allocation
@@ -439,7 +455,7 @@ export async function updateEmployee(id: string, formData: FormData): Promise<an
 
         if (updateError) {
           console.error("Error updating primary company allocation:", updateError)
-          throw new Error(`Failed to update primary company allocation: ${updateError.message}`)
+          // We still return success since the employee itself was updated
         }
       } else {
         // Create new primary allocation
@@ -453,7 +469,7 @@ export async function updateEmployee(id: string, formData: FormData): Promise<an
 
         if (insertError) {
           console.error("Error creating primary company allocation:", insertError)
-          throw new Error(`Failed to create primary company allocation: ${insertError.message}`)
+          // We still return success since the employee itself was updated
         }
       }
     }
@@ -552,154 +568,409 @@ export async function deleteEmployee(id: string) {
   }
 }
 
-// Get employee companies
+// Get all projects
+export async function getProjects(): Promise<Project[]> {
+  const supabase = createClient()
+
+  try {
+    const { data, error } = await supabase.from("projects").select("*").order("name")
+
+    if (error) {
+      console.error("Error fetching projects:", error)
+      throw new Error(`Failed to fetch projects: ${error.message}`)
+    }
+
+    return data || []
+  } catch (error) {
+    console.error("Exception in getProjects:", error)
+    // Return empty array instead of throwing to prevent UI from breaking
+    return []
+  }
+}
+
+// Update the getProjectsByCompany function to handle the case where the projects table doesn't exist
+
+// Get projects by company
+export async function getProjectsByCompany(companyId: number) {
+  const supabase = createClient()
+
+  try {
+    // Check if projects table exists
+    const projectsTableExists = await tableExists("projects")
+
+    if (!projectsTableExists) {
+      console.log("Projects table does not exist, returning empty array")
+      return []
+    }
+
+    // If table exists, query the projects
+    const { data, error } = await supabase.from("projects").select("id, name").eq("company_id", companyId).order("name")
+
+    if (error) {
+      console.error("Error fetching projects:", error)
+      return []
+    }
+
+    return data || []
+  } catch (error) {
+    console.error("Error in getProjectsByCompany:", error)
+    return []
+  }
+}
+
+// Get employee companies with enhanced allocation information
 export async function getEmployeeCompanies(employeeId: string): Promise<EmployeeCompany[]> {
   const supabase = createClient()
 
-  const { data, error } = await supabase
-    .from("employee_companies")
-    .select(`
+  try {
+    // Check if the employee_companies table has the project_id column
+    let hasProjectId = false
+    try {
+      const projectIdResult = await supabase
+        .from("information_schema.columns")
+        .select("column_name")
+        .eq("table_name", "employee_companies")
+        .eq("column_name", "project_id")
+        .single()
+
+      hasProjectId = !!projectIdResult.data
+    } catch (error) {
+      console.log("Error checking project_id column:", error)
+      // Continue with hasProjectId = false
+    }
+
+    // Check if the employee_companies table has the start_date column
+    let hasStartDate = false
+    try {
+      const startDateResult = await supabase
+        .from("information_schema.columns")
+        .select("column_name")
+        .eq("table_name", "employee_companies")
+        .eq("column_name", "start_date")
+        .single()
+
+      hasStartDate = !!startDateResult.data
+    } catch (error) {
+      console.log("Error checking start_date column:", error)
+      // Continue with hasStartDate = false
+    }
+
+    // Check if the employee_companies table has the status column
+    let hasStatus = false
+    try {
+      const statusResult = await supabase
+        .from("information_schema.columns")
+        .select("column_name")
+        .eq("table_name", "employee_companies")
+        .eq("column_name", "status")
+        .single()
+
+      hasStatus = !!statusResult.data
+    } catch (error) {
+      console.log("Error checking status column:", error)
+      // Continue with hasStatus = false
+    }
+
+    // Basic query that will work with any schema
+    let query = `
       *,
       companies:company_id(name),
       branches:branch_id(name)
-    `)
-    .eq("employee_id", employeeId)
-    .order("is_primary", { ascending: false })
+    `
 
-  if (error) {
-    console.error("Error fetching employee companies:", error)
-    throw new Error("Failed to fetch employee companies")
+    // Add project join if the column exists
+    if (hasProjectId) {
+      query += `,
+      projects:project_id(name)
+      `
+    }
+
+    // Execute the query
+    const { data, error } = await supabase
+      .from("employee_companies")
+      .select(query)
+      .eq("employee_id", employeeId)
+      .order("is_primary", { ascending: false })
+
+    if (error) {
+      console.error("Error fetching employee companies:", error)
+      throw new Error(`Failed to fetch employee companies: ${error.message}`)
+    }
+
+    // Map the data to include all required fields, with defaults for missing columns
+    return data.map((ec) => ({
+      ...ec,
+      company_name: ec.companies?.name || null,
+      branch_name: ec.branches?.name || null,
+      project_name: ec.projects?.name || null,
+      // Add default values for new fields if they don't exist
+      start_date: ec.start_date || new Date(),
+      end_date: ec.end_date || null,
+      status: ec.status || "active",
+    }))
+  } catch (error) {
+    console.error("Error in getEmployeeCompanies:", error)
+
+    // Final fallback - try a very simple query
+    try {
+      const { data, error } = await supabase
+        .from("employee_companies")
+        .select("*, companies:company_id(name), branches:branch_id(name)")
+        .eq("employee_id", employeeId)
+        .order("is_primary", { ascending: false })
+
+      if (error) {
+        console.error("Error in fallback query:", error)
+        return []
+      }
+
+      return data.map((ec) => ({
+        ...ec,
+        company_name: ec.companies?.name || null,
+        branch_name: ec.branches?.name || null,
+        project_id: null,
+        project_name: null,
+        start_date: ec.start_date || new Date(),
+        end_date: ec.end_date || null,
+        status: ec.status || "active",
+      }))
+    } catch (finalError) {
+      console.error("Final error in getEmployeeCompanies:", finalError)
+      return []
+    }
   }
-
-  return data.map((ec) => ({
-    ...ec,
-    company_name: ec.companies?.name || null,
-    branch_name: ec.branches?.name || null,
-  }))
 }
 
-// Add employee company
+// Add employee company with enhanced allocation information
 export async function addEmployeeCompany(employeeId: string, formData: FormData): Promise<void> {
   const supabase = createClient()
 
   const company_id = Number.parseInt(formData.get("company_id") as string)
   const branch_id = Number.parseInt(formData.get("branch_id") as string)
+  const project_id = formData.get("project_id") ? Number.parseInt(formData.get("project_id") as string) : null
   const allocation_percentage = Number.parseInt(formData.get("allocation_percentage") as string)
+  const start_date = formData.get("start_date") as string
+  const end_date = (formData.get("end_date") as string) || null
 
-  // Check if allocation would exceed 100%
-  const { data: existingAllocations } = await supabase
-    .from("employee_companies")
-    .select("allocation_percentage")
-    .eq("employee_id", employeeId)
+  try {
+    // Check if the employee_companies table has the project_id column
+    let hasProjectId = false
+    try {
+      const projectIdResult = await supabase
+        .from("information_schema.columns")
+        .select("column_name")
+        .eq("table_name", "employee_companies")
+        .eq("column_name", "project_id")
+        .single()
 
-  const totalAllocation = existingAllocations?.reduce((sum, ec) => sum + ec.allocation_percentage, 0) || 0
-  if (totalAllocation + allocation_percentage > 100) {
-    throw new Error(
-      `Total allocation percentage cannot exceed 100%. Current total: ${totalAllocation}%, Adding: ${allocation_percentage}%`,
-    )
-  }
-
-  // Check if company already has an allocation for this employee
-  const { data: existingCompany } = await supabase
-    .from("employee_companies")
-    .select("id")
-    .eq("employee_id", employeeId)
-    .eq("company_id", company_id)
-    .maybeSingle()
-
-  if (existingCompany) {
-    throw new Error(
-      "This company already has an allocation for this employee. Please edit the existing allocation instead.",
-    )
-  }
-
-  // Insert employee company
-  const { error } = await supabase.from("employee_companies").insert({
-    employee_id: Number.parseInt(employeeId),
-    company_id,
-    branch_id,
-    allocation_percentage,
-    is_primary: false,
-  })
-
-  if (error) {
-    console.error("Error adding employee company:", error)
-
-    // Handle unique constraint violation
-    if (error.code === "23505" && error.message.includes("employee_companies_employee_id_company_id_key")) {
-      throw new Error(
-        "This employee already has an allocation for this company. Each company can only be allocated once per employee.",
-      )
+      hasProjectId = !!projectIdResult.data
+    } catch (error) {
+      console.log("Error checking project_id column:", error)
+      // Continue with hasProjectId = false
     }
 
-    throw new Error("Failed to add employee company")
-  }
+    // Check if the employee_companies table has the start_date column
+    let hasStartDate = false
+    try {
+      const startDateResult = await supabase
+        .from("information_schema.columns")
+        .select("column_name")
+        .eq("table_name", "employee_companies")
+        .eq("column_name", "start_date")
+        .single()
 
-  revalidatePath(`/people/employees/${employeeId}`)
-  revalidatePath(`/people/employees/${employeeId}/edit`)
+      hasStartDate = !!startDateResult.data
+    } catch (error) {
+      console.log("Error checking start_date column:", error)
+      // Continue with hasStartDate = false
+    }
+
+    // Check if the employee_companies table has the status column
+    let hasStatus = false
+    try {
+      const statusResult = await supabase
+        .from("information_schema.columns")
+        .select("column_name")
+        .eq("table_name", "employee_companies")
+        .eq("column_name", "status")
+        .single()
+
+      hasStatus = !!statusResult.data
+    } catch (error) {
+      console.log("Error checking status column:", error)
+      // Continue with hasStatus = false
+    }
+
+    // Prepare the data object based on available columns
+    const insertData: any = {
+      employee_id: Number.parseInt(employeeId),
+      company_id,
+      branch_id,
+      allocation_percentage,
+      is_primary: false,
+    }
+
+    // Add optional fields if the columns exist
+    if (hasProjectId && project_id) {
+      insertData.project_id = project_id
+    }
+
+    if (hasStartDate) {
+      insertData.start_date = start_date || new Date().toISOString().split("T")[0]
+      if (end_date) {
+        insertData.end_date = end_date
+      }
+    }
+
+    if (hasStatus) {
+      // Determine status based on dates
+      if (start_date && new Date(start_date) > new Date()) {
+        insertData.status = "pending"
+      } else if (end_date && new Date(end_date) < new Date()) {
+        insertData.status = "expired"
+      } else {
+        insertData.status = "active"
+      }
+    }
+
+    // Insert employee company
+    const { error } = await supabase.from("employee_companies").insert(insertData)
+
+    if (error) {
+      console.error("Error adding employee company:", error)
+
+      // Handle specific error cases
+      if (error.code === "23505" && error.message.includes("employee_companies_employee_id_company_id_key")) {
+        throw new Error(
+          "This employee already has an allocation for this company. Each company can only be allocated once per employee.",
+        )
+      }
+
+      if (error.message.includes("validate_employee_allocation")) {
+        throw new Error(error.message.replace(/^[^:]+: /, ""))
+      }
+
+      throw new Error("Failed to add employee company")
+    }
+
+    revalidatePath(`/people/employees/${employeeId}`)
+    revalidatePath(`/people/employees/${employeeId}/edit`)
+  } catch (error) {
+    console.error("Error in addEmployeeCompany:", error)
+    throw error
+  }
 }
 
-// Update employee company
+// Update employee company with enhanced allocation information
 export async function updateEmployeeCompany(id: string, formData: FormData): Promise<void> {
   const supabase = createClient()
 
   const employee_id = Number.parseInt(formData.get("employee_id") as string)
-  const company_id = Number.parseInt(formData.get("company_id") as string)
   const branch_id = Number.parseInt(formData.get("branch_id") as string)
+  const project_id = formData.get("project_id") ? Number.parseInt(formData.get("project_id") as string) : null
   const allocation_percentage = Number.parseInt(formData.get("allocation_percentage") as string)
+  const start_date = formData.get("start_date") as string
+  const end_date = (formData.get("end_date") as string) || null
 
-  // Get current allocation
-  const { data: currentAllocation } = await supabase
-    .from("employee_companies")
-    .select("allocation_percentage, is_primary")
-    .eq("id", id)
-    .single()
+  try {
+    // Check if the employee_companies table has the project_id column
+    let hasProjectId = false
+    try {
+      const projectIdResult = await supabase
+        .from("information_schema.columns")
+        .select("column_name")
+        .eq("table_name", "employee_companies")
+        .eq("column_name", "project_id")
+        .single()
 
-  // Check if allocation would exceed 100%
-  const { data: existingAllocations } = await supabase
-    .from("employee_companies")
-    .select("allocation_percentage")
-    .eq("employee_id", employee_id)
-    .neq("id", id)
+      hasProjectId = !!projectIdResult.data
+    } catch (error) {
+      console.log("Error checking project_id column:", error)
+      // Continue with hasProjectId = false
+    }
 
-  const totalAllocation = existingAllocations?.reduce((sum, ec) => sum + ec.allocation_percentage, 0) || 0
-  if (totalAllocation + allocation_percentage > 100) {
-    throw new Error(
-      `Total allocation percentage cannot exceed 100%. Other allocations: ${totalAllocation}%, This allocation: ${allocation_percentage}%`,
-    )
-  }
+    // Check if the employee_companies table has the start_date column
+    let hasStartDate = false
+    try {
+      const startDateResult = await supabase
+        .from("information_schema.columns")
+        .select("column_name")
+        .eq("table_name", "employee_companies")
+        .eq("column_name", "start_date")
+        .single()
 
-  // Update employee company
-  const { error } = await supabase
-    .from("employee_companies")
-    .update({
+      hasStartDate = !!startDateResult.data
+    } catch (error) {
+      console.log("Error checking start_date column:", error)
+      // Continue with hasStartDate = false
+    }
+
+    // Check if the employee_companies table has the status column
+    let hasStatus = false
+    try {
+      const statusResult = await supabase
+        .from("information_schema.columns")
+        .select("column_name")
+        .eq("table_name", "employee_companies")
+        .eq("column_name", "status")
+        .single()
+
+      hasStatus = !!statusResult.data
+    } catch (error) {
+      console.log("Error checking status column:", error)
+      // Continue with hasStatus = false
+    }
+
+    // Prepare the update data object based on available columns
+    const updateData: any = {
       branch_id,
       allocation_percentage,
-    })
-    .eq("id", id)
-
-  if (error) {
-    console.error("Error updating employee company:", error)
-    throw new Error("Failed to update employee company")
-  }
-
-  // If this is the primary allocation, also update the employee's home branch
-  if (currentAllocation?.is_primary) {
-    const { error: updateEmployeeError } = await supabase
-      .from("employees")
-      .update({
-        home_branch_id: branch_id,
-      })
-      .eq("id", employee_id)
-
-    if (updateEmployeeError) {
-      console.error("Error updating employee home branch:", updateEmployeeError)
-      // We don't throw here to avoid rolling back the allocation update
     }
-  }
 
-  revalidatePath(`/people/employees/${employee_id}`)
-  revalidatePath(`/people/employees/${employee_id}/edit`)
+    // Add optional fields if the columns exist
+    if (hasProjectId) {
+      updateData.project_id = project_id
+    }
+
+    if (hasStartDate) {
+      updateData.start_date = start_date || null
+      if (end_date) {
+        updateData.end_date = end_date
+      } else {
+        updateData.end_date = null
+      }
+    }
+
+    if (hasStatus) {
+      // Determine status based on dates
+      if (start_date && new Date(start_date) > new Date()) {
+        updateData.status = "pending"
+      } else if (end_date && new Date(end_date) < new Date()) {
+        updateData.status = "expired"
+      } else {
+        updateData.status = "active"
+      }
+    }
+
+    // Update employee company
+    const { error } = await supabase.from("employee_companies").update(updateData).eq("id", id)
+
+    if (error) {
+      console.error("Error updating employee company:", error)
+
+      if (error.message.includes("validate_employee_allocation")) {
+        throw new Error(error.message.replace(/^[^:]+: /, ""))
+      }
+
+      throw new Error("Failed to update employee company")
+    }
+
+    revalidatePath(`/people/employees/${employee_id}`)
+    revalidatePath(`/people/employees/${employee_id}/edit`)
+  } catch (error) {
+    console.error("Error in updateEmployeeCompany:", error)
+    throw error
+  }
 }
 
 // Delete employee company

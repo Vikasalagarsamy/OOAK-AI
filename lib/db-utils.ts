@@ -3,45 +3,62 @@ import { createClient } from "@/lib/supabase"
 /**
  * Checks if a table exists in the database
  * @param tableName The name of the table to check
- * @returns A boolean indicating whether the table exists
+ * @returns A promise that resolves to a boolean indicating if the table exists
  */
 export async function tableExists(tableName: string): Promise<boolean> {
   const supabase = createClient()
 
-  const { data, error } = await supabase.rpc("table_exists", {
-    p_table_name: tableName,
-  })
+  try {
+    // First approach: Try to query the information_schema.tables view
+    const { data, error } = await supabase
+      .from("information_schema.tables")
+      .select("table_name")
+      .eq("table_name", tableName)
+      .eq("table_schema", "public")
+      .maybeSingle()
 
-  if (error) {
+    if (!error && data) {
+      return true
+    }
+
+    // Second approach: If the first approach fails, try to select from the table with a limit of 0
+    try {
+      const { error: queryError } = await supabase.from(tableName).select("*", { count: "exact", head: true }).limit(0)
+
+      // If there's no error, the table exists
+      return !queryError
+    } catch (innerError) {
+      console.error(`Error checking table existence with direct query: ${innerError}`)
+      return false
+    }
+  } catch (error) {
     console.error(`Error checking if table ${tableName} exists:`, error)
+
+    // Third approach: Try a RPC call to a custom function if it exists
+    try {
+      const { data, error: rpcError } = await supabase.rpc("check_table_exists", { table_name: tableName })
+      if (!rpcError && data) {
+        return data
+      }
+    } catch (rpcError) {
+      console.error(`Error calling check_table_exists RPC: ${rpcError}`)
+    }
+
     return false
   }
-
-  return data || false
 }
 
 /**
- * Safely executes a database query, checking if the required tables exist first
- * @param requiredTables Array of table names required for the query
- * @param queryFn Function to execute if all tables exist
- * @param fallbackValue Value to return if any table doesn't exist
- * @returns The result of queryFn or fallbackValue
+ * Safely executes a query that might fail if a table doesn't exist
+ * @param queryFn The query function to execute
+ * @param fallback The fallback value to return if the query fails
+ * @returns The result of the query or the fallback value
  */
-export async function safeQuery<T>(requiredTables: string[], queryFn: () => Promise<T>, fallbackValue: T): Promise<T> {
-  // Check if all required tables exist
-  for (const table of requiredTables) {
-    const exists = await tableExists(table)
-    if (!exists) {
-      console.warn(`Table ${table} does not exist. Returning fallback value.`)
-      return fallbackValue
-    }
-  }
-
-  // All tables exist, execute the query
+export async function safeQuery<T>(queryFn: () => Promise<T>, fallback: T): Promise<T> {
   try {
     return await queryFn()
   } catch (error) {
     console.error("Error executing query:", error)
-    return fallbackValue
+    return fallback
   }
 }

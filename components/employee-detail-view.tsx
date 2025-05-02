@@ -1,12 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { deleteEmployee, getEmployeeCompanies } from "@/actions/employee-actions"
+import { deleteEmployee, getEmployee, getEmployeeCompanies } from "@/actions/employee-actions"
 import { DeleteEmployeeDialog } from "@/components/delete-employee-dialog"
 import type { Employee, EmployeeCompany } from "@/types/employee"
 import {
@@ -24,49 +24,62 @@ import {
   XCircle,
   Clock,
   User,
+  FileText,
 } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "@/components/ui/use-toast"
-import { useEffect } from "react"
+import { format } from "date-fns"
 
 interface EmployeeDetailViewProps {
-  employee: Employee
+  id: string
 }
 
-export function EmployeeDetailView({ employee }: EmployeeDetailViewProps) {
+export function EmployeeDetailView({ id }: EmployeeDetailViewProps) {
   const router = useRouter()
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [employee, setEmployee] = useState<Employee | null>(null)
   const [employeeCompanies, setEmployeeCompanies] = useState<EmployeeCompany[]>([])
+  const [isLoadingEmployee, setIsLoadingEmployee] = useState(true)
   const [isLoadingAllocations, setIsLoadingAllocations] = useState(true)
 
   useEffect(() => {
-    const fetchEmployeeCompanies = async () => {
+    const fetchData = async () => {
       try {
+        setIsLoadingEmployee(true)
+        const employeeData = await getEmployee(id)
+        setEmployee(employeeData)
+
         setIsLoadingAllocations(true)
-        const data = await getEmployeeCompanies(employee.id.toString())
-        setEmployeeCompanies(data)
+        if (employeeData) {
+          const allocationsData = await getEmployeeCompanies(id)
+          setEmployeeCompanies(allocationsData)
+        }
       } catch (error) {
-        console.error("Error fetching employee companies:", error)
+        console.error("Error fetching employee data:", error)
         toast({
           title: "Error",
-          description: "Failed to load company allocations",
+          description: "Failed to load employee data",
           variant: "destructive",
         })
       } finally {
+        setIsLoadingEmployee(false)
         setIsLoadingAllocations(false)
       }
     }
 
-    fetchEmployeeCompanies()
-  }, [employee.id])
+    if (id) {
+      fetchData()
+    }
+  }, [id])
 
   const handleDelete = async () => {
-    setIsDeleting(true)
+    if (!employee) return
 
+    setIsDeleting(true)
     try {
-      await deleteEmployee(employee.id.toString())
+      await deleteEmployee(id)
       router.push("/people/employees")
     } catch (error) {
       console.error("Error deleting employee:", error)
@@ -125,10 +138,54 @@ export function EmployeeDetailView({ employee }: EmployeeDetailViewProps) {
     }
   }
 
+  const getAllocationStatusBadge = (status: string) => {
+    switch (status?.toLowerCase()) {
+      case "active":
+        return <Badge className="bg-green-100 text-green-800">Active</Badge>
+      case "pending":
+        return <Badge className="bg-blue-100 text-blue-800">Pending</Badge>
+      case "completed":
+        return <Badge className="bg-gray-100 text-gray-800">Completed</Badge>
+      case "expired":
+        return <Badge className="bg-red-100 text-red-800">Expired</Badge>
+      default:
+        return <Badge className="bg-gray-100 text-gray-800">{status}</Badge>
+    }
+  }
+
   const formatDate = (dateString: string | null | undefined) => {
     if (!dateString) return "N/A"
     return new Date(dateString).toLocaleDateString()
   }
+
+  if (isLoadingEmployee) {
+    return (
+      <div className="flex items-center justify-center h-48">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
+          <p className="mt-2">Loading employee data...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!employee) {
+    return (
+      <div className="flex flex-col items-center justify-center h-48">
+        <AlertCircle className="h-8 w-8 text-red-500 mb-2" />
+        <h3 className="text-lg font-medium">Employee not found</h3>
+        <p className="text-muted-foreground">The employee you are looking for does not exist or has been deleted.</p>
+        <Button className="mt-4" onClick={() => router.push("/people/employees")}>
+          Back to Employees
+        </Button>
+      </div>
+    )
+  }
+
+  // Group allocations by status
+  const activeAllocations = employeeCompanies.filter((a) => a.status === "active")
+  const pendingAllocations = employeeCompanies.filter((a) => a.status === "pending")
+  const completedAllocations = employeeCompanies.filter((a) => a.status === "completed" || a.status === "expired")
 
   return (
     <div className="space-y-6">
@@ -210,25 +267,25 @@ export function EmployeeDetailView({ employee }: EmployeeDetailViewProps) {
             <div className="flex items-center gap-2">
               <Users className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm font-medium">Department:</span>
-              <span className="text-sm">{employee.departments?.name || "N/A"}</span>
+              <span className="text-sm">{employee.department_name || "N/A"}</span>
             </div>
 
             <div className="flex items-center gap-2">
               <Users className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm font-medium">Designation:</span>
-              <span className="text-sm">{employee.designations?.name || "N/A"}</span>
+              <span className="text-sm">{employee.designation_name || "N/A"}</span>
             </div>
 
             <div className="flex items-center gap-2">
               <Building2 className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm font-medium">Primary Company:</span>
-              <span className="text-sm">{employee.companies?.name || "N/A"}</span>
+              <span className="text-sm">{employee.primary_company_name || "N/A"}</span>
             </div>
 
             <div className="flex items-center gap-2">
               <Building2 className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm font-medium">Home Branch:</span>
-              <span className="text-sm">{employee.branches?.name || "N/A"}</span>
+              <span className="text-sm">{employee.home_branch_name || "N/A"}</span>
             </div>
           </CardContent>
         </Card>
@@ -271,44 +328,68 @@ export function EmployeeDetailView({ employee }: EmployeeDetailViewProps) {
         </Card>
       </div>
 
-      <Tabs defaultValue="company-allocations" className="w-full">
+      <Tabs defaultValue="active-allocations" className="w-full">
         <TabsList>
-          <TabsTrigger value="company-allocations">Company Allocations</TabsTrigger>
+          <TabsTrigger value="active-allocations">Active Allocations</TabsTrigger>
+          <TabsTrigger value="pending-allocations">Pending Allocations</TabsTrigger>
+          <TabsTrigger value="completed-allocations">Completed Allocations</TabsTrigger>
           <TabsTrigger value="work-history">Work History</TabsTrigger>
         </TabsList>
-        <TabsContent value="company-allocations" className="mt-4">
+
+        <TabsContent value="active-allocations" className="mt-4">
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-lg">Company Allocations</CardTitle>
+              <CardTitle className="text-lg">Active Company & Project Allocations</CardTitle>
             </CardHeader>
             <CardContent>
               {isLoadingAllocations ? (
                 <div className="text-center py-4">Loading allocations...</div>
-              ) : employeeCompanies.length === 0 ? (
+              ) : activeAllocations.length === 0 ? (
                 <div className="text-center py-4 text-muted-foreground">
-                  <p>No company allocations found</p>
+                  <p>No active allocations found</p>
                   <Button variant="outline" className="mt-2" asChild>
-                    <Link href={`/people/employees/${employee.id}/edit`}>Add Company Allocation</Link>
+                    <Link href={`/people/employees/${employee.id}/edit`}>Add Allocation</Link>
                   </Button>
                 </div>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Company</TableHead>
-                      <TableHead>Branch</TableHead>
+                      <TableHead>Company / Branch</TableHead>
+                      <TableHead>Project</TableHead>
                       <TableHead>Allocation %</TableHead>
+                      <TableHead>Period</TableHead>
                       <TableHead>Primary</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {employeeCompanies.map((company) => (
-                      <TableRow key={company.id} className={company.is_primary ? "bg-muted/20" : ""}>
-                        <TableCell className="font-medium">{company.company_name}</TableCell>
-                        <TableCell>{company.branch_name}</TableCell>
-                        <TableCell>{company.allocation_percentage}%</TableCell>
+                    {activeAllocations.map((allocation) => (
+                      <TableRow key={allocation.id} className={allocation.is_primary ? "bg-muted/20" : ""}>
                         <TableCell>
-                          {company.is_primary ? (
+                          <div>
+                            <p className="font-medium">{allocation.company_name}</p>
+                            <p className="text-sm text-muted-foreground">{allocation.branch_name}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell>{allocation.project_name || "General"}</TableCell>
+                        <TableCell>{allocation.allocation_percentage}%</TableCell>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="text-sm">
+                              {allocation.start_date
+                                ? format(new Date(allocation.start_date), "MMM d, yyyy")
+                                : "No start"}
+                            </span>
+                            {allocation.end_date && (
+                              <span className="text-sm text-muted-foreground">
+                                to {format(new Date(allocation.end_date), "MMM d, yyyy")}
+                              </span>
+                            )}
+                            {!allocation.end_date && <span className="text-sm text-muted-foreground">No end date</span>}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {allocation.is_primary ? (
                             <Badge variant="outline" className="bg-green-100 text-green-800 border-green-200">
                               Primary
                             </Badge>
@@ -318,10 +399,10 @@ export function EmployeeDetailView({ employee }: EmployeeDetailViewProps) {
                     ))}
                     <TableRow>
                       <TableCell colSpan={2} className="text-right font-medium">
-                        Total Allocation:
+                        Total Active Allocation:
                       </TableCell>
-                      <TableCell colSpan={2} className="font-medium">
-                        {employeeCompanies.reduce((sum, company) => sum + company.allocation_percentage, 0)}%
+                      <TableCell colSpan={3} className="font-medium">
+                        {activeAllocations.reduce((sum, allocation) => sum + allocation.allocation_percentage, 0)}%
                       </TableCell>
                     </TableRow>
                   </TableBody>
@@ -329,7 +410,7 @@ export function EmployeeDetailView({ employee }: EmployeeDetailViewProps) {
               )}
               <div className="mt-4 flex justify-end">
                 <Button variant="outline" asChild>
-                  <Link href={`/people/employees/${employee.id}/edit`}>
+                  <Link href={`/people/employees/${employee.id}/edit?tab=allocations`}>
                     <Pencil className="h-4 w-4 mr-2" />
                     Manage Allocations
                   </Link>
@@ -338,6 +419,112 @@ export function EmployeeDetailView({ employee }: EmployeeDetailViewProps) {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="pending-allocations" className="mt-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">Pending Allocations</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isLoadingAllocations ? (
+                <div className="text-center py-4">Loading allocations...</div>
+              ) : pendingAllocations.length === 0 ? (
+                <div className="text-center py-4 text-muted-foreground">
+                  <p>No pending allocations found</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Company / Branch</TableHead>
+                      <TableHead>Project</TableHead>
+                      <TableHead>Allocation %</TableHead>
+                      <TableHead>Start Date</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pendingAllocations.map((allocation) => (
+                      <TableRow key={allocation.id}>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">{allocation.company_name}</p>
+                            <p className="text-sm text-muted-foreground">{allocation.branch_name}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell>{allocation.project_name || "General"}</TableCell>
+                        <TableCell>{allocation.allocation_percentage}%</TableCell>
+                        <TableCell>
+                          {allocation.start_date
+                            ? format(new Date(allocation.start_date), "MMM d, yyyy")
+                            : "No start date"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="completed-allocations" className="mt-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">Completed/Expired Allocations</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isLoadingAllocations ? (
+                <div className="text-center py-4">Loading allocations...</div>
+              ) : completedAllocations.length === 0 ? (
+                <div className="text-center py-4 text-muted-foreground">
+                  <p>No completed or expired allocations found</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Company / Branch</TableHead>
+                      <TableHead>Project</TableHead>
+                      <TableHead>Allocation %</TableHead>
+                      <TableHead>Period</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {completedAllocations.map((allocation) => (
+                      <TableRow key={allocation.id}>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">{allocation.company_name}</p>
+                            <p className="text-sm text-muted-foreground">{allocation.branch_name}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell>{allocation.project_name || "General"}</TableCell>
+                        <TableCell>{allocation.allocation_percentage}%</TableCell>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="text-sm">
+                              {allocation.start_date
+                                ? format(new Date(allocation.start_date), "MMM d, yyyy")
+                                : "No start"}
+                            </span>
+                            {allocation.end_date && (
+                              <span className="text-sm text-muted-foreground">
+                                to {format(new Date(allocation.end_date), "MMM d, yyyy")}
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>{getAllocationStatusBadge(allocation.status || "")}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="work-history" className="mt-4">
           <Card>
             <CardHeader className="pb-3">
@@ -345,20 +532,16 @@ export function EmployeeDetailView({ employee }: EmployeeDetailViewProps) {
             </CardHeader>
             <CardContent>
               <div className="text-center py-4 text-muted-foreground">
+                <FileText className="h-12 w-12 mx-auto text-muted-foreground/50 mb-2" />
                 <p>Work history information not available</p>
+                <p className="text-sm mt-1">This feature will be available in a future update.</p>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
 
-      <DeleteEmployeeDialog
-        isOpen={isDeleteDialogOpen}
-        onClose={() => setIsDeleteDialogOpen(false)}
-        onDelete={handleDelete}
-        isDeleting={isDeleting}
-        employeeName={`${employee.first_name} ${employee.last_name}`}
-      />
+      <DeleteEmployeeDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen} employee={employee} />
     </div>
   )
 }

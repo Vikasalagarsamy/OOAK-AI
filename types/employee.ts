@@ -28,10 +28,10 @@ export interface Employee {
   branches?: { name: string }
 
   // Denormalized fields
-  department?: string
-  designation?: string
-  primary_company?: string
-  home_branch?: string
+  department_name?: string
+  designation_name?: string
+  primary_company_name?: string
+  home_branch_name?: string
 
   // This field might not exist in the database
   location?: string
@@ -89,19 +89,37 @@ export interface Branch {
   location: string | null
 }
 
+export interface Project {
+  id: number
+  name: string
+  code: string
+  description: string | null
+  start_date: string | null
+  end_date: string | null
+  status: string
+  company_id: number | null
+  created_at: string
+  updated_at: string
+}
+
 export interface EmployeeCompany {
   id: number
   employee_id: number
   company_id: number
   branch_id: number
+  project_id?: number | null
   allocation_percentage: number
   is_primary: boolean
+  start_date?: string | Date | null
+  end_date?: string | Date | null
+  status?: string
   created_at: string
   updated_at: string
 
   // Joined fields
   company_name?: string | null
   branch_name?: string | null
+  project_name?: string | null
 }
 
 export interface EmployeeFormData {
@@ -126,6 +144,9 @@ export interface EmployeeFormData {
 export interface EmployeeCompanyFormData {
   company_id: number
   branch_id: number
+  project_id?: number | null
   allocation_percentage: number
   is_primary: boolean
+  start_date?: string | null
+  end_date?: string | null
 }
