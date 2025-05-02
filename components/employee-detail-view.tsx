@@ -32,7 +32,7 @@ import { toast } from "@/components/ui/use-toast"
 import { format } from "date-fns"
 
 interface EmployeeDetailViewProps {
-  id: string
+  id: string | number
 }
 
 export function EmployeeDetailView({ id }: EmployeeDetailViewProps) {
@@ -48,13 +48,16 @@ export function EmployeeDetailView({ id }: EmployeeDetailViewProps) {
     const fetchData = async () => {
       try {
         setIsLoadingEmployee(true)
-        const employeeData = await getEmployee(id)
-        setEmployee(employeeData)
+        // Convert id to number if it's a string and not "add"
+        if (id && id !== "add") {
+          const employeeData = await getEmployee(id)
+          setEmployee(employeeData)
 
-        setIsLoadingAllocations(true)
-        if (employeeData) {
-          const allocationsData = await getEmployeeCompanies(id)
-          setEmployeeCompanies(allocationsData)
+          setIsLoadingAllocations(true)
+          if (employeeData) {
+            const allocationsData = await getEmployeeCompanies(employeeData.id)
+            setEmployeeCompanies(allocationsData)
+          }
         }
       } catch (error) {
         console.error("Error fetching employee data:", error)

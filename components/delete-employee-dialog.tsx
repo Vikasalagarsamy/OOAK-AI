@@ -32,7 +32,7 @@ export function DeleteEmployeeDialog({ open, onOpenChange, employee, onDelete }:
     setIsDeleting(true)
 
     try {
-      // Call the server action - this may redirect, which will navigate away from this page
+      // Call the server action
       await deleteEmployee(employee.id.toString())
 
       // If we get here (no redirect occurred), update the UI

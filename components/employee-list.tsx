@@ -9,9 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Pencil, Trash2, Plus, Search, CheckCircle2, XCircle, Clock, AlertCircle, User, Building2 } from "lucide-react"
 import { DeleteEmployeeDialog } from "@/components/delete-employee-dialog"
 import { BatchDeleteEmployeesDialog } from "@/components/batch-delete-employees-dialog"
-import { deleteEmployee } from "@/actions/employee-actions"
 import { useRouter } from "next/navigation"
-import { toast } from "@/components/ui/use-toast"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import type { Employee } from "@/types/employee"
 
@@ -26,7 +24,6 @@ export function EmployeeList({ employees }: EmployeeListProps) {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isBatchDeleteDialogOpen, setIsBatchDeleteDialogOpen] = useState(false)
   const [employeeToDelete, setEmployeeToDelete] = useState<Employee | null>(null)
-  const [isDeleting, setIsDeleting] = useState(false)
 
   const filteredEmployees = employees.filter((employee) => {
     const searchTermLower = searchTerm.toLowerCase()
@@ -64,30 +61,9 @@ export function EmployeeList({ employees }: EmployeeListProps) {
     setIsDeleteDialogOpen(true)
   }
 
-  const handleDelete = async () => {
-    if (!employeeToDelete) return
-
-    setIsDeleting(true)
-
-    try {
-      await deleteEmployee(employeeToDelete.id.toString())
-      toast({
-        title: "Employee deleted",
-        description: `${employeeToDelete.first_name} ${employeeToDelete.last_name} has been deleted.`,
-      })
-      router.refresh()
-    } catch (error) {
-      console.error("Error deleting employee:", error)
-      toast({
-        title: "Error",
-        description: "Failed to delete employee. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsDeleting(false)
-      setIsDeleteDialogOpen(false)
-      setEmployeeToDelete(null)
-    }
+  const handleEmployeeDeleted = (id: string) => {
+    // If employee was deleted successfully, refresh the page
+    router.refresh()
   }
 
   const getStatusIcon = (status: string) => {
@@ -273,11 +249,10 @@ export function EmployeeList({ employees }: EmployeeListProps) {
       </div>
 
       <DeleteEmployeeDialog
-        isOpen={isDeleteDialogOpen}
-        onClose={() => setIsDeleteDialogOpen(false)}
-        onDelete={handleDelete}
-        isDeleting={isDeleting}
-        employeeName={employeeToDelete ? `${employeeToDelete.first_name} ${employeeToDelete.last_name}` : ""}
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+        employee={employeeToDelete}
+        onDelete={handleEmployeeDeleted}
       />
 
       <BatchDeleteEmployeesDialog

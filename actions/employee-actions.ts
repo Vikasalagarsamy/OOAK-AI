@@ -36,8 +36,15 @@ export async function getEmployees() {
   return transformedData
 }
 
-export async function getEmployee(id: number) {
+export async function getEmployee(id: string | number) {
   const supabase = createClient()
+
+  // Validate that id is a number
+  const numericId = typeof id === "string" ? Number.parseInt(id) : id
+
+  if (isNaN(numericId)) {
+    throw new Error(`Invalid employee ID: ${id}`)
+  }
 
   const { data, error } = await supabase
     .from("employees")
@@ -48,7 +55,7 @@ export async function getEmployee(id: number) {
       branches(name),
       companies(name)
     `)
-    .eq("id", id)
+    .eq("id", numericId)
     .single()
 
   if (error) {
