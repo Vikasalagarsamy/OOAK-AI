@@ -1,3 +1,4 @@
+"use server"
 import { createClient } from "@/lib/supabase"
 import { safeQuery } from "@/lib/db-utils"
 
