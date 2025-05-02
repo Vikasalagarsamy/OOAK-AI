@@ -190,11 +190,15 @@ export function EnhancedCompanyAllocationForm({
   }
 
   const handleOpenAddDialog = () => {
+    // Calculate available allocation percentage
+    const availablePercentage = 100 - totalAllocationPercentage
+
     // Reset form fields
     setSelectedCompanyId("")
     setSelectedBranchId("")
     setSelectedProjectId("")
-    setAllocationPercentage("100")
+    // Set the allocation percentage to the available percentage (or 100 if nothing is allocated yet)
+    setAllocationPercentage(availablePercentage > 0 ? String(availablePercentage) : "100")
     setStartDate(new Date().toISOString().split("T")[0])
     setEndDate("")
 
@@ -229,11 +233,11 @@ export function EnhancedCompanyAllocationForm({
         return
       }
 
-      // Validate dates
-      if (endDate && new Date(endDate) <= new Date(startDate)) {
+      // Check if the new allocation would exceed 100%
+      if (totalAllocationPercentage + percentage > 100) {
         toast({
-          title: "Validation Error",
-          description: "End date must be after start date.",
+          title: "Allocation Error",
+          description: `Total allocation would exceed 100%. Current total: ${totalAllocationPercentage}%, Available: ${100 - totalAllocationPercentage}%`,
           variant: "destructive",
         })
         setIsSubmitting(false)
@@ -759,15 +763,14 @@ export function EnhancedCompanyAllocationForm({
                   id="allocation"
                   type="number"
                   min="1"
-                  max="100"
+                  max={100 - totalAllocationPercentage}
                   value={allocationPercentage}
                   onChange={(e) => setAllocationPercentage(e.target.value)}
                 />
-                {totalAllocationPercentage > 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    Current total active allocation: {totalAllocationPercentage}%
-                  </p>
-                )}
+                <p className="text-xs text-muted-foreground">
+                  Current total active allocation: {totalAllocationPercentage}%, Available:{" "}
+                  {100 - totalAllocationPercentage}%
+                </p>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">

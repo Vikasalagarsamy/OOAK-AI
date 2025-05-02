@@ -166,27 +166,27 @@ export async function updateEmployee(id: string, formData: FormData) {
   const supabase = createClient()
 
   try {
-    // Update employee
+    // Update employee with proper null handling
     const { data, error } = await supabase
       .from("employees")
       .update({
-        first_name: formData.get("first_name"),
-        last_name: formData.get("last_name"),
-        email: formData.get("email"),
-        phone: formData.get("phone"),
-        address: formData.get("address"),
-        city: formData.get("city"),
-        state: formData.get("state"),
-        zip_code: formData.get("zip_code"),
-        country: formData.get("country"),
-        hire_date: formData.get("hire_date"),
+        first_name: formData.get("first_name") || null,
+        last_name: formData.get("last_name") || null,
+        email: formData.get("email") || null,
+        phone: formData.get("phone") || null,
+        address: formData.get("address") || null,
+        city: formData.get("city") || null,
+        state: formData.get("state") || null,
+        zip_code: formData.get("zip_code") || null,
+        country: formData.get("country") || null,
+        hire_date: formData.get("hire_date") || null,
         termination_date: formData.get("termination_date") || null,
-        status: formData.get("status"),
+        status: formData.get("status") || null,
         department_id: formData.get("department_id") ? Number.parseInt(formData.get("department_id") as string) : null,
         designation_id: formData.get("designation_id")
           ? Number.parseInt(formData.get("designation_id") as string)
           : null,
-        job_title: formData.get("job_title"),
+        job_title: formData.get("job_title") || null,
         home_branch_id: formData.get("home_branch_id")
           ? Number.parseInt(formData.get("home_branch_id") as string)
           : null,
@@ -264,16 +264,21 @@ export async function addEmployeeCompany(employeeId: number, formData: FormData)
     // Check if total allocation would exceed 100%
     const { data: existingAllocations } = await supabase
       .from("employee_companies")
-      .select("allocation_percentage")
+      .select("allocation_percentage, company_id")
       .eq("employee_id", employeeId)
-      .neq("company_id", formData.get("company_id") ? Number.parseInt(formData.get("company_id") as string) : null) // Exclude the company we're adding/updating
 
+    // Calculate total existing allocation, excluding the company we're adding/updating
+    const companyId = formData.get("company_id") ? Number.parseInt(formData.get("company_id") as string) : null
     const totalExistingAllocation =
-      existingAllocations?.reduce((sum, item) => sum + (item.allocation_percentage || 0), 0) || 0
+      existingAllocations
+        ?.filter((item) => item.company_id !== companyId) // Exclude the company we're adding/updating
+        .reduce((sum, item) => sum + (item.allocation_percentage || 0), 0) || 0
 
-    if (totalExistingAllocation + Number.parseInt(formData.get("allocation_percentage") as string) > 100) {
+    const newAllocationPercentage = Number.parseInt(formData.get("allocation_percentage") as string)
+
+    if (totalExistingAllocation + newAllocationPercentage > 100) {
       throw new Error(
-        `Total allocation would exceed 100%. Current total: ${totalExistingAllocation}%, Trying to add: ${formData.get("allocation_percentage")}%`,
+        `Total allocation would exceed 100%. Current total: ${totalExistingAllocation}%, Trying to add: ${newAllocationPercentage}%, Available: ${100 - totalExistingAllocation}%`,
       )
     }
 

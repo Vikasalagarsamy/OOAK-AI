@@ -201,11 +201,77 @@ export function EditEmployeeForm({ employee }: EditEmployeeFormProps) {
     setFormError(null)
 
     try {
+      // Create a FormData object from the form
       const formData = new FormData(e.currentTarget)
 
-      // Ensure first name and last name are properly set
-      formData.set("first_name", firstName)
-      formData.set("last_name", lastName)
+      // Ensure all employee data is included, even if fields weren't modified
+      // This prevents fields from being emptied when switching between tabs
+
+      // Basic information
+      formData.set("first_name", firstName || employee.first_name || "")
+      formData.set("last_name", lastName || employee.last_name || "")
+
+      // Ensure these fields are always included with their original values if not changed
+      if (!formData.get("email") && employee.email) {
+        formData.set("email", employee.email)
+      }
+
+      if (!formData.get("phone") && employee.phone) {
+        formData.set("phone", employee.phone)
+      }
+
+      if (!formData.get("address") && employee.address) {
+        formData.set("address", employee.address)
+      }
+
+      if (!formData.get("city") && employee.city) {
+        formData.set("city", employee.city)
+      }
+
+      if (!formData.get("state") && employee.state) {
+        formData.set("state", employee.state)
+      }
+
+      if (!formData.get("zip_code") && employee.zip_code) {
+        formData.set("zip_code", employee.zip_code)
+      }
+
+      if (!formData.get("country") && employee.country) {
+        formData.set("country", employee.country)
+      }
+
+      if (!formData.get("hire_date") && employee.hire_date) {
+        formData.set("hire_date", formatDateForInput(employee.hire_date))
+      }
+
+      if (!formData.get("termination_date") && employee.termination_date) {
+        formData.set("termination_date", formatDateForInput(employee.termination_date))
+      }
+
+      if (!formData.get("status") && employee.status) {
+        formData.set("status", employee.status)
+      }
+
+      if (!formData.get("job_title") && employee.job_title) {
+        formData.set("job_title", employee.job_title)
+      }
+
+      // Organization details
+      if (!formData.get("department_id") && employee.department_id) {
+        formData.set("department_id", employee.department_id.toString())
+      }
+
+      if (!formData.get("designation_id") && employee.designation_id) {
+        formData.set("designation_id", employee.designation_id.toString())
+      }
+
+      if (!formData.get("primary_company_id") && employee.primary_company_id) {
+        formData.set("primary_company_id", employee.primary_company_id.toString())
+      }
+
+      if (!formData.get("home_branch_id") && employee.home_branch_id) {
+        formData.set("home_branch_id", employee.home_branch_id.toString())
+      }
 
       const result = await updateEmployee(employee.id.toString(), formData)
 
