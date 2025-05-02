@@ -133,6 +133,8 @@ export function RecentActivity({ activities: initialActivities }: RecentActivity
         return "DS"
       case "role":
         return "RO"
+      case "lead":
+        return "LD"
       default:
         return "AC"
     }
@@ -161,6 +163,8 @@ export function RecentActivity({ activities: initialActivities }: RecentActivity
         return "bg-cyan-100 text-cyan-700"
       case "role":
         return "bg-orange-100 text-orange-700"
+      case "lead":
+        return "bg-red-100 text-red-700"
       default:
         return "bg-gray-100 text-gray-700"
     }

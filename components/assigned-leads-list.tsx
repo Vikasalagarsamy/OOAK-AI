@@ -7,8 +7,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, RefreshCw, UserPlus, Eye } from "lucide-react"
+import { Loader2, RefreshCw, UserPlus, Eye, Trash2 } from "lucide-react"
 import { ReassignLeadDialog } from "@/components/reassign-lead-dialog"
+import { DeleteLeadDialog } from "@/components/delete-lead-dialog"
 import { useToast } from "@/components/ui/use-toast"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
@@ -18,6 +19,7 @@ export function AssignedLeadsList() {
   const [refreshing, setRefreshing] = useState(false)
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
   const [isReassignDialogOpen, setIsReassignDialogOpen] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const { toast } = useToast()
 
   useEffect(() => {
@@ -76,8 +78,19 @@ export function AssignedLeadsList() {
     setIsReassignDialogOpen(true)
   }
 
+  const handleDeleteClick = (lead: Lead) => {
+    setSelectedLead(lead)
+    setIsDeleteDialogOpen(true)
+  }
+
   const handleReassignComplete = () => {
     setIsReassignDialogOpen(false)
+    setSelectedLead(null)
+    fetchAssignedLeads()
+  }
+
+  const handleDeleteComplete = () => {
+    setIsDeleteDialogOpen(false)
     setSelectedLead(null)
     fetchAssignedLeads()
   }
@@ -160,6 +173,14 @@ export function AssignedLeadsList() {
                               <Eye className="h-4 w-4" />
                             </a>
                           </Button>
+                          <Button
+                            size="icon"
+                            variant="outline"
+                            className="text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                            onClick={() => handleDeleteClick(lead)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -172,12 +193,20 @@ export function AssignedLeadsList() {
       </Card>
 
       {selectedLead && (
-        <ReassignLeadDialog
-          lead={selectedLead}
-          open={isReassignDialogOpen}
-          onOpenChange={setIsReassignDialogOpen}
-          onReassignComplete={handleReassignComplete}
-        />
+        <>
+          <ReassignLeadDialog
+            lead={selectedLead}
+            open={isReassignDialogOpen}
+            onOpenChange={setIsReassignDialogOpen}
+            onReassignComplete={handleReassignComplete}
+          />
+          <DeleteLeadDialog
+            lead={selectedLead}
+            open={isDeleteDialogOpen}
+            onOpenChange={setIsDeleteDialogOpen}
+            onDeleteComplete={handleDeleteComplete}
+          />
+        </>
       )}
     </>
   )

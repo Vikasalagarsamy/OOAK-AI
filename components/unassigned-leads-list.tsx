@@ -7,8 +7,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, RefreshCw, UserPlus, Eye } from "lucide-react"
+import { Loader2, RefreshCw, UserPlus, Eye, Trash2 } from "lucide-react"
 import { AssignLeadDialog } from "@/components/assign-lead-dialog"
+import { DeleteLeadDialog } from "@/components/delete-lead-dialog"
 import { useToast } from "@/components/ui/use-toast"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -19,6 +20,7 @@ export function UnassignedLeadsList() {
   const [refreshing, setRefreshing] = useState(false)
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const { toast } = useToast()
 
   useEffect(() => {
@@ -75,8 +77,19 @@ export function UnassignedLeadsList() {
     setIsAssignDialogOpen(true)
   }
 
+  const handleDeleteClick = (lead: Lead) => {
+    setSelectedLead(lead)
+    setIsDeleteDialogOpen(true)
+  }
+
   const handleAssignComplete = () => {
     setIsAssignDialogOpen(false)
+    setSelectedLead(null)
+    fetchUnassignedLeads()
+  }
+
+  const handleDeleteComplete = () => {
+    setIsDeleteDialogOpen(false)
     setSelectedLead(null)
     fetchUnassignedLeads()
   }
@@ -175,6 +188,14 @@ export function UnassignedLeadsList() {
                               <Eye className="h-4 w-4" />
                             </a>
                           </Button>
+                          <Button
+                            size="icon"
+                            variant="outline"
+                            className="text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                            onClick={() => handleDeleteClick(lead)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -187,12 +208,20 @@ export function UnassignedLeadsList() {
       </Card>
 
       {selectedLead && (
-        <AssignLeadDialog
-          lead={selectedLead}
-          open={isAssignDialogOpen}
-          onOpenChange={setIsAssignDialogOpen}
-          onAssignComplete={handleAssignComplete}
-        />
+        <>
+          <AssignLeadDialog
+            lead={selectedLead}
+            open={isAssignDialogOpen}
+            onOpenChange={setIsAssignDialogOpen}
+            onAssignComplete={handleAssignComplete}
+          />
+          <DeleteLeadDialog
+            lead={selectedLead}
+            open={isDeleteDialogOpen}
+            onOpenChange={setIsDeleteDialogOpen}
+            onDeleteComplete={handleDeleteComplete}
+          />
+        </>
       )}
     </>
   )
