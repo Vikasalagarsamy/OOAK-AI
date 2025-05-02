@@ -1,7 +1,6 @@
 "use server"
 
 import { createClient } from "@/lib/supabase/server"
-import { logActivity } from "@/services/activity-service"
 
 export async function getLeads() {
   const supabase = createClient()
@@ -45,13 +44,13 @@ export async function assignLead(
     }
 
     // Log the activity
-    await logActivity({
-      actionType: "assignment",
-      entityType: "lead",
-      entityId: leadId.toString(),
-      entityName: leadNumber,
+    await supabase.from("activities").insert({
+      activity_type: "lead_assigned",
       description: `Lead ${leadNumber} (${clientName}) assigned to ${employeeName}`,
-      userName: "System", // You might want to change this to the current user
+      performed_by: "system", // You might want to change this to the current user
+      entity_type: "lead",
+      entity_id: leadId,
+      created_at: new Date().toISOString(),
     })
 
     return {
@@ -91,8 +90,16 @@ export async function assignLeadToEmployee(leadId: number, employeeId: number): 
 /**
  * Deletes a lead from the system
  */
-export async function deleteLead(leadId: number): Promise<{ success: boolean; message: string }> {
+export async function deleteLead(leadId: number | undefined): Promise<{ success: boolean; message: string }> {
   const supabase = createClient()
+
+  // Validate leadId
+  if (leadId === undefined || isNaN(Number(leadId))) {
+    return {
+      success: false,
+      message: "Invalid lead ID provided",
+    }
+  }
 
   try {
     // First, get the lead details for logging
@@ -115,14 +122,14 @@ export async function deleteLead(leadId: number): Promise<{ success: boolean; me
       return { success: false, message: `Failed to delete lead: ${deleteError.message}` }
     }
 
-    // Log the activity using the activity service
-    await logActivity({
-      actionType: "delete",
-      entityType: "lead",
-      entityId: leadId.toString(),
-      entityName: leadData.lead_number,
+    // Log the activity
+    await supabase.from("activities").insert({
+      activity_type: "lead_deleted",
       description: `Lead ${leadData.lead_number} (${leadData.client_name}) was deleted`,
-      userName: "System", // You might want to change this to the current user
+      performed_by: "system", // You might want to change this to the current user
+      entity_type: "lead",
+      entity_id: leadId,
+      created_at: new Date().toISOString(),
     })
 
     return {

@@ -14,31 +14,33 @@ import { Button } from "@/components/ui/button"
 import { Loader2 } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import { deleteLead } from "@/actions/lead-actions"
+import type { Lead } from "@/types/lead"
 
 interface DeleteLeadDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  leadId: number
-  leadNumber: string
-  clientName: string
+  lead: Lead | null
   onDeleted: () => void
 }
 
-export function DeleteLeadDialog({
-  open,
-  onOpenChange,
-  leadId,
-  leadNumber,
-  clientName,
-  onDeleted,
-}: DeleteLeadDialogProps) {
+export function DeleteLeadDialog({ open, onOpenChange, lead, onDeleted }: DeleteLeadDialogProps) {
   const [isDeleting, setIsDeleting] = useState(false)
   const { toast } = useToast()
 
   const handleDelete = async () => {
+    if (!lead || typeof lead.id !== "number") {
+      toast({
+        title: "Error",
+        description: "Invalid lead data. Please try again.",
+        variant: "destructive",
+      })
+      onOpenChange(false)
+      return
+    }
+
     setIsDeleting(true)
     try {
-      const result = await deleteLead(leadId)
+      const result = await deleteLead(lead.id)
 
       if (result.success) {
         toast({
@@ -65,13 +67,18 @@ export function DeleteLeadDialog({
     }
   }
 
+  if (!lead) {
+    return null
+  }
+
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Are you sure you want to delete this lead?</AlertDialogTitle>
           <AlertDialogDescription>
-            You are about to delete lead <strong>{leadNumber}</strong> for client <strong>{clientName}</strong>.
+            You are about to delete lead <strong>{lead.lead_number}</strong> for client{" "}
+            <strong>{lead.client_name}</strong>.
             <br />
             <br />
             This action cannot be undone. This will permanently delete the lead and remove all associated data.
