@@ -1,6 +1,19 @@
 "use server"
 
-import { createClient } from "@/lib/supabase"
+import { createClient } from "@/lib/supabase/server"
+
+export async function getLeads() {
+  const supabase = createClient()
+
+  const { data, error } = await supabase.from("leads").select("*").order("created_at", { ascending: false })
+
+  if (error) {
+    console.error("Error fetching leads:", error)
+    throw new Error(`Error fetching leads: ${error.message}`)
+  }
+
+  return data
+}
 
 /**
  * Assigns a lead to an employee

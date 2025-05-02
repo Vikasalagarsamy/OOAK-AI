@@ -1,6 +1,6 @@
 "use server"
 
-import { createClient } from "@/lib/supabase"
+import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import { getEmployeesForLeadAssignment } from "./employee-selection-actions"
 
@@ -9,63 +9,22 @@ interface ReassignmentResult {
   message: string
 }
 
-export async function reassignLead(
-  leadId: number,
-  leadNumber: string,
-  clientName: string,
-  newEmployeeId: number,
-  newEmployeeName: string,
-): Promise<ReassignmentResult> {
+export async function reassignLead(leadId: string, employeeId: string) {
   const supabase = createClient()
 
   try {
-    // Update the lead's assigned_to field
-    const { error } = await supabase
-      .from("leads")
-      .update({
-        assigned_to: newEmployeeId,
-        status: "ASSIGNED", // Ensure status is set to ASSIGNED
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", leadId)
+    const { error } = await supabase.from("leads").update({ assigned_to: employeeId }).eq("id", leadId)
 
     if (error) {
-      console.error("Error reassigning lead:", error)
-      return {
-        success: false,
-        message: `Failed to reassign lead: ${error.message}`,
-      }
+      throw new Error(`Error reassigning lead: ${error.message}`)
     }
 
-    // Log the reassignment activity
-    const { error: activityError } = await supabase.from("activities").insert({
-      action_type: "LEAD_REASSIGNED", // Changed from activity_type to action_type
-      entity_type: "lead", // Changed from reference_type to entity_type
-      entity_id: leadId, // Changed from reference_id to entity_id
-      entity_name: leadNumber,
-      description: `Lead ${leadNumber} (${clientName}) was reassigned to ${newEmployeeName}`,
-      user_name: "system", // This should ideally be the current user's ID
-      created_at: new Date().toISOString(),
-    })
-
-    if (activityError) {
-      console.error("Error logging reassignment activity:", activityError)
-      // We don't fail the whole operation if just the activity logging fails
-    }
-
-    // Revalidate the manage leads page to reflect changes
-    revalidatePath("/sales/manage-lead")
-
-    return {
-      success: true,
-      message: `Lead successfully reassigned to ${newEmployeeName}`,
-    }
-  } catch (error) {
-    console.error("Exception reassigning lead:", error)
-    return {
-      success: false,
-      message: `An unexpected error occurred: ${error instanceof Error ? error.message : String(error)}`,
-    }
+    revalidatePath(`/sales/lead/${leadId}`)
+    revalidatePath("/sales/unassigned-lead")
+    return { success: true }
+  } catch (error: any) {
+    console.error("Error reassigning lead:", error)
+    return { success: false, error: error.message }
   }
 }
 

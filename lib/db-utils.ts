@@ -1,14 +1,14 @@
 import { createClient } from "@/lib/supabase/server"
 
 /**
- * Checks if a table exists in the database
+ * Safely checks if a table exists in the database
  * @param tableName The name of the table to check
- * @returns A promise that resolves to a boolean indicating if the table exists
+ * @returns Promise<boolean> True if the table exists, false otherwise
  */
 export async function tableExists(tableName: string): Promise<boolean> {
-  try {
-    const supabase = createClient()
+  const supabase = createClient()
 
+  try {
     const { data, error } = await supabase
       .from("information_schema.tables")
       .select("table_name")
@@ -28,15 +28,27 @@ export async function tableExists(tableName: string): Promise<boolean> {
 }
 
 /**
- * Safely executes a query, catching any errors
- * @param queryFn The query function to execute
- * @returns The result of the query or the default value if an error occurred
+ * Safely executes a database query with fallback value if the table doesn't exist
+ * @param tables Array of table names that the query depends on
+ * @param queryFn Function that executes the query
+ * @param fallbackValue Value to return if any of the tables don't exist
+ * @returns Promise<T> Result of the query or fallback value
  */
-export async function safeQuery<T>(queryFn: () => Promise<T>, defaultValue: T): Promise<T> {
+export async function safeQuery<T>(tables: string[], queryFn: () => Promise<T>, fallbackValue: T): Promise<T> {
   try {
+    // Check if all required tables exist
+    for (const table of tables) {
+      const exists = await tableExists(table)
+      if (!exists) {
+        console.log(`Table ${table} does not exist, returning fallback value`)
+        return fallbackValue
+      }
+    }
+
+    // Execute the query
     return await queryFn()
   } catch (error) {
-    console.error("Error executing query:", error)
-    return defaultValue
+    console.error("Error in safeQuery:", error)
+    return fallbackValue
   }
 }
