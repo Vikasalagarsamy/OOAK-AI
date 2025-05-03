@@ -49,19 +49,14 @@ export async function getLeads() {
         }
 
         // Fetch lead source info if lead_source_id exists
-        // Check if the column exists first
-        if (lead.lead_source_id !== undefined) {
-          try {
-            const { data: sourceData } = await supabase
-              .from("lead_sources")
-              .select("name")
-              .eq("id", lead.lead_source_id)
-              .single()
+        if (lead.lead_source_id) {
+          const { data: sourceData } = await supabase
+            .from("lead_sources")
+            .select("name")
+            .eq("id", lead.lead_source_id)
+            .single()
 
-            leadSourceName = sourceData?.name || null
-          } catch (error) {
-            console.log("Lead source fetch error (might not exist):", error)
-          }
+          leadSourceName = sourceData?.name || null
         }
 
         // Return the enhanced lead with additional information
@@ -74,6 +69,11 @@ export async function getLeads() {
         }
       }),
     )
+
+    console.log("Enhanced leads:", enhancedLeads.length)
+    if (enhancedLeads.length > 0) {
+      console.log("First enhanced lead:", JSON.stringify(enhancedLeads[0], null, 2))
+    }
 
     return enhancedLeads
   } catch (error) {
@@ -100,7 +100,7 @@ export async function assignLead(
       .from("leads")
       .update({
         assigned_to: employeeId,
-        status: "assigned",
+        status: "ASSIGNED",
         updated_at: new Date().toISOString(),
       })
       .eq("id", leadId)
@@ -143,7 +143,7 @@ export async function assignLeadToEmployee(leadId: number, employeeId: number): 
     .from("leads")
     .update({
       assigned_to: employeeId,
-      status: "assigned",
+      status: "ASSIGNED",
       updated_at: new Date().toISOString(),
     })
     .eq("id", leadId)

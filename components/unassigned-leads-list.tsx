@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
-import { Loader2, UserPlus, Trash2, Building2, MapPin } from "lucide-react"
+import { Loader2, UserPlus, Trash2, Building2, MapPin, Tag } from "lucide-react"
 import { AssignLeadDialog } from "./assign-lead-dialog"
 import { DeleteLeadDialog } from "./delete-lead-dialog"
 import { getLeads } from "@/actions/lead-actions"
@@ -19,18 +19,27 @@ export function UnassignedLeadsList() {
   const [assignDialogOpen, setAssignDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   const fetchLeads = async () => {
     setLoading(true)
     try {
       const data = await getLeads()
+
       // Filter for unassigned leads and ensure no null values
       const unassignedLeads = data
         .filter((lead) => lead) // Filter out null/undefined leads
-        .filter((lead) => !lead.assigned_to || lead.status === "unassigned")
+        .filter((lead) => !lead.assigned_to || lead.status === "UNASSIGNED")
+
+      console.log("Unassigned leads:", unassignedLeads.length)
+      if (unassignedLeads.length > 0) {
+        console.log("First lead:", JSON.stringify(unassignedLeads[0], null, 2))
+      }
+
       setLeads(unassignedLeads)
     } catch (error) {
       console.error("Error fetching leads:", error)
+      setError("Error: " + (error instanceof Error ? error.message : String(error)))
       setLeads([])
     } finally {
       setLoading(false)
@@ -70,106 +79,120 @@ export function UnassignedLeadsList() {
           <div className="flex justify-center items-center h-40">
             <Loader2 className="h-8 w-8 animate-spin text-gray-500" />
           </div>
+        ) : error ? (
+          <div className="text-center py-8 text-red-500">
+            <p>Error loading leads: {error}</p>
+          </div>
         ) : leads.length === 0 ? (
           <div className="text-center py-8 text-gray-500">No unassigned leads found</div>
         ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Lead #</TableHead>
-                  <TableHead>Client</TableHead>
-                  <TableHead>Company</TableHead>
-                  <TableHead>Branch</TableHead>
-                  <TableHead>Source</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {leads.map(
-                  (lead) =>
-                    lead && (
-                      <TableRow key={lead.id}>
-                        <TableCell className="font-medium">{lead.lead_number}</TableCell>
-                        <TableCell>
-                          <div className="flex flex-col">
-                            <span>{lead.client_name}</span>
-                            {lead.client_phone && (
-                              <span className="text-xs text-muted-foreground">{lead.client_phone}</span>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <div className="flex items-center">
-                                  <Building2 className="h-4 w-4 mr-1 text-muted-foreground" />
-                                  <span className="truncate max-w-[120px]">{lead.company_name || "N/A"}</span>
-                                </div>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>{lead.company_name || "No company assigned"}</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </TableCell>
-                        <TableCell>
-                          {lead.branch_name ? (
+          <>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Lead #</TableHead>
+                    <TableHead>Client</TableHead>
+                    <TableHead>Company</TableHead>
+                    <TableHead>Branch</TableHead>
+                    <TableHead>Source</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {leads.map(
+                    (lead) =>
+                      lead && (
+                        <TableRow key={lead.id}>
+                          <TableCell className="font-medium">{lead.lead_number}</TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span>{lead.client_name}</span>
+                              {lead.client_phone && (
+                                <span className="text-xs text-muted-foreground">
+                                  {lead.country_code} {lead.client_phone}
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <div className="flex items-center">
-                                    <MapPin className="h-4 w-4 mr-1 text-muted-foreground" />
-                                    <span className="truncate max-w-[120px]">{lead.branch_name}</span>
+                                    <Building2 className="h-4 w-4 mr-1 text-muted-foreground" />
+                                    <span className="truncate max-w-[120px]">{lead.company_name || "N/A"}</span>
                                   </div>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  <p>{lead.branch_name}</p>
-                                  {lead.branch_location && <p className="text-xs">{lead.branch_location}</p>}
+                                  <p>{lead.company_name || "No company assigned"}</p>
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
-                          ) : (
-                            <span className="text-muted-foreground text-sm">—</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {lead.lead_source_name ? (
-                            <Badge variant="outline" className="bg-blue-50">
-                              {lead.lead_source_name}
-                            </Badge>
-                          ) : (
-                            <span className="text-muted-foreground text-sm">—</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {lead.created_at ? new Date(lead.created_at).toLocaleDateString() : "N/A"}
-                        </TableCell>
-                        <TableCell>
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                            Unassigned
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex space-x-2">
-                            <Button size="sm" variant="outline" onClick={() => handleAssignClick(lead)}>
-                              <UserPlus className="h-4 w-4 mr-1" />
-                              Assign
-                            </Button>
-                            <Button size="sm" variant="destructive" onClick={() => handleDeleteClick(lead)}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ),
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                          </TableCell>
+                          <TableCell>
+                            {lead.branch_name ? (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div className="flex items-center">
+                                      <MapPin className="h-4 w-4 mr-1 text-muted-foreground" />
+                                      <span className="truncate max-w-[120px]">{lead.branch_name}</span>
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>{lead.branch_name}</p>
+                                    {lead.branch_location && <p className="text-xs">{lead.branch_location}</p>}
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {lead.lead_source ? (
+                              <Badge variant="outline" className="bg-blue-50 flex items-center gap-1">
+                                <Tag className="h-3 w-3" />
+                                {lead.lead_source}
+                              </Badge>
+                            ) : lead.lead_source_name ? (
+                              <Badge variant="outline" className="bg-blue-50 flex items-center gap-1">
+                                <Tag className="h-3 w-3" />
+                                {lead.lead_source_name}
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {lead.created_at ? new Date(lead.created_at).toLocaleDateString() : "N/A"}
+                          </TableCell>
+                          <TableCell>
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                              Unassigned
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex space-x-2">
+                              <Button size="sm" variant="outline" onClick={() => handleAssignClick(lead)}>
+                                <UserPlus className="h-4 w-4 mr-1" />
+                                Assign
+                              </Button>
+                              <Button size="sm" variant="destructive" onClick={() => handleDeleteClick(lead)}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ),
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </>
         )}
 
         <AssignLeadDialog

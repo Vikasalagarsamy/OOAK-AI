@@ -34,13 +34,14 @@ export async function getLeadSources(): Promise<LeadSource[]> {
   try {
     const supabase = createClient()
 
-    const { data, error } = await supabase.from("lead_sources").select("*").order("name")
+    const { data, error } = await supabase.from("lead_sources").select("id, name, description").order("name")
 
     if (error) {
       console.error("Error fetching lead sources:", error)
       return []
     }
 
+    console.log("Lead sources fetched:", data)
     return data || []
   } catch (error) {
     console.error("Error in getLeadSources:", error)

@@ -16,7 +16,7 @@ import { useToast } from "@/components/ui/use-toast"
 import { createClient } from "@/lib/supabase"
 import { generateLeadNumber, ensureUniqueLeadNumber } from "@/utils/lead-number-generator"
 import { logActivity } from "@/services/activity-service"
-import { getLeadSources } from "@/services/lead-source-service"
+import { getLeadSourceColumnName } from "@/actions/schema-actions"
 import type { LeadSource } from "@/types/lead-source"
 import { Loader2, Building2, Phone, FileText, Save, Info, AlertCircle } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -122,19 +122,26 @@ interface Branch {
   company_id: number
 }
 
+interface EnhancedLeadSource extends LeadSource {
+  id: number
+  name: string
+}
+
 export function CreateLeadForm() {
   const router = useRouter()
   const { toast } = useToast()
   const [companies, setCompanies] = useState<Company[]>([])
   const [branches, setBranches] = useState<Branch[]>([])
-  const [leadSources, setLeadSources] = useState<LeadSource[]>([])
+  const [leadSources, setLeadSources] = useState<EnhancedLeadSource[]>([])
   const [filteredBranches, setFilteredBranches] = useState<Branch[]>([])
   const [loading, setLoading] = useState(false)
   const [loadingCompanies, setLoadingCompanies] = useState(true)
   const [loadingBranches, setLoadingBranches] = useState(true)
   const [loadingLeadSources, setLoadingLeadSources] = useState(true)
   const [formError, setFormError] = useState<string | null>(null)
-  const [validLeadSources, setValidLeadSources] = useState<string[]>([])
+  const [debugInfo, setDebugInfo] = useState<string | null>(null)
+  const [sourceColumnName, setSourceColumnName] = useState<string | null>(null)
+  const [schemaChecked, setSchemaChecked] = useState(false)
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -162,13 +169,29 @@ export function CreateLeadForm() {
   const hasWhatsapp = watch("is_whatsapp")
   const hasSeparateWhatsapp = watch("has_separate_whatsapp")
   const countryCode = watch("country_code")
+  const leadSource = watch("lead_source")
 
-  // Fetch companies, branches, and lead sources on component mount
+  // Check schema and fetch data on component mount
   useEffect(() => {
+    checkSchema()
     fetchCompanies()
     fetchBranches()
     fetchLeadSources()
   }, [])
+
+  // Check database schema to find the correct column name
+  const checkSchema = async () => {
+    try {
+      const columnName = await getLeadSourceColumnName()
+      console.log("Lead source column name:", columnName)
+      setSourceColumnName(columnName)
+      setSchemaChecked(true)
+    } catch (error) {
+      console.error("Error checking schema:", error)
+      setFormError(`Error checking database schema: ${error instanceof Error ? error.message : String(error)}`)
+      setSchemaChecked(true)
+    }
+  }
 
   // Filter branches when company changes
   useEffect(() => {
@@ -193,15 +216,6 @@ export function CreateLeadForm() {
       trigger(["whatsapp_country_code", "whatsapp_number"])
     }
   }, [hasWhatsapp, hasSeparateWhatsapp, trigger, isDirty])
-
-  // Build valid lead sources list for validation
-  useEffect(() => {
-    if (leadSources.length > 0) {
-      const sources = leadSources.map((source) => source.name)
-      sources.push("not-specified") // Add the "not specified" option
-      setValidLeadSources(sources)
-    }
-  }, [leadSources])
 
   const fetchCompanies = async () => {
     setLoadingCompanies(true)
@@ -252,8 +266,16 @@ export function CreateLeadForm() {
   const fetchLeadSources = async () => {
     setLoadingLeadSources(true)
     try {
-      const sources = await getLeadSources()
-      setLeadSources(sources)
+      const supabase = createClient()
+      const { data, error } = await supabase.from("lead_sources").select("id, name").order("name")
+
+      if (error) {
+        console.error("Error fetching lead sources:", error)
+        throw error
+      }
+
+      console.log("Lead sources fetched:", data)
+      setLeadSources(data || [])
     } catch (error) {
       console.error("Error fetching lead sources:", error)
       toast({
@@ -266,23 +288,11 @@ export function CreateLeadForm() {
     }
   }
 
-  const validateLeadSource = (leadSource: string | undefined): boolean => {
-    if (!leadSource || leadSource === "") return true
-    return validLeadSources.includes(leadSource)
-  }
-
   const onSubmit = async (data: FormValues) => {
     setFormError(null)
     setLoading(true)
 
     try {
-      // Additional validation before submission
-      if (!validateLeadSource(data.lead_source)) {
-        setFormError("Invalid lead source selected")
-        setLoading(false)
-        return
-      }
-
       const supabase = createClient()
 
       // Generate a unique lead number
@@ -290,7 +300,7 @@ export function CreateLeadForm() {
       leadNumber = await ensureUniqueLeadNumber(leadNumber)
 
       // Prepare the lead data
-      const leadData = {
+      const leadData: Record<string, any> = {
         lead_number: leadNumber,
         company_id: Number.parseInt(data.company_id, 10),
         branch_id: data.branch_id ? Number.parseInt(data.branch_id, 10) : null,
@@ -308,10 +318,27 @@ export function CreateLeadForm() {
           : data.is_whatsapp
             ? data.phone.trim()
             : null,
-        lead_source: data.lead_source === "not-specified" ? null : data.lead_source || null,
         notes: data.notes ? data.notes.trim() : null,
         status: "UNASSIGNED",
       }
+
+      // Handle lead source based on the column name
+      if (sourceColumnName && data.lead_source && data.lead_source !== "none") {
+        if (sourceColumnName === "lead_source") {
+          // If it's the text column, find the source name
+          const selectedSource = leadSources.find((source) => source.id.toString() === data.lead_source)
+          if (selectedSource) {
+            leadData.lead_source = selectedSource.name
+          }
+        } else if (sourceColumnName === "lead_source_id") {
+          // If it's the ID column, use the ID
+          leadData.lead_source_id = Number.parseInt(data.lead_source, 10)
+        }
+      }
+
+      // Debug the lead data before submission
+      console.log("Lead data being submitted:", JSON.stringify(leadData, null, 2))
+      setDebugInfo(JSON.stringify(leadData, null, 2))
 
       // Insert the lead
       const { data: insertedLead, error } = await supabase.from("leads").insert(leadData).select().single()
@@ -320,13 +347,16 @@ export function CreateLeadForm() {
         throw error
       }
 
+      // Log the inserted lead data
+      console.log("Inserted lead data:", JSON.stringify(insertedLead, null, 2))
+
       // Log the activity
       await logActivity({
         actionType: "create",
         entityType: "lead",
         entityId: insertedLead.id.toString(),
         entityName: leadNumber,
-        description: `Created new lead ${leadNumber} for ${data.client_name}${data.lead_source && data.lead_source !== "not-specified" ? ` from ${data.lead_source}` : ""}`,
+        description: `Created new lead ${leadNumber} for ${data.client_name}`,
         userName: "Current User", // Replace with actual user name when available
       })
 
@@ -350,6 +380,20 @@ export function CreateLeadForm() {
     }
   }
 
+  // Show a message if we're still checking the schema
+  if (!schemaChecked) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex flex-col items-center justify-center p-8">
+            <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+            <p className="text-center text-muted-foreground">Checking database schema...</p>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <form onSubmit={handleSubmit(onSubmit)} noValidate>
       <Card>
@@ -365,6 +409,16 @@ export function CreateLeadForm() {
             <Alert variant="destructive" className="mb-6">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>{formError}</AlertDescription>
+            </Alert>
+          )}
+
+          {/* Schema Status */}
+          {sourceColumnName === null && (
+            <Alert className="mb-6">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Lead source tracking is not available. The required database column could not be found or created.
+              </AlertDescription>
             </Alert>
           )}
 
@@ -579,47 +633,49 @@ export function CreateLeadForm() {
               </div>
             )}
 
-            {/* Lead Source Section */}
-            <div className="space-y-2">
-              <Label
-                htmlFor="lead_source"
-                className={`flex items-center gap-2 ${errors.lead_source ? "text-destructive" : ""}`}
-              >
-                <Info className="h-4 w-4" />
-                Lead Source
-              </Label>
-              <Select
-                disabled={loading || loadingLeadSources}
-                value={form.watch("lead_source")}
-                onValueChange={(value) => setValue("lead_source", value, { shouldValidate: true })}
-              >
-                <SelectTrigger id="lead_source" className={errors.lead_source ? "border-destructive" : ""}>
-                  <SelectValue placeholder="Select a lead source" />
-                </SelectTrigger>
-                <SelectContent>
-                  {loadingLeadSources ? (
-                    <div className="flex items-center justify-center p-2">
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      Loading...
-                    </div>
-                  ) : leadSources.length === 0 ? (
-                    <SelectItem value="no-sources" disabled>
-                      No lead sources found
-                    </SelectItem>
-                  ) : (
-                    <>
-                      <SelectItem value="not-specified">Not specified</SelectItem>
-                      {leadSources.map((source) => (
-                        <SelectItem key={source.id} value={source.name}>
-                          {source.name}
-                        </SelectItem>
-                      ))}
-                    </>
-                  )}
-                </SelectContent>
-              </Select>
-              {errors.lead_source && <p className="text-sm text-destructive">{errors.lead_source.message}</p>}
-            </div>
+            {/* Lead Source Section - Only show if the column exists */}
+            {sourceColumnName && (
+              <div className="space-y-2">
+                <Label
+                  htmlFor="lead_source"
+                  className={`flex items-center gap-2 ${errors.lead_source ? "text-destructive" : ""}`}
+                >
+                  <Info className="h-4 w-4" />
+                  Lead Source
+                </Label>
+                <Select
+                  disabled={loading || loadingLeadSources}
+                  value={leadSource}
+                  onValueChange={(value) => setValue("lead_source", value, { shouldValidate: true })}
+                >
+                  <SelectTrigger id="lead_source" className={errors.lead_source ? "border-destructive" : ""}>
+                    <SelectValue placeholder="Select a lead source" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {loadingLeadSources ? (
+                      <div className="flex items-center justify-center p-2">
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Loading...
+                      </div>
+                    ) : leadSources.length === 0 ? (
+                      <SelectItem value="no-sources" disabled>
+                        No lead sources found
+                      </SelectItem>
+                    ) : (
+                      <>
+                        <SelectItem value="none">Not specified</SelectItem>
+                        {leadSources.map((source) => (
+                          <SelectItem key={source.id} value={source.id.toString()}>
+                            {source.name}
+                          </SelectItem>
+                        ))}
+                      </>
+                    )}
+                  </SelectContent>
+                </Select>
+                {errors.lead_source && <p className="text-sm text-destructive">{errors.lead_source.message}</p>}
+              </div>
+            )}
           </div>
 
           {/* Notes Section */}
@@ -637,6 +693,17 @@ export function CreateLeadForm() {
             />
             {errors.notes && <p className="text-sm text-destructive">{errors.notes.message}</p>}
           </div>
+
+          {/* Debug Information */}
+          {debugInfo && (
+            <div className="mt-4 p-4 bg-gray-50 rounded border text-xs">
+              <div className="flex items-center mb-2">
+                <Info className="h-4 w-4 mr-1 text-blue-500" />
+                <span className="font-semibold">Debug Information</span>
+              </div>
+              <pre className="whitespace-pre-wrap overflow-auto">{debugInfo}</pre>
+            </div>
+          )}
         </CardContent>
         <CardFooter className="flex justify-between">
           <Button variant="outline" type="button" onClick={() => router.back()} disabled={loading}>

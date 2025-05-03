@@ -11,12 +11,24 @@ export interface Lead {
   branch_name?: string
   branch_location?: string
   location?: string
-  status: "NEW" | "ASSIGNED" | "CONTACTED" | "QUALIFIED" | "PROPOSAL" | "NEGOTIATION" | "WON" | "LOST" | "REJECTED"
+  status:
+    | "NEW"
+    | "ASSIGNED"
+    | "CONTACTED"
+    | "QUALIFIED"
+    | "PROPOSAL"
+    | "NEGOTIATION"
+    | "WON"
+    | "LOST"
+    | "REJECTED"
+    | "UNASSIGNED"
   assigned_to?: number | null
   assigned_to_name?: string
   created_at?: string
   updated_at?: string
   notes?: string
+  lead_source?: string
   lead_source_id?: number
   lead_source_name?: string
+  country_code?: string
 }
