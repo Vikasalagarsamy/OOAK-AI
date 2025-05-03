@@ -1,6 +1,9 @@
 import { AddEmployeeForm } from "@/components/add-employee-form"
 import { getDepartments, getDesignations, getCompanies, getBranches } from "@/actions/employee-actions"
 
+// Force dynamic rendering since this page uses cookies
+export const dynamic = "force-dynamic"
+
 export default async function AddEmployeePage() {
   try {
     // Fetch all required data for the form

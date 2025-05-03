@@ -2,6 +2,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { AssignedLeadsList } from "@/components/assigned-leads-list"
 import { DollarSign } from "lucide-react"
 
+// Force dynamic rendering to avoid build-time errors
+export const dynamic = "force-dynamic"
+
 export default function ManageLeadPage() {
   return (
     <div className="container mx-auto p-4">
