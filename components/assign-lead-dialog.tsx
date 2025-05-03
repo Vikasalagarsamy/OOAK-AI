@@ -16,27 +16,19 @@ import { Loader2, AlertCircle, Info, Building, Briefcase, Star } from "lucide-re
 import { useToast } from "@/components/ui/use-toast"
 import { getEmployeesForLeadAssignment, assignLeadToEmployee } from "@/actions/employee-selection-actions"
 import type { Lead } from "@/types/lead"
+import type { Employee } from "@/types/employee"
 
-interface Employee {
-  id: number
-  employee_id: string
-  name: string
-  designation: string
-  department?: string
-  allocation_percentage?: number
-  is_primary?: boolean
-  is_sales?: boolean
-  status?: string
-}
-
+// Update the interface to make lead optional
 interface AssignLeadDialogProps {
-  lead: Lead
+  lead: Lead | null
   open: boolean
   onOpenChange: (open: boolean) => void
   onAssignComplete?: () => void
+  onAssigned?: () => void // Adding this to maintain compatibility with existing code
 }
 
-export function AssignLeadDialog({ lead, open, onOpenChange, onAssignComplete }: AssignLeadDialogProps) {
+// Update the component to handle null lead
+export function AssignLeadDialog({ lead, open, onOpenChange, onAssignComplete, onAssigned }: AssignLeadDialogProps) {
   const [employees, setEmployees] = useState<Employee[]>([])
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("")
   const [loading, setLoading] = useState(false)
@@ -45,16 +37,18 @@ export function AssignLeadDialog({ lead, open, onOpenChange, onAssignComplete }:
   const { toast } = useToast()
 
   useEffect(() => {
-    if (open) {
+    if (open && lead) {
       fetchEmployees()
     } else {
       // Reset state when dialog closes
       setSelectedEmployeeId("")
       setError(null)
     }
-  }, [open])
+  }, [open, lead])
 
   const fetchEmployees = async () => {
+    if (!lead) return
+
     setLoading(true)
     setError(null)
     try {
@@ -83,6 +77,15 @@ export function AssignLeadDialog({ lead, open, onOpenChange, onAssignComplete }:
   }
 
   const handleAssign = async () => {
+    if (!lead) {
+      toast({
+        title: "Error",
+        description: "Lead data is missing. Please try again.",
+        variant: "destructive",
+      })
+      return
+    }
+
     if (!selectedEmployeeId) {
       toast({
         title: "Error",
@@ -105,6 +108,9 @@ export function AssignLeadDialog({ lead, open, onOpenChange, onAssignComplete }:
         if (onAssignComplete) {
           onAssignComplete()
         }
+        if (onAssigned) {
+          onAssigned()
+        }
       } else {
         toast({
           title: "Error",
@@ -124,47 +130,72 @@ export function AssignLeadDialog({ lead, open, onOpenChange, onAssignComplete }:
     }
   }
 
+  // If lead is null, don't render the dialog content
+  if (!lead && open) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Assign Lead</DialogTitle>
+            <DialogDescription>Lead data is missing. Please try again.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    )
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Assign Lead</DialogTitle>
           <DialogDescription>
-            Assign lead #{lead.lead_number} - {lead.client_name} to a team member.
+            {lead
+              ? `Assign lead #${lead.lead_number} - ${lead.client_name} to a team member.`
+              : "Loading lead details..."}
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
           {/* Lead info */}
-          <div className="bg-muted/40 p-3 rounded-md space-y-1 text-sm">
-            <div className="grid grid-cols-2 gap-2">
-              {lead.company_name && (
-                <div>
-                  <span className="text-muted-foreground">Company:</span>
-                  <span className="font-medium ml-1">{lead.company_name}</span>
-                </div>
-              )}
-              {lead.branch_name && (
-                <div>
-                  <span className="text-muted-foreground">Branch:</span>
-                  <span className="font-medium ml-1">{lead.branch_name}</span>
-                </div>
-              )}
+          {lead && (
+            <div className="bg-muted/40 p-3 rounded-md space-y-1 text-sm">
+              <div className="grid grid-cols-2 gap-2">
+                {lead.company_name && (
+                  <div>
+                    <span className="text-muted-foreground">Company:</span>
+                    <span className="font-medium ml-1">{lead.company_name}</span>
+                  </div>
+                )}
+                {lead.branch_name && (
+                  <div>
+                    <span className="text-muted-foreground">Branch:</span>
+                    <span className="font-medium ml-1">{lead.branch_name}</span>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Info message */}
-          <div className="bg-blue-50 border border-blue-100 rounded-md p-3 text-sm text-blue-700 flex items-start gap-2">
-            <Info className="h-4 w-4 mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="font-medium">Employee Selection</p>
-              <p className="text-xs mt-0.5">
-                {lead.company_id
-                  ? `Showing employees allocated to ${lead.company_name || "this company"}`
-                  : "Showing all active employees with sales employees prioritized"}
-              </p>
+          {lead && (
+            <div className="bg-blue-50 border border-blue-100 rounded-md p-3 text-sm text-blue-700 flex items-start gap-2">
+              <Info className="h-4 w-4 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="font-medium">Employee Selection</p>
+                <p className="text-xs mt-0.5">
+                  {lead.company_id
+                    ? `Showing employees allocated to ${lead.company_name || "this company"}`
+                    : "Showing all active employees with sales employees prioritized"}
+                </p>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Employee selection */}
           <div className="grid gap-2">
@@ -210,7 +241,7 @@ export function AssignLeadDialog({ lead, open, onOpenChange, onAssignComplete }:
                             )}
                           </div>
 
-                          {employee.allocation_percentage !== undefined && (
+                          {employee.allocation_percentage !== undefined && lead && (
                             <div className="mt-1 bg-green-50 text-green-700 text-xs p-1 rounded flex items-center gap-1">
                               <Building className="h-3 w-3" />
                               <span>
@@ -245,7 +276,7 @@ export function AssignLeadDialog({ lead, open, onOpenChange, onAssignComplete }:
           </Button>
           <Button
             onClick={handleAssign}
-            disabled={submitting || !selectedEmployeeId}
+            disabled={submitting || !selectedEmployeeId || !lead}
             className="bg-green-600 hover:bg-green-700 text-white"
           >
             {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}

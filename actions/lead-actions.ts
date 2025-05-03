@@ -5,14 +5,81 @@ import { createClient } from "@/lib/supabase/server"
 export async function getLeads() {
   const supabase = createClient()
 
-  const { data, error } = await supabase.from("leads").select("*").order("created_at", { ascending: false })
+  try {
+    // First, fetch the leads without trying to use relationships
+    const { data: leadsData, error: leadsError } = await supabase
+      .from("leads")
+      .select("*")
+      .order("created_at", { ascending: false })
 
-  if (error) {
-    console.error("Error fetching leads:", error)
-    throw new Error(`Error fetching leads: ${error.message}`)
+    if (leadsError) {
+      console.error("Error fetching leads:", leadsError)
+      throw new Error(`Error fetching leads: ${leadsError.message}`)
+    }
+
+    // Process the leads to add additional information
+    const enhancedLeads = await Promise.all(
+      leadsData.map(async (lead) => {
+        let companyName = null
+        let branchName = null
+        let branchLocation = null
+        let leadSourceName = null
+
+        // Fetch company info if company_id exists
+        if (lead.company_id) {
+          const { data: companyData } = await supabase
+            .from("companies")
+            .select("name")
+            .eq("id", lead.company_id)
+            .single()
+
+          companyName = companyData?.name || null
+        }
+
+        // Fetch branch info if branch_id exists
+        if (lead.branch_id) {
+          const { data: branchData } = await supabase
+            .from("branches")
+            .select("name, location")
+            .eq("id", lead.branch_id)
+            .single()
+
+          branchName = branchData?.name || null
+          branchLocation = branchData?.location || null
+        }
+
+        // Fetch lead source info if lead_source_id exists
+        // Check if the column exists first
+        if (lead.lead_source_id !== undefined) {
+          try {
+            const { data: sourceData } = await supabase
+              .from("lead_sources")
+              .select("name")
+              .eq("id", lead.lead_source_id)
+              .single()
+
+            leadSourceName = sourceData?.name || null
+          } catch (error) {
+            console.log("Lead source fetch error (might not exist):", error)
+          }
+        }
+
+        // Return the enhanced lead with additional information
+        return {
+          ...lead,
+          company_name: companyName,
+          branch_name: branchName,
+          branch_location: branchLocation,
+          lead_source_name: leadSourceName,
+        }
+      }),
+    )
+
+    return enhancedLeads
+  } catch (error) {
+    console.error("Error processing leads:", error)
+    throw new Error(`Error processing leads: ${error instanceof Error ? error.message : String(error)}`)
   }
-
-  return data
 }
 
 /**
