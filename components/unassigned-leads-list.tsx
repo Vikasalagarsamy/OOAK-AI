@@ -9,6 +9,7 @@ import { AssignLeadDialog } from "./assign-lead-dialog"
 import { DeleteLeadDialog } from "./delete-lead-dialog"
 import { getLeads } from "@/actions/lead-actions"
 import type { Lead } from "@/types/lead"
+import dynamic from "next/dynamic"
 
 export function UnassignedLeadsList() {
   const [leads, setLeads] = useState<Lead[]>([])
@@ -21,11 +22,14 @@ export function UnassignedLeadsList() {
     setLoading(true)
     try {
       const data = await getLeads()
-      // Filter for unassigned leads
-      const unassignedLeads = data.filter((lead: Lead) => !lead.assigned_to || lead.status === "unassigned")
+      // Filter for unassigned leads and ensure no null values
+      const unassignedLeads = data
+        .filter((lead) => lead) // Filter out null/undefined leads
+        .filter((lead) => !lead.assigned_to || lead.status === "unassigned")
       setLeads(unassignedLeads)
     } catch (error) {
       console.error("Error fetching leads:", error)
+      setLeads([])
     } finally {
       setLoading(false)
     }
@@ -78,29 +82,32 @@ export function UnassignedLeadsList() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {leads.map((lead) => (
-                <TableRow key={lead.id}>
-                  <TableCell>{lead.lead_number}</TableCell>
-                  <TableCell>{lead.client_name}</TableCell>
-                  <TableCell>{new Date(lead.created_at).toLocaleDateString()}</TableCell>
-                  <TableCell>
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                      Unassigned
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex space-x-2">
-                      <Button size="sm" variant="outline" onClick={() => handleAssignClick(lead)}>
-                        <UserPlus className="h-4 w-4 mr-1" />
-                        Assign
-                      </Button>
-                      <Button size="sm" variant="destructive" onClick={() => handleDeleteClick(lead)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {leads.map(
+                (lead) =>
+                  lead && (
+                    <TableRow key={lead.id}>
+                      <TableCell>{lead.lead_number}</TableCell>
+                      <TableCell>{lead.client_name}</TableCell>
+                      <TableCell>{lead.created_at ? new Date(lead.created_at).toLocaleDateString() : "N/A"}</TableCell>
+                      <TableCell>
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                          Unassigned
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex space-x-2">
+                          <Button size="sm" variant="outline" onClick={() => handleAssignClick(lead)}>
+                            <UserPlus className="h-4 w-4 mr-1" />
+                            Assign
+                          </Button>
+                          <Button size="sm" variant="destructive" onClick={() => handleDeleteClick(lead)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ),
+              )}
             </TableBody>
           </Table>
         )}
@@ -122,3 +129,5 @@ export function UnassignedLeadsList() {
     </Card>
   )
 }
+
+const UnassignedLeadsListWithNoSSR = dynamic(() => Promise.resolve(UnassignedLeadsList), { ssr: false })
