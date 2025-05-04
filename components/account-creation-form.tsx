@@ -1,24 +1,30 @@
 "use client"
 
+import type React from "react"
+
 import { useState } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
-import { useToast } from "@/components/ui/use-toast"
+import { Check, ChevronsUpDown, Loader2 } from "lucide-react"
+import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent } from "@/components/ui/card"
-import { Loader2, CheckCircle2 } from "lucide-react"
-import { PasswordStrengthMeter } from "./password-strength-meter"
+import { toast } from "@/components/ui/use-toast"
+import { PasswordStrengthMeter } from "@/components/password-strength-meter"
 import { createUserAccount, getEmployees, getRoles } from "@/actions/account-creation-actions"
 
-// Define the form schema with Zod
 const formSchema = z
   .object({
-    employeeId: z.string().min(1, "Employee is required"),
-    roleId: z.string().min(1, "Role is required"),
+    employeeId: z.string({
+      required_error: "Please select an employee.",
+    }),
+    roleId: z.string({
+      required_error: "Please select a role.",
+    }),
     password: z
       .string()
       .min(8, "Password must be at least 8 characters")
@@ -26,7 +32,7 @@ const formSchema = z
       .regex(/[a-z]/, "Password must contain at least one lowercase letter")
       .regex(/[0-9]/, "Password must contain at least one number")
       .regex(/[^A-Za-z0-9]/, "Password must contain at least one special character"),
-    confirmPassword: z.string().min(1, "Please confirm your password"),
+    confirmPassword: z.string(),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: "Passwords do not match",
@@ -36,16 +42,15 @@ const formSchema = z
 type FormValues = z.infer<typeof formSchema>
 
 export function AccountCreationForm() {
-  const { toast } = useToast()
   const [employees, setEmployees] = useState<any[]>([])
   const [roles, setRoles] = useState<any[]>([])
-  const [loading, setLoading] = useState(false)
-  const [loadingData, setLoadingData] = useState(true)
+  const [isLoading, setIsLoading] = useState(false)
+  const [employeesLoading, setEmployeesLoading] = useState(true)
+  const [rolesLoading, setRolesLoading] = useState(true)
+  const [passwordStrength, setPasswordStrength] = useState(0)
   const [success, setSuccess] = useState(false)
   const [selectedEmployee, setSelectedEmployee] = useState<any>(null)
-  const [passwordStrength, setPasswordStrength] = useState(0)
 
-  // Initialize the form
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -58,44 +63,86 @@ export function AccountCreationForm() {
 
   // Fetch employees and roles on component mount
   useState(() => {
-    const fetchData = async () => {
+    const fetchEmployees = async () => {
       try {
-        const [employeesData, rolesData] = await Promise.all([getEmployees(), getRoles()])
-
-        setEmployees(employeesData || [])
-        setRoles(rolesData || [])
+        const data = await getEmployees()
+        setEmployees(data)
       } catch (error) {
-        console.error("Error fetching data:", error)
+        console.error("Error fetching employees:", error)
         toast({
           title: "Error",
-          description: "Failed to load employees and roles. Please try again.",
+          description: "Failed to load employees. Please try again.",
           variant: "destructive",
         })
       } finally {
-        setLoadingData(false)
+        setEmployeesLoading(false)
       }
     }
 
-    fetchData()
-  }, [toast])
+    const fetchRoles = async () => {
+      try {
+        const data = await getRoles()
+        setRoles(data)
+      } catch (error) {
+        console.error("Error fetching roles:", error)
+        toast({
+          title: "Error",
+          description: "Failed to load roles. Please try again.",
+          variant: "destructive",
+        })
+      } finally {
+        setRolesLoading(false)
+      }
+    }
 
-  // Handle form submission
+    fetchEmployees()
+    fetchRoles()
+  }, [])
+
+  const calculatePasswordStrength = (password: string) => {
+    if (!password) return 0
+
+    let strength = 0
+
+    // Length check
+    if (password.length >= 8) strength += 1
+    if (password.length >= 12) strength += 1
+
+    // Character variety checks
+    if (/[A-Z]/.test(password)) strength += 1
+    if (/[a-z]/.test(password)) strength += 1
+    if (/[0-9]/.test(password)) strength += 1
+    if (/[^A-Za-z0-9]/.test(password)) strength += 1
+
+    // Normalize to 0-100
+    return Math.min(Math.floor((strength / 6) * 100), 100)
+  }
+
+  const onPasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const password = e.target.value
+    form.setValue("password", password)
+    setPasswordStrength(calculatePasswordStrength(password))
+  }
+
   const onSubmit = async (data: FormValues) => {
-    setLoading(true)
+    setIsLoading(true)
     try {
-      const result = await createUserAccount(data)
+      const result = await createUserAccount({
+        employeeId: data.employeeId,
+        roleId: data.roleId,
+        password: data.password,
+      })
 
       if (result.success) {
         setSuccess(true)
-        form.reset()
         toast({
-          title: "Success",
-          description: "User account created successfully",
+          title: "Account Created",
+          description: "User account has been created successfully.",
         })
       } else {
         toast({
           title: "Error",
-          description: result.error || "Failed to create user account",
+          description: result.error || "Failed to create account. Please try again.",
           variant: "destructive",
         })
       }
@@ -107,16 +154,16 @@ export function AccountCreationForm() {
         variant: "destructive",
       })
     } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
   }
 
-  // Handle employee selection
-  const handleEmployeeChange = (value: string) => {
-    const employee = employees.find((emp) => emp.id === value)
+  const handleEmployeeSelect = (employeeId: string) => {
+    form.setValue("employeeId", employeeId)
+    const employee = employees.find((emp) => emp.id === employeeId)
     setSelectedEmployee(employee)
 
-    // If employee has a department, suggest a role
+    // Suggest a role based on employee department if available
     if (employee?.department_id) {
       const suggestedRole = roles.find((role) => role.department_id === employee.department_id)
       if (suggestedRole) {
@@ -125,172 +172,220 @@ export function AccountCreationForm() {
     }
   }
 
-  // Calculate password strength
-  const calculatePasswordStrength = (password: string) => {
-    let strength = 0
-
-    if (password.length >= 8) strength += 1
-    if (/[A-Z]/.test(password)) strength += 1
-    if (/[a-z]/.test(password)) strength += 1
-    if (/[0-9]/.test(password)) strength += 1
-    if (/[^A-Za-z0-9]/.test(password)) strength += 1
-
-    setPasswordStrength(strength)
-  }
-
   if (success) {
     return (
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-col items-center justify-center py-8">
-            <CheckCircle2 className="h-16 w-16 text-green-500 mb-4" />
-            <h2 className="text-2xl font-bold mb-2">Account Created Successfully</h2>
-            <p className="text-muted-foreground text-center mb-6">
-              The user account has been created successfully. The employee can now log in using their credentials.
-            </p>
-            <Button onClick={() => setSuccess(false)}>Create Another Account</Button>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="flex flex-col items-center justify-center py-8">
+        <div className="rounded-full bg-green-100 p-3 mb-4">
+          <Check className="h-8 w-8 text-green-600" />
+        </div>
+        <h3 className="text-xl font-medium mb-2">Account Created Successfully</h3>
+        <p className="text-muted-foreground text-center mb-6">
+          The user account has been created and is now ready to use.
+        </p>
+        <Button
+          onClick={() => {
+            setSuccess(false)
+            form.reset()
+            setPasswordStrength(0)
+          }}
+        >
+          Create Another Account
+        </Button>
+      </div>
     )
   }
 
   return (
-    <Card>
-      <CardContent className="pt-6">
-        {loadingData ? (
-          <div className="flex justify-center items-center py-8">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <span className="ml-2">Loading data...</span>
-          </div>
-        ) : (
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <FormField
-                control={form.control}
-                name="employeeId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Employee</FormLabel>
-                    <Select
-                      onValueChange={(value) => {
-                        field.onChange(value)
-                        handleEmployeeChange(value)
-                      }}
-                      defaultValue={field.value}
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <FormField
+          control={form.control}
+          name="employeeId"
+          render={({ field }) => (
+            <FormItem className="flex flex-col">
+              <FormLabel>Employee</FormLabel>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <FormControl>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      className={cn("justify-between", !field.value && "text-muted-foreground")}
+                      disabled={employeesLoading}
                     >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select an employee" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
+                      {employeesLoading ? (
+                        <div className="flex items-center">
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Loading employees...
+                        </div>
+                      ) : field.value ? (
+                        employees.find((employee) => employee.id === field.value)?.full_name || "Select employee"
+                      ) : (
+                        "Select employee"
+                      )}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </FormControl>
+                </PopoverTrigger>
+                <PopoverContent className="p-0 w-[400px]">
+                  <Command>
+                    <CommandInput placeholder="Search employees..." />
+                    <CommandList>
+                      <CommandEmpty>No employee found.</CommandEmpty>
+                      <CommandGroup className="max-h-[300px] overflow-auto">
                         {employees.map((employee) => (
-                          <SelectItem key={employee.id} value={employee.id}>
-                            {employee.first_name} {employee.last_name} ({employee.employee_id})
-                          </SelectItem>
+                          <CommandItem
+                            key={employee.id}
+                            value={employee.id}
+                            onSelect={() => handleEmployeeSelect(employee.id)}
+                          >
+                            <Check
+                              className={cn("mr-2 h-4 w-4", employee.id === field.value ? "opacity-100" : "opacity-0")}
+                            />
+                            <div className="flex flex-col">
+                              <span>{employee.full_name}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {employee.employee_id} • {employee.department_name || "No Department"}
+                              </span>
+                            </div>
+                          </CommandItem>
                         ))}
-                      </SelectContent>
-                    </Select>
-                    <FormDescription>Select an employee to create an account for.</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              <FormDescription>Select the employee for whom you want to create an account.</FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
-              {selectedEmployee && (
-                <div className="bg-muted p-4 rounded-md">
-                  <h3 className="font-medium mb-2">Selected Employee Details</h3>
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div>Name:</div>
-                    <div>
-                      {selectedEmployee.first_name} {selectedEmployee.last_name}
-                    </div>
-                    <div>Employee ID:</div>
-                    <div>{selectedEmployee.employee_id}</div>
-                    <div>Department:</div>
-                    <div>{selectedEmployee.department_name || "Not assigned"}</div>
-                    <div>Designation:</div>
-                    <div>{selectedEmployee.designation_name || "Not assigned"}</div>
-                  </div>
-                </div>
-              )}
-
-              <FormField
-                control={form.control}
-                name="roleId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Role</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a role" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {roles.map((role) => (
-                          <SelectItem key={role.id} value={role.id}>
-                            {role.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormDescription>Assign a role to determine the user's permissions.</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="password"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Password</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="password"
-                        {...field}
-                        onChange={(e) => {
-                          field.onChange(e)
-                          calculatePasswordStrength(e.target.value)
-                        }}
-                      />
-                    </FormControl>
-                    <PasswordStrengthMeter strength={passwordStrength} />
-                    <FormDescription>
-                      Password must be at least 8 characters and include uppercase, lowercase, number, and special
-                      character.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="confirmPassword"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Confirm Password</FormLabel>
-                    <FormControl>
-                      <Input type="password" {...field} />
-                    </FormControl>
-                    <FormDescription>Re-enter the password to confirm.</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <Button type="submit" disabled={loading}>
-                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Create Account
-              </Button>
-            </form>
-          </Form>
+        {selectedEmployee && (
+          <div className="bg-muted p-3 rounded-md">
+            <h4 className="font-medium mb-2">Selected Employee</h4>
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <div>
+                <span className="text-muted-foreground">Name:</span> {selectedEmployee.full_name}
+              </div>
+              <div>
+                <span className="text-muted-foreground">ID:</span> {selectedEmployee.employee_id}
+              </div>
+              <div>
+                <span className="text-muted-foreground">Department:</span> {selectedEmployee.department_name || "N/A"}
+              </div>
+              <div>
+                <span className="text-muted-foreground">Designation:</span> {selectedEmployee.designation_name || "N/A"}
+              </div>
+            </div>
+          </div>
         )}
-      </CardContent>
-    </Card>
+
+        <FormField
+          control={form.control}
+          name="roleId"
+          render={({ field }) => (
+            <FormItem className="flex flex-col">
+              <FormLabel>Role</FormLabel>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <FormControl>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      className={cn("justify-between", !field.value && "text-muted-foreground")}
+                      disabled={rolesLoading}
+                    >
+                      {rolesLoading ? (
+                        <div className="flex items-center">
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Loading roles...
+                        </div>
+                      ) : field.value ? (
+                        roles.find((role) => role.id === field.value)?.role_title || "Select role"
+                      ) : (
+                        "Select role"
+                      )}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </FormControl>
+                </PopoverTrigger>
+                <PopoverContent className="p-0 w-[300px]">
+                  <Command>
+                    <CommandInput placeholder="Search roles..." />
+                    <CommandList>
+                      <CommandEmpty>No role found.</CommandEmpty>
+                      <CommandGroup className="max-h-[300px] overflow-auto">
+                        {roles.map((role) => (
+                          <CommandItem key={role.id} value={role.id} onSelect={() => form.setValue("roleId", role.id)}>
+                            <Check
+                              className={cn("mr-2 h-4 w-4", role.id === field.value ? "opacity-100" : "opacity-0")}
+                            />
+                            <div className="flex flex-col">
+                              <span>{role.role_title}</span>
+                              {role.description && (
+                                <span className="text-xs text-muted-foreground">{role.description}</span>
+                              )}
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              <FormDescription>Assign a role to determine the user&apos;s permissions.</FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="password"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Password</FormLabel>
+              <FormControl>
+                <Input type="password" placeholder="Enter password" {...field} onChange={onPasswordChange} />
+              </FormControl>
+              <div className="mt-2">
+                <PasswordStrengthMeter strength={passwordStrength} />
+              </div>
+              <FormDescription>
+                Password must be at least 8 characters and include uppercase, lowercase, number, and special character.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="confirmPassword"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Confirm Password</FormLabel>
+              <FormControl>
+                <Input type="password" placeholder="Confirm password" {...field} />
+              </FormControl>
+              <FormDescription>Re-enter the password to confirm.</FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <Button type="submit" className="w-full" disabled={isLoading}>
+          {isLoading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Creating Account...
+            </>
+          ) : (
+            "Create Account"
+          )}
+        </Button>
+      </form>
+    </Form>
   )
 }

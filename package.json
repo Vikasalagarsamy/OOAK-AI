@@ -64,7 +64,6 @@
     "fs": "latest",
     "path": "latest",
     "@supabase/ssr": "latest",
-    "crypto": "latest",
     "bcryptjs": "latest"
   },
   "devDependencies": {
