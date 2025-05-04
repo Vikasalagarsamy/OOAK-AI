@@ -75,8 +75,11 @@ export async function getEmployee(id: string | number) {
   return transformedData
 }
 
-export async function getEmployeeCompanies(employeeId: number) {
+export async function getEmployeeCompanies(employeeId: string | number) {
   const supabase = createClient()
+
+  // Convert employeeId to number if it's a string
+  const numericId = typeof employeeId === "string" ? Number.parseInt(employeeId, 10) : employeeId
 
   const { data, error } = await supabase
     .from("employee_companies")
@@ -85,7 +88,7 @@ export async function getEmployeeCompanies(employeeId: number) {
       companies(name),
       branches(name)
     `)
-    .eq("employee_id", employeeId)
+    .eq("employee_id", numericId)
     .order("is_primary", { ascending: false })
 
   if (error) {

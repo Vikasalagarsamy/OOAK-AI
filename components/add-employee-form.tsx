@@ -131,6 +131,7 @@ export function AddEmployeeForm() {
 
     // Validate allocations whenever they change
     if (newAllocations.length > 0) {
+      // Check total allocation percentage
       const totalAllocation = newAllocations.reduce((sum, allocation) => sum + allocation.allocation_percentage, 0)
       if (totalAllocation !== 100) {
         setValidationErrors({
@@ -141,6 +142,24 @@ export function AddEmployeeForm() {
         // Clear the allocation error if it's fixed
         const { allocations, ...restErrors } = validationErrors
         setValidationErrors(restErrors)
+      }
+
+      // Check for duplicate company-branch combinations
+      const combinations = new Set()
+      const duplicates = newAllocations.filter((allocation) => {
+        const key = `${allocation.company_id}-${allocation.branch_id}`
+        if (combinations.has(key)) {
+          return true
+        }
+        combinations.add(key)
+        return false
+      })
+
+      if (duplicates.length > 0) {
+        setValidationErrors({
+          ...validationErrors,
+          allocations: `Duplicate company-branch combinations found. Each company-branch combination must be unique.`,
+        })
       }
     }
   }

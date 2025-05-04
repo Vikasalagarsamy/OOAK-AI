@@ -110,10 +110,8 @@ export function CompanyAllocationForm({ allocations, onChange, onPrimaryChange }
     fetchBranches()
   }, [selectedCompanyId, branchesMap])
 
-  // Get available companies (those not already allocated)
-  const availableCompanies = companies.filter(
-    (company) => !allocations.some((allocation) => allocation.company_id === company.id),
-  )
+  // Get available companies (all companies, as we now allow the same company with different branches)
+  const availableCompanies = companies
 
   const handleAddAllocation = () => {
     setError(null)
@@ -143,6 +141,14 @@ export function CompanyAllocationForm({ allocations, onChange, onPrimaryChange }
 
     if (!company || !branch) {
       setError("Invalid company or branch selection")
+      return
+    }
+
+    // Check if this company-branch combination already exists
+    const existingAllocation = allocations.find((a) => a.company_id === companyId && a.branch_id === branchId)
+
+    if (existingAllocation) {
+      setError("This company and branch combination already has an allocation")
       return
     }
 
@@ -289,93 +295,81 @@ export function CompanyAllocationForm({ allocations, onChange, onPrimaryChange }
         )}
 
         {/* Add Allocation Form */}
-        {availableCompanies.length > 0 && (
-          <div className="space-y-4 border rounded-md p-4 mt-4">
-            <h3 className="text-sm font-medium">Add Company Allocation</h3>
+        <div className="space-y-4 border rounded-md p-4 mt-4">
+          <h3 className="text-sm font-medium">Add Company Allocation</h3>
 
-            {error && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
+          {error && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="company_id">Company</Label>
-                <Select
-                  value={selectedCompanyId}
-                  onValueChange={setSelectedCompanyId}
-                  disabled={isLoading || isAddingAllocation}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select company" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableCompanies.map((company) => (
-                      <SelectItem key={company.id} value={company.id.toString()}>
-                        {company.name}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="company_id">Company</Label>
+              <Select
+                value={selectedCompanyId}
+                onValueChange={setSelectedCompanyId}
+                disabled={isLoading || isAddingAllocation}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select company" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableCompanies.map((company) => (
+                    <SelectItem key={company.id} value={company.id.toString()}>
+                      {company.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="branch_id">Branch</Label>
+              <Select
+                value={selectedBranchId}
+                onValueChange={setSelectedBranchId}
+                disabled={!selectedCompanyId || isAddingAllocation}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={selectedCompanyId ? "Select branch" : "Select company first"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {selectedCompanyId &&
+                    branchesMap[Number.parseInt(selectedCompanyId)]?.map((branch) => (
+                      <SelectItem key={branch.id} value={branch.id.toString()}>
+                        {branch.name}
                       </SelectItem>
                     ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                </SelectContent>
+              </Select>
+            </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="branch_id">Branch</Label>
-                <Select
-                  value={selectedBranchId}
-                  onValueChange={setSelectedBranchId}
-                  disabled={!selectedCompanyId || isAddingAllocation}
+            <div className="space-y-2">
+              <Label htmlFor="allocation_percentage">Allocation %</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id="allocation_percentage"
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={allocationPercentage}
+                  onChange={(e) => setAllocationPercentage(e.target.value)}
+                  disabled={isAddingAllocation}
+                />
+                <Button
+                  onClick={handleAddAllocation}
+                  disabled={!selectedCompanyId || !selectedBranchId || isAddingAllocation}
+                  className="flex-shrink-0"
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder={selectedCompanyId ? "Select branch" : "Select company first"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {selectedCompanyId &&
-                      branchesMap[Number.parseInt(selectedCompanyId)]?.map((branch) => (
-                        <SelectItem key={branch.id} value={branch.id.toString()}>
-                          {branch.name}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="allocation_percentage">Allocation %</Label>
-                <div className="flex items-center gap-2">
-                  <Input
-                    id="allocation_percentage"
-                    type="number"
-                    min="1"
-                    max="100"
-                    value={allocationPercentage}
-                    onChange={(e) => setAllocationPercentage(e.target.value)}
-                    disabled={isAddingAllocation}
-                  />
-                  <Button
-                    onClick={handleAddAllocation}
-                    disabled={!selectedCompanyId || !selectedBranchId || isAddingAllocation}
-                    className="flex-shrink-0"
-                  >
-                    {isAddingAllocation ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                  </Button>
-                </div>
+                  {isAddingAllocation ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                </Button>
               </div>
             </div>
           </div>
-        )}
-
-        {availableCompanies.length === 0 && allocations.length > 0 && (
-          <Alert>
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              All available companies have been allocated. Due to database constraints, an employee can only be
-              allocated to a company once.
-            </AlertDescription>
-          </Alert>
-        )}
+        </div>
 
         {/* Hidden field to store allocations as JSON for form submission */}
         <input type="hidden" name="allocations_json" value={JSON.stringify(allocations)} />
