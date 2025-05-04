@@ -5,19 +5,36 @@ import { assignLeadToEmployee } from "./lead-actions"
 
 interface ReassignmentResult {
   success: boolean
-  message: string
+  message?: string
+  error?: string
 }
 
 // Update the reassignLead function to use our improved logic
-export async function reassignLead(leadId: string, employeeId: string) {
+export async function reassignLead(leadId: string, employeeId: string): Promise<ReassignmentResult> {
   try {
-    // Use the improved assignLeadToEmployee function
-    const result = await assignLeadToEmployee(Number(leadId), Number(employeeId))
+    // Parse the IDs to integers and validate them
+    const parsedLeadId = Number.parseInt(leadId, 10)
+    const parsedEmployeeId = Number.parseInt(employeeId, 10)
+
+    // Validate that the parsed values are actual numbers
+    if (isNaN(parsedLeadId)) {
+      console.error("Invalid lead ID:", leadId)
+      return { success: false, error: `Invalid lead ID: ${leadId}` }
+    }
+
+    if (isNaN(parsedEmployeeId)) {
+      console.error("Invalid employee ID:", employeeId)
+      return { success: false, error: `Invalid employee ID: ${employeeId}` }
+    }
+
+    // Use the improved assignLeadToEmployee function with validated IDs
+    const result = await assignLeadToEmployee(parsedLeadId, parsedEmployeeId)
 
     if (result.success) {
       // Revalidate paths
       revalidatePath(`/sales/lead/${leadId}`)
       revalidatePath("/sales/unassigned-lead")
+      revalidatePath("/sales/manage-lead")
       return { success: true, message: result.message }
     } else {
       return { success: false, error: result.message }
@@ -35,6 +52,12 @@ export async function getEmployeesByCompanyAndBranch(
   location?: string | null,
 ) {
   try {
+    // Validate companyId
+    if (!companyId || isNaN(companyId)) {
+      console.error("Invalid company ID:", companyId)
+      return []
+    }
+
     // Use our improved employee selection action
     const employees = await getEmployeesForLeadAssignment(companyId, branchId, "Sales")
 

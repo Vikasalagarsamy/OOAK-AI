@@ -58,17 +58,58 @@ export function ReassignLeadDialog({ lead, open, onOpenChange, onReassignComplet
       return
     }
 
+    // Ensure company_id is a valid number
+    const companyId =
+      typeof lead.company_id === "number"
+        ? lead.company_id
+        : lead.company_id
+          ? Number.parseInt(lead.company_id.toString(), 10)
+          : null
+
+    if (!companyId || isNaN(companyId)) {
+      console.error("Invalid company ID:", lead.company_id)
+      toast({
+        title: "Error",
+        description: "Invalid company information. Please try again.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Ensure branch_id is a valid number or null
+    const branchId =
+      typeof lead.branch_id === "number"
+        ? lead.branch_id
+        : lead.branch_id
+          ? Number.parseInt(lead.branch_id.toString(), 10)
+          : null
+
+    if (lead.branch_id && (branchId === null || isNaN(branchId))) {
+      console.error("Invalid branch ID:", lead.branch_id)
+      // Continue with null branch ID rather than failing completely
+    }
+
     setFetchingEmployees(true)
     try {
       // Get employees from the same company, branch, and location
       const employeesData = await getEmployeesByCompanyAndBranch(
-        lead.company_id,
-        lead.branch_id,
+        companyId,
+        branchId,
         lead.location || lead.branch_location || null,
       )
 
       // Filter out the currently assigned employee
-      const filteredEmployees = employeesData.filter((emp) => emp.id !== lead.assigned_to)
+      const filteredEmployees = employeesData.filter((emp) => {
+        // Ensure assigned_to is a number for comparison
+        const assignedTo =
+          typeof lead.assigned_to === "number"
+            ? lead.assigned_to
+            : lead.assigned_to
+              ? Number.parseInt(lead.assigned_to.toString(), 10)
+              : null
+
+        return emp.id !== assignedTo
+      })
 
       // Additional validation to ensure only sales roles are included
       // This is a safeguard in case the server-side filtering missed something
@@ -146,32 +187,41 @@ export function ReassignLeadDialog({ lead, open, onOpenChange, onReassignComplet
 
     setLoading(true)
     try {
-      const employeeId = Number.parseInt(selectedEmployeeId, 10)
-      const employee = employees.find((emp) => emp.id === employeeId)
+      // Ensure we have a valid lead ID
+      const leadId = typeof lead.id === "number" ? lead.id : lead.id ? Number.parseInt(lead.id.toString(), 10) : null
 
+      if (!leadId || isNaN(leadId)) {
+        throw new Error("Invalid lead ID")
+      }
+
+      // Parse the selected employee ID
+      const employeeId = Number.parseInt(selectedEmployeeId, 10)
+      if (isNaN(employeeId)) {
+        throw new Error("Invalid employee ID")
+      }
+
+      const employee = employees.find((emp) => emp.id === employeeId)
       if (!employee) {
         throw new Error("Selected employee not found")
       }
 
       // Make sure we're passing the correct types to reassignLead
       const result = await reassignLead(
-        Number(lead.id), // Ensure lead.id is a number
-        lead.lead_number,
-        lead.client_name,
-        employeeId, // This is already a number
-        employee.full_name,
+        leadId.toString(), // Convert to string as expected by the action
+        employeeId.toString(), // Convert to string as expected by the action
       )
 
       if (result.success) {
         toast({
           title: "Success",
-          description: result.message,
+          description: result.message || "Lead reassigned successfully",
         })
         if (onReassignComplete) {
           onReassignComplete(true)
         }
+        onOpenChange(false) // Close the dialog on success
       } else {
-        throw new Error(result.message)
+        throw new Error(result.error || "Failed to reassign lead")
       }
     } catch (error) {
       console.error("Error reassigning lead:", error)

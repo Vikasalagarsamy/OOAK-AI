@@ -10,6 +10,15 @@ interface AssignLeadResult {
 }
 
 export async function assignLeadToEmployee(leadId: number, employeeId: number): Promise<AssignLeadResult> {
+  // Validate input parameters
+  if (!leadId || isNaN(leadId)) {
+    return { success: false, message: `Invalid lead ID: ${leadId}` }
+  }
+
+  if (!employeeId || isNaN(employeeId)) {
+    return { success: false, message: `Invalid employee ID: ${employeeId}` }
+  }
+
   const supabase = createClient()
 
   try {
@@ -18,7 +27,7 @@ export async function assignLeadToEmployee(leadId: number, employeeId: number): 
     // Get the lead details first
     const { data: lead, error: leadError } = await supabase
       .from("leads")
-      .select("id, company_id, branch_id, status")
+      .select("id, company_id, branch_id, status, lead_number, client_name")
       .eq("id", leadId)
       .single()
 
@@ -80,28 +89,25 @@ export async function assignLeadToEmployee(leadId: number, employeeId: number): 
       return { success: false, message: `Failed to assign lead: ${updateError.message}` }
     }
 
-    // Log the assignment in the activity log if the table exists
+    // Log the activity
     try {
-      const { data: tableExists } = await supabase
-        .from("information_schema.tables")
-        .select("table_name")
-        .eq("table_name", "activity_log")
-        .maybeSingle()
-
-      if (tableExists) {
-        await supabase.from("activity_log").insert({
-          activity_type: "lead_assignment",
-          entity_type: "lead",
-          entity_id: leadId,
-          user_id: null, // System action
-          description: `Lead #${leadId} assigned to ${employee.first_name} ${employee.last_name}`,
-          created_at: new Date().toISOString(),
-        })
-      }
+      await logActivity({
+        actionType: "assignment",
+        entityType: "lead",
+        entityId: leadId.toString(),
+        entityName: lead.lead_number || `Lead #${leadId}`,
+        description: `Lead ${lead.lead_number || `#${leadId}`} for ${lead.client_name || "Unknown Client"} assigned to ${employee.first_name} ${employee.last_name}`,
+        userName: "System",
+      })
     } catch (logError) {
       console.error("Error logging activity:", logError)
       // Don't fail the assignment if logging fails
     }
+
+    // Revalidate relevant paths
+    revalidatePath(`/sales/lead/${leadId}`)
+    revalidatePath("/sales/unassigned-lead")
+    revalidatePath("/sales/manage-lead")
 
     return {
       success: true,
@@ -120,6 +126,15 @@ export async function assignLead(
   employeeId: number,
   employeeName: string,
 ): Promise<{ success: boolean; message: string }> {
+  // Validate input parameters
+  if (!leadId || isNaN(leadId)) {
+    return { success: false, message: `Invalid lead ID: ${leadId}` }
+  }
+
+  if (!employeeId || isNaN(employeeId)) {
+    return { success: false, message: `Invalid employee ID: ${employeeId}` }
+  }
+
   const supabase = createClient()
 
   try {
@@ -143,6 +158,11 @@ export async function assignLead(
       userName: "System", // You might want to get the actual user name
     })
 
+    // Revalidate relevant paths
+    revalidatePath(`/sales/lead/${leadId}`)
+    revalidatePath("/sales/unassigned-lead")
+    revalidatePath("/sales/manage-lead")
+
     return { success: true, message: `Lead ${leadNumber} assigned to ${employeeName}` }
   } catch (error) {
     console.error("Error assigning lead:", error)
@@ -151,6 +171,11 @@ export async function assignLead(
 }
 
 export async function deleteLead(leadId: number): Promise<{ success: boolean; message: string }> {
+  // Validate input parameter
+  if (!leadId || isNaN(leadId)) {
+    return { success: false, message: `Invalid lead ID: ${leadId}` }
+  }
+
   const supabase = createClient()
 
   try {
