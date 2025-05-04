@@ -1,30 +1,34 @@
 import type React from "react"
-import "@/app/globals.css"
+import type { Metadata } from "next"
 import { Inter } from "next/font/google"
-import { Toaster } from "@/components/toaster"
+import "./globals.css"
 import { Header } from "@/components/header"
+import { Toaster } from "@/components/toaster"
+import { AuthProvider } from "@/contexts/auth-context"
 
 const inter = Inter({ subsets: ["latin"] })
 
-export const metadata = {
-  title: "Company & Branch Manager",
-  description: "Manage your companies and their branches",
+export const metadata: Metadata = {
+  title: "Company Branch Manager",
+  description: "Manage your company branches and employees",
     generator: 'v0.dev'
 }
 
 export default function RootLayout({
   children,
-}: {
+}: Readonly<{
   children: React.ReactNode
-}) {
+}>) {
   return (
     <html lang="en">
       <body className={inter.className}>
-        <div className="relative flex min-h-screen flex-col">
-          <Header />
-          <div className="flex-1">{children}</div>
-        </div>
-        <Toaster />
+        <AuthProvider>
+          <div className="min-h-screen flex flex-col">
+            <Header />
+            <main className="flex-1">{children}</main>
+          </div>
+          <Toaster />
+        </AuthProvider>
       </body>
     </html>
   )

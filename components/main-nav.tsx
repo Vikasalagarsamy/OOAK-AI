@@ -123,6 +123,21 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
                   </NavigationMenuLink>
                 </Link>
               </li>
+              <li>
+                <Link href="/organization/account-creation" legacyBehavior passHref>
+                  <NavigationMenuLink
+                    className={cn(
+                      "block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
+                      pathname === "/organization/account-creation" && "bg-accent text-accent-foreground",
+                    )}
+                  >
+                    <div className="text-sm font-medium leading-none">Account Creation</div>
+                    <p className="line-clamp-2 text-sm leading-snug text-muted-foreground">
+                      Create user accounts for employees
+                    </p>
+                  </NavigationMenuLink>
+                </Link>
+              </li>
             </ul>
           </NavigationMenuContent>
         </NavigationMenuItem>
@@ -201,6 +216,21 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
                     </p>
                   </a>
                 </NavigationMenuLink>
+              </li>
+              <li>
+                <Link href="/sales/my-leads" legacyBehavior passHref>
+                  <NavigationMenuLink
+                    className={cn(
+                      "block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
+                      pathname === "/sales/my-leads" && "bg-accent text-accent-foreground",
+                    )}
+                  >
+                    <div className="text-sm font-medium leading-none">My Leads</div>
+                    <p className="line-clamp-2 text-sm leading-snug text-muted-foreground">
+                      View leads assigned to you
+                    </p>
+                  </NavigationMenuLink>
+                </Link>
               </li>
               <li>
                 <Link href="/sales/create-lead" legacyBehavior passHref>

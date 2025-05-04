@@ -63,7 +63,9 @@
     "@supabase/auth-helpers-nextjs": "latest",
     "fs": "latest",
     "path": "latest",
-    "@supabase/ssr": "latest"
+    "@supabase/ssr": "latest",
+    "crypto": "latest",
+    "bcryptjs": "latest"
   },
   "devDependencies": {
     "@types/node": "^22",

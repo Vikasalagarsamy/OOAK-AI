@@ -58,6 +58,11 @@ export function MobileNav({ className, ...props }: MobileNavProps) {
       active: pathname === "/organization/roles",
     },
     {
+      href: "/organization/account-creation",
+      label: "Account Creation",
+      active: pathname === "/organization/account-creation",
+    },
+    {
       href: "/people",
       label: "People",
       active: pathname === "/people",
@@ -81,6 +86,11 @@ export function MobileNav({ className, ...props }: MobileNavProps) {
       href: "/sales",
       label: "Sales",
       active: pathname === "/sales",
+    },
+    {
+      href: "/sales/my-leads",
+      label: "My Leads",
+      active: pathname === "/sales/my-leads",
     },
     {
       href: "/sales/create-lead",
