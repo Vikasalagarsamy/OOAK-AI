@@ -141,15 +141,16 @@ export function AddEmployeeAllocations({
     const company = companies.find((c) => c.id.toString() === selectedCompanyId)
     const branch = branches.find((b) => b.id.toString() === selectedBranchId)
 
-    // Check if this company already has an allocation (regardless of branch)
-    // This is to prevent violating the unique constraint on employee_id and company_id
-    const existingCompanyIndex = allocations.findIndex((a) => a.company_id.toString() === selectedCompanyId)
+    // Check if this exact company-branch combination already has an allocation
+    const existingAllocationIndex = allocations.findIndex(
+      (a) => a.company_id.toString() === selectedCompanyId && a.branch_id.toString() === selectedBranchId,
+    )
 
-    if (existingCompanyIndex >= 0) {
+    if (existingAllocationIndex >= 0) {
       toast({
-        title: "Company already allocated",
+        title: "Allocation already exists",
         description:
-          "This company already has an allocation. Due to database constraints, an employee can only be allocated to a company once.",
+          "This company and branch combination already has an allocation. Please edit the existing allocation instead.",
         variant: "destructive",
       })
       return
@@ -228,17 +229,23 @@ export function AddEmployeeAllocations({
     const company = companies.find((c) => c.id.toString() === selectedCompanyId)
     const branch = branches.find((b) => b.id.toString() === selectedBranchId)
 
-    // Check if changing to a different company that already has an allocation
-    if (allocations[editingIndex].company_id.toString() !== selectedCompanyId) {
-      const existingCompanyIndex = allocations.findIndex(
-        (a, i) => i !== editingIndex && a.company_id.toString() === selectedCompanyId,
+    // Check if changing to a company-branch combination that already exists
+    if (
+      allocations[editingIndex].company_id.toString() !== selectedCompanyId ||
+      allocations[editingIndex].branch_id.toString() !== selectedBranchId
+    ) {
+      const existingCombinationIndex = allocations.findIndex(
+        (a, i) =>
+          i !== editingIndex &&
+          a.company_id.toString() === selectedCompanyId &&
+          a.branch_id.toString() === selectedBranchId,
       )
 
-      if (existingCompanyIndex >= 0) {
+      if (existingCombinationIndex >= 0) {
         toast({
-          title: "Company already allocated",
+          title: "Allocation already exists",
           description:
-            "This company already has an allocation. Due to database constraints, an employee can only be allocated to a company once.",
+            "This company and branch combination already has an allocation. Please edit the existing allocation instead.",
           variant: "destructive",
         })
         return
@@ -431,14 +438,7 @@ export function AddEmployeeAllocations({
   }, [allocations])
 
   // Get available companies (those not already allocated)
-  const availableCompanies = companies.filter(
-    (company) =>
-      !allocations.some(
-        (allocation) =>
-          allocation.company_id === company.id &&
-          (editingIndex === -1 || allocations.indexOf(allocation) !== editingIndex),
-      ),
-  )
+  const availableCompanies = companies
 
   return (
     <div className="space-y-4">
@@ -673,21 +673,11 @@ export function AddEmployeeAllocations({
                   <SelectValue placeholder="Select company" />
                 </SelectTrigger>
                 <SelectContent>
-                  {companies
-                    .filter(
-                      (company) =>
-                        company.id.toString() ===
-                          (editingIndex >= 0 ? allocations[editingIndex].company_id.toString() : "") ||
-                        !allocations.some(
-                          (allocation) =>
-                            allocation.company_id === company.id && allocations.indexOf(allocation) !== editingIndex,
-                        ),
-                    )
-                    .map((company) => (
-                      <SelectItem key={company.id} value={company.id.toString()}>
-                        {company.name}
-                      </SelectItem>
-                    ))}
+                  {companies.map((company) => (
+                    <SelectItem key={company.id} value={company.id.toString()}>
+                      {company.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

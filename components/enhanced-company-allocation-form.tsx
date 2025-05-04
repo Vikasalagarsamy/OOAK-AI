@@ -244,12 +244,16 @@ export function EnhancedCompanyAllocationForm({
         return
       }
 
-      // Check if company already has an allocation
-      const existingAllocation = allocations.find((a) => a.company_id === Number.parseInt(selectedCompanyId))
+      // Check if this specific company-branch combination already has an allocation
+      const existingAllocation = allocations.find(
+        (a) => a.company_id === Number.parseInt(selectedCompanyId) && a.branch_id === Number.parseInt(selectedBranchId),
+      )
+
       if (existingAllocation) {
         toast({
           title: "Validation Error",
-          description: "This company already has an allocation. Please edit the existing allocation instead.",
+          description:
+            "This company and branch combination already has an allocation. Please edit the existing allocation instead.",
           variant: "destructive",
         })
         setIsSubmitting(false)
@@ -466,6 +470,8 @@ export function EnhancedCompanyAllocationForm({
         description: error instanceof Error ? error.message : "Failed to delete allocation. Please try again.",
         variant: "destructive",
       })
+    } finally {
+      setIsSubmitting(false)
     }
   }
 

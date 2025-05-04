@@ -253,26 +253,26 @@ export async function addEmployeeCompany(employeeId: number, formData: EmployeeC
       )
     }
 
-    // Check if this company already exists for this employee
-    const { data: existingCompany } = await supabase
+    // Check if this company-branch combination already exists for this employee
+    const { data: existingCompanyBranch } = await supabase
       .from("employee_companies")
       .select("*")
       .eq("employee_id", employeeId)
       .eq("company_id", formData.company_id)
+      .eq("branch_id", formData.branch_id)
       .maybeSingle()
 
     let result
 
-    if (existingCompany) {
-      // Update existing allocation
+    if (existingCompanyBranch) {
+      // Update existing allocation for this company-branch
       result = await supabase
         .from("employee_companies")
         .update({
-          branch_id: formData.branch_id,
           allocation_percentage: formData.allocation_percentage,
           is_primary: formData.is_primary,
         })
-        .eq("id", existingCompany.id)
+        .eq("id", existingCompanyBranch.id)
         .select()
         .single()
     } else {
@@ -321,7 +321,8 @@ export async function addEmployeeCompany(employeeId: number, formData: EmployeeC
   }
 }
 
-export async function removeEmployeeCompany(employeeId: number, companyId: number) {
+// Update this function to remove by allocation ID rather than company_id
+export async function removeEmployeeCompany(allocationId: string, employeeId: number) {
   const supabase = createClient()
 
   try {
@@ -329,8 +330,7 @@ export async function removeEmployeeCompany(employeeId: number, companyId: numbe
     const { data: companyData } = await supabase
       .from("employee_companies")
       .select("is_primary")
-      .eq("employee_id", employeeId)
-      .eq("company_id", companyId)
+      .eq("id", allocationId)
       .single()
 
     if (companyData?.is_primary) {
@@ -338,11 +338,7 @@ export async function removeEmployeeCompany(employeeId: number, companyId: numbe
     }
 
     // Delete the company allocation
-    const { error } = await supabase
-      .from("employee_companies")
-      .delete()
-      .eq("employee_id", employeeId)
-      .eq("company_id", companyId)
+    const { error } = await supabase.from("employee_companies").delete().eq("id", allocationId)
 
     if (error) {
       throw new Error(`Error removing employee company: ${error.message}`)

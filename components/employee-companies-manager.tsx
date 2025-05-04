@@ -295,9 +295,7 @@ export function EmployeeCompaniesManager({
   }
 
   // Get available companies (those not already allocated)
-  const availableCompanies = companies.filter(
-    (company) => !employeeCompanies.some((allocation) => allocation.company_id === company.id),
-  )
+  const availableCompanies = companies
 
   const renderLoadingOverlay = () => {
     if (!loadingMessage) return null
@@ -363,7 +361,7 @@ export function EmployeeCompaniesManager({
                               <SelectValue placeholder="Select company" />
                             </SelectTrigger>
                             <SelectContent>
-                              {availableCompanies.map((company) => (
+                              {companies.map((company) => (
                                 <SelectItem key={company.id} value={company.id.toString()}>
                                   {company.name}
                                 </SelectItem>
