@@ -27,8 +27,13 @@ export interface Lead {
   created_at?: string
   updated_at?: string
   notes?: string
-  lead_source?: string
   lead_source_id?: number
   lead_source_name?: string
   country_code?: string
+  phone?: string
+  email?: string
+  whatsapp_country_code?: string
+  whatsapp_number?: string
+  is_whatsapp?: boolean
+  has_separate_whatsapp?: boolean
 }

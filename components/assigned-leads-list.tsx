@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Loader2, UserCheck, Trash2 } from "lucide-react"
 import { ReassignLeadDialog } from "./reassign-lead-dialog"
 import { DeleteLeadDialog } from "./delete-lead-dialog"
-import { getLeads } from "@/actions/lead-actions"
+import { getAssignedLeads } from "@/actions/manage-lead-actions"
 import type { Lead } from "@/types/lead"
 
 export function AssignedLeadsList() {
@@ -20,10 +20,8 @@ export function AssignedLeadsList() {
   const fetchLeads = async () => {
     setLoading(true)
     try {
-      const data = await getLeads()
-      // Filter for assigned leads
-      const assignedLeads = data.filter((lead: Lead) => lead.assigned_to && lead.status === "assigned")
-      setLeads(assignedLeads)
+      const data = await getAssignedLeads()
+      setLeads(data)
     } catch (error) {
       console.error("Error fetching leads:", error)
     } finally {
@@ -45,8 +43,11 @@ export function AssignedLeadsList() {
     setDeleteDialogOpen(true)
   }
 
-  const handleLeadReassigned = () => {
-    fetchLeads()
+  const handleLeadReassigned = (success: boolean) => {
+    if (success) {
+      fetchLeads()
+    }
+    setReassignDialogOpen(false)
   }
 
   const handleLeadDeleted = () => {
@@ -84,7 +85,7 @@ export function AssignedLeadsList() {
                   <TableCell>{lead.lead_number}</TableCell>
                   <TableCell>{lead.client_name}</TableCell>
                   <TableCell>{lead.assigned_to_name || "Unknown"}</TableCell>
-                  <TableCell>{new Date(lead.created_at).toLocaleDateString()}</TableCell>
+                  <TableCell>{new Date(lead.created_at || "").toLocaleDateString()}</TableCell>
                   <TableCell>
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                       Assigned
@@ -111,7 +112,7 @@ export function AssignedLeadsList() {
           open={reassignDialogOpen}
           onOpenChange={setReassignDialogOpen}
           lead={selectedLead}
-          onReassigned={handleLeadReassigned}
+          onReassignComplete={handleLeadReassigned}
         />
 
         <DeleteLeadDialog

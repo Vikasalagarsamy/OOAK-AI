@@ -1,7 +1,7 @@
-import { createClient } from "@supabase/supabase-js"
+import { createClient as supabaseCreateClient } from "@supabase/supabase-js"
 
 // Define types for better type safety
-type SupabaseClient = ReturnType<typeof createClient>
+type SupabaseClient = ReturnType<typeof supabaseCreateClient>
 
 // Global variables to store client instances
 let browserClient: SupabaseClient | null = null
@@ -13,6 +13,7 @@ function getSupabaseCredentials() {
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
   if (!supabaseUrl || !supabaseAnonKey) {
+    console.error("Missing Supabase credentials:", { supabaseUrl, supabaseAnonKey })
     throw new Error("Supabase URL or anonymous key is missing from environment variables")
   }
 
@@ -21,11 +22,14 @@ function getSupabaseCredentials() {
 
 // Get server-side credentials
 function getServerCredentials() {
+  // For server-side, prefer service role key but fall back to anon key if not available
   const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const supabaseServiceKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
   if (!supabaseUrl || !supabaseServiceKey) {
-    throw new Error("Supabase URL or service role key is missing from environment variables")
+    console.error("Missing server Supabase credentials:", { supabaseUrl, hasServiceKey: !!supabaseServiceKey })
+    throw new Error("Supabase URL or key is missing from environment variables")
   }
 
   return { supabaseUrl, supabaseServiceKey }
@@ -35,90 +39,79 @@ function getServerCredentials() {
 export function getSupabaseBrowser(): SupabaseClient {
   if (browserClient) return browserClient
 
-  const { supabaseUrl, supabaseAnonKey } = getSupabaseCredentials()
+  try {
+    const { supabaseUrl, supabaseAnonKey } = getSupabaseCredentials()
+    console.log("Creating browser Supabase client with URL:", supabaseUrl)
 
-  browserClient = createClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      persistSession: true,
-      storageKey: "supabase-auth", // Consistent storage key
-    },
-  })
-
-  // Override auth methods to always return a mock authenticated user
-  const originalGetUser = browserClient.auth.getUser
-  browserClient.auth.getUser = async () => {
-    // Return a mock authenticated user
-    return {
-      data: {
-        user: {
-          id: "00000000-0000-0000-0000-000000000000",
-          app_metadata: {},
-          user_metadata: {},
-          aud: "authenticated",
-          created_at: new Date().toISOString(),
-          role: "authenticated",
-          email: "admin@example.com",
-        },
+    // Use the imported supabaseCreateClient directly
+    browserClient = supabaseCreateClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
       },
-      error: null,
-    }
-  }
+    })
 
-  // Override getSession to always return a mock session
-  const originalGetSession = browserClient.auth.getSession
-  browserClient.auth.getSession = async () => {
-    // Return a mock session
-    return {
-      data: {
-        session: {
-          access_token: "mock-access-token",
-          refresh_token: "mock-refresh-token",
-          expires_in: 3600,
-          expires_at: new Date().getTime() + 3600000,
-          token_type: "bearer",
-          user: {
-            id: "00000000-0000-0000-0000-000000000000",
-            app_metadata: {},
-            user_metadata: {},
-            aud: "authenticated",
-            created_at: new Date().toISOString(),
-            role: "authenticated",
-            email: "admin@example.com",
-          },
-        },
-      },
-      error: null,
-    }
+    return browserClient
+  } catch (error) {
+    console.error("Error creating browser Supabase client:", error)
+    throw error
   }
-
-  return browserClient
 }
 
 // Create server client (for server-side use with service role)
 export function getSupabaseServer(): SupabaseClient {
-  // Always create a new instance on the server to avoid sharing state between requests
-  if (typeof window === "undefined") {
-    const { supabaseUrl, supabaseServiceKey } = getServerCredentials()
+  try {
+    // Always create a new instance on the server to avoid sharing state between requests
+    if (typeof window === "undefined") {
+      const { supabaseUrl, supabaseServiceKey } = getServerCredentials()
+      console.log("Creating server Supabase client with URL:", supabaseUrl)
 
-    const client = createClient(supabaseUrl, supabaseServiceKey, {
+      // Use the imported supabaseCreateClient directly
+      return supabaseCreateClient(supabaseUrl, supabaseServiceKey, {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+        },
+      })
+    }
+
+    // If called from the client, use the browser client
+    return getSupabaseBrowser()
+  } catch (error) {
+    console.error("Error creating server Supabase client:", error)
+    throw error
+  }
+}
+
+// Create a basic client without authentication overrides
+export function createBasicClient(): SupabaseClient {
+  try {
+    const { supabaseUrl, supabaseAnonKey } = getSupabaseCredentials()
+    console.log("Creating basic Supabase client with URL:", supabaseUrl)
+
+    // Create a simple client without auth overrides
+    return supabaseCreateClient(supabaseUrl, supabaseAnonKey, {
       auth: {
         persistSession: false,
+        autoRefreshToken: false,
       },
     })
-
-    // No need to override auth methods for server client as we're bypassing auth checks at the middleware level
-
-    return client
+  } catch (error) {
+    console.error("Error creating basic Supabase client:", error)
+    throw error
   }
-
-  // If called from the client, use the browser client
-  return getSupabaseBrowser()
 }
 
 // Export a default client for backward compatibility
 export const supabase = typeof window === "undefined" ? getSupabaseServer() : getSupabaseBrowser()
 
 // Legacy function for backward compatibility
-export function createSupabaseClient() {
-  return typeof window === "undefined" ? getSupabaseServer() : getSupabaseBrowser()
+export function createClient() {
+  // For server-side use a basic client without auth overrides to avoid JWT issues
+  if (typeof window === "undefined") {
+    return createBasicClient()
+  }
+
+  // For client-side use the browser client
+  return getSupabaseBrowser()
 }

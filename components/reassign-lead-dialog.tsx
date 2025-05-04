@@ -31,10 +31,10 @@ interface Employee {
 }
 
 interface ReassignLeadDialogProps {
-  lead: Lead
+  lead: Lead | null
   open: boolean
   onOpenChange: (open: boolean) => void
-  onReassignComplete: (success: boolean) => void
+  onReassignComplete?: (success: boolean) => void
 }
 
 export function ReassignLeadDialog({ lead, open, onOpenChange, onReassignComplete }: ReassignLeadDialogProps) {
@@ -42,16 +42,22 @@ export function ReassignLeadDialog({ lead, open, onOpenChange, onReassignComplet
   const [employees, setEmployees] = useState<Employee[]>([])
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("")
   const [loading, setLoading] = useState(false)
-  const [fetchingEmployees, setFetchingEmployees] = useState(true)
+  const [fetchingEmployees, setFetchingEmployees] = useState(false)
 
   // Fetch employees on component mount and when dialog opens
   useEffect(() => {
-    if (open) {
+    if (open && lead) {
       fetchEmployees()
     }
-  }, [open, lead.company_id, lead.branch_id, lead.location])
+  }, [open, lead])
 
   const fetchEmployees = async () => {
+    // Guard clause: if lead is null, don't proceed
+    if (!lead) {
+      console.warn("Cannot fetch employees: lead is null")
+      return
+    }
+
     setFetchingEmployees(true)
     try {
       // Get employees from the same company, branch, and location
@@ -119,6 +125,16 @@ export function ReassignLeadDialog({ lead, open, onOpenChange, onReassignComplet
   }
 
   const handleReassign = async () => {
+    // Guard clause: if lead is null, don't proceed
+    if (!lead) {
+      toast({
+        title: "Error",
+        description: "Cannot reassign: lead information is missing.",
+        variant: "destructive",
+      })
+      return
+    }
+
     if (!selectedEmployeeId) {
       toast({
         title: "Error",
@@ -151,7 +167,9 @@ export function ReassignLeadDialog({ lead, open, onOpenChange, onReassignComplet
           title: "Success",
           description: result.message,
         })
-        onReassignComplete(true)
+        if (onReassignComplete) {
+          onReassignComplete(true)
+        }
       } else {
         throw new Error(result.message)
       }
@@ -162,7 +180,9 @@ export function ReassignLeadDialog({ lead, open, onOpenChange, onReassignComplet
         description: `Failed to reassign lead: ${error instanceof Error ? error.message : String(error)}`,
         variant: "destructive",
       })
-      onReassignComplete(false)
+      if (onReassignComplete) {
+        onReassignComplete(false)
+      }
     } finally {
       setLoading(false)
     }
@@ -177,68 +197,80 @@ export function ReassignLeadDialog({ lead, open, onOpenChange, onReassignComplet
             Reassign Lead
           </DialogTitle>
           <DialogDescription>
-            Reassign lead {lead.lead_number} ({lead.client_name}) to a different resource.
-            {lead.assigned_to_name && (
-              <div className="mt-1 font-medium">Currently assigned to: {lead.assigned_to_name}</div>
+            {lead ? (
+              <>
+                Reassign lead {lead.lead_number} ({lead.client_name}) to a different resource.
+                {lead.assigned_to_name && (
+                  <div className="mt-1 font-medium">Currently assigned to: {lead.assigned_to_name}</div>
+                )}
+              </>
+            ) : (
+              "Please select a lead to reassign."
             )}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-4 py-4">
-          <div className="flex flex-col space-y-1.5">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Building className="h-4 w-4" />
-              <span>Company: {lead.company_name}</span>
-            </div>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <MapPin className="h-4 w-4" />
-              <span>{lead.location ? `Location: ${lead.location}` : `Branch: ${lead.branch_name}`}</span>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="employee" className="flex items-center gap-2">
-              <User className="h-4 w-4" />
-              Select New Resource
-            </Label>
-            {fetchingEmployees ? (
-              <div className="flex items-center gap-2 h-10 px-3 border rounded-md">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="text-sm text-muted-foreground">Loading available resources...</span>
+        {lead ? (
+          <div className="grid gap-4 py-4">
+            <div className="flex flex-col space-y-1.5">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Building className="h-4 w-4" />
+                <span>Company: {lead.company_name}</span>
               </div>
-            ) : (
-              <Select value={selectedEmployeeId} onValueChange={setSelectedEmployeeId} disabled={loading}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a resource" />
-                </SelectTrigger>
-                <SelectContent>
-                  {employees.length === 0 ? (
-                    <SelectItem value="no-employees" disabled>
-                      No sales resources available for this branch
-                    </SelectItem>
-                  ) : (
-                    employees.map((employee) => (
-                      <SelectItem key={employee.id} value={employee.id.toString()} className="py-2">
-                        <div className="flex flex-col">
-                          <span>{employee.full_name}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {employee.role || "Sales"}
-                            {employee.location ? ` • ${employee.location}` : ""}
-                          </span>
-                        </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <MapPin className="h-4 w-4" />
+                <span>{lead.location ? `Location: ${lead.location}` : `Branch: ${lead.branch_name}`}</span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="employee" className="flex items-center gap-2">
+                <User className="h-4 w-4" />
+                Select New Resource
+              </Label>
+              {fetchingEmployees ? (
+                <div className="flex items-center gap-2 h-10 px-3 border rounded-md">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="text-sm text-muted-foreground">Loading available resources...</span>
+                </div>
+              ) : (
+                <Select value={selectedEmployeeId} onValueChange={setSelectedEmployeeId} disabled={loading}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a resource" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {employees.length === 0 ? (
+                      <SelectItem value="no-employees" disabled>
+                        No sales resources available for this branch
                       </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-            )}
-            <div className="text-xs text-muted-foreground">
-              {lead.location
-                ? `Prioritizing sales personnel in ${lead.location}.`
-                : "Only showing sales personnel and account managers for this lead."}
+                    ) : (
+                      employees.map((employee) => (
+                        <SelectItem key={employee.id} value={employee.id.toString()} className="py-2">
+                          <div className="flex flex-col">
+                            <span>{employee.full_name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {employee.role || "Sales"}
+                              {employee.location ? ` • ${employee.location}` : ""}
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              )}
+              <div className="text-xs text-muted-foreground">
+                {lead.location
+                  ? `Prioritizing sales personnel in ${lead.location}.`
+                  : "Only showing sales personnel and account managers for this lead."}
+              </div>
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="py-6 text-center text-muted-foreground">
+            No lead selected or lead data is missing. Please try again.
+          </div>
+        )}
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading} className="gap-1">
@@ -247,7 +279,7 @@ export function ReassignLeadDialog({ lead, open, onOpenChange, onReassignComplet
           </Button>
           <Button
             onClick={handleReassign}
-            disabled={loading || !selectedEmployeeId || employees.length === 0}
+            disabled={loading || !selectedEmployeeId || employees.length === 0 || !lead}
             className="gap-1"
           >
             {loading ? (

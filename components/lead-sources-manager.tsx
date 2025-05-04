@@ -11,9 +11,13 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useToast } from "@/components/ui/use-toast"
-import { createClient } from "@/lib/supabase"
 import type { LeadSource } from "@/types/lead-source"
-import { getLeadSources, createLeadSource } from "@/services/lead-source-service"
+import {
+  getLeadSources,
+  createLeadSource,
+  updateLeadSource,
+  toggleLeadSourceStatus,
+} from "@/services/lead-source-service"
 import { Loader2, Plus, Edit, Check, X } from "lucide-react"
 
 const formSchema = z.object({
@@ -51,6 +55,7 @@ export function LeadSourcesManager() {
     setLoading(true)
     try {
       const sources = await getLeadSources()
+      console.log("Lead sources loaded in component:", sources)
       setLeadSources(sources)
     } catch (error) {
       console.error("Error fetching lead sources:", error)
@@ -104,17 +109,7 @@ export function LeadSourcesManager() {
     if (!editingId) return
 
     try {
-      const supabase = createClient()
-      const { error } = await supabase
-        .from("lead_sources")
-        .update({
-          name: editName,
-          description: editDescription,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", editingId)
-
-      if (error) throw error
+      await updateLeadSource(editingId, editName, editDescription)
 
       toast({
         title: "Success",
@@ -133,18 +128,13 @@ export function LeadSourcesManager() {
     }
   }
 
-  const toggleSourceStatus = async (id: number, currentStatus: boolean) => {
+  const handleToggleSourceStatus = async (id: number, currentStatus: boolean) => {
     try {
-      const supabase = createClient()
-      const { error } = await supabase
-        .from("lead_sources")
-        .update({
-          is_active: !currentStatus,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", id)
+      console.log(
+        `Toggling lead source ${id} from ${currentStatus ? "active" : "inactive"} to ${!currentStatus ? "active" : "inactive"}`,
+      )
 
-      if (error) throw error
+      await toggleLeadSourceStatus(id, currentStatus)
 
       toast({
         title: "Success",
@@ -266,7 +256,7 @@ export function LeadSourcesManager() {
                         <Button
                           variant={source.is_active ? "outline" : "destructive"}
                           size="sm"
-                          onClick={() => toggleSourceStatus(source.id, source.is_active)}
+                          onClick={() => handleToggleSourceStatus(source.id, source.is_active)}
                         >
                           {source.is_active ? "Active" : "Inactive"}
                         </Button>
