@@ -5,6 +5,18 @@ import { revalidatePath } from "next/cache"
 import type { Branch } from "@/types/employee"
 import { generateEmployeeId as generateEmployeeIdUtil } from "@/utils/employee-id-generator"
 
+// Define the EmployeeCompany type
+export type EmployeeCompany = {
+  id: number
+  employee_id: string
+  company_id: number
+  branch_id: number
+  company_name: string
+  branch_name: string
+  allocation_percentage: number
+  is_primary: boolean
+}
+
 export async function getEmployees() {
   const supabase = createClient()
 
@@ -75,35 +87,50 @@ export async function getEmployee(id: string | number) {
   return transformedData
 }
 
-export async function getEmployeeCompanies(employeeId: string | number) {
-  const supabase = createClient()
+export async function getEmployeeCompanies(employeeId: string): Promise<EmployeeCompany[]> {
+  try {
+    console.log("getEmployeeCompanies called with employeeId:", employeeId)
+    const supabase = createClient()
 
-  // Convert employeeId to number if it's a string
-  const numericId = typeof employeeId === "string" ? Number.parseInt(employeeId, 10) : employeeId
+    const { data, error } = await supabase
+      .from("employee_companies")
+      .select(`
+        id,
+        employee_id,
+        company_id,
+        branch_id,
+        allocation_percentage,
+        is_primary,
+        companies(id, name),
+        branches(id, name)
+      `)
+      .eq("employee_id", employeeId)
 
-  const { data, error } = await supabase
-    .from("employee_companies")
-    .select(`
-      *,
-      companies(name),
-      branches(name)
-    `)
-    .eq("employee_id", numericId)
-    .order("is_primary", { ascending: false })
+    if (error) {
+      console.error("Error fetching employee companies:", error)
+      throw new Error(`Failed to fetch employee companies: ${error.message}`)
+    }
 
-  if (error) {
-    console.error("Error fetching employee companies:", error)
-    throw new Error(`Error fetching employee companies: ${error.message}`)
+    console.log("Employee companies data:", data)
+
+    // Transform the data to match the EmployeeCompany type
+    const transformedData: EmployeeCompany[] = data.map((item) => ({
+      id: item.id,
+      employee_id: item.employee_id,
+      company_id: item.company_id,
+      branch_id: item.branch_id,
+      company_name: item.companies?.name || "Unknown Company",
+      branch_name: item.branches?.name || "Unknown Branch",
+      allocation_percentage: item.allocation_percentage || 0,
+      is_primary: item.is_primary || false,
+    }))
+
+    console.log("Transformed employee companies:", transformedData)
+    return transformedData
+  } catch (error) {
+    console.error("Error in getEmployeeCompanies:", error)
+    throw error
   }
-
-  // Transform the data to include the related names
-  const transformedData = data.map((employeeCompany) => ({
-    ...employeeCompany,
-    company_name: employeeCompany.companies?.name || "Unknown",
-    branch_name: employeeCompany.branches?.name || "Unknown",
-  }))
-
-  return transformedData
 }
 
 export async function createEmployee(formData: FormData) {
@@ -267,21 +294,26 @@ export async function deleteEmployee(id: string) {
   }
 }
 
-export async function addEmployeeCompany(employeeId: number, formData: FormData) {
+export async function addEmployeeCompany(employeeId: number | string, formData: FormData) {
   const supabase = createClient()
 
   try {
+    // Convert employeeId to number if it's a string
+    const numericEmployeeId = typeof employeeId === "string" ? Number.parseInt(employeeId, 10) : employeeId
+
     // Check if total allocation would exceed 100%
     const { data: existingAllocations } = await supabase
       .from("employee_companies")
-      .select("allocation_percentage, company_id")
-      .eq("employee_id", employeeId)
+      .select("allocation_percentage, company_id, branch_id")
+      .eq("employee_id", numericEmployeeId)
 
-    // Calculate total existing allocation, excluding the company we're adding/updating
     const companyId = formData.get("company_id") ? Number.parseInt(formData.get("company_id") as string) : null
+    const branchId = formData.get("branch_id") ? Number.parseInt(formData.get("branch_id") as string) : null
+
+    // Calculate total existing allocation, excluding the company-branch we're adding/updating
     const totalExistingAllocation =
       existingAllocations
-        ?.filter((item) => item.company_id !== companyId) // Exclude the company we're adding/updating
+        ?.filter((item) => !(item.company_id === companyId && item.branch_id === branchId))
         .reduce((sum, item) => sum + (item.allocation_percentage || 0), 0) || 0
 
     const newAllocationPercentage = Number.parseInt(formData.get("allocation_percentage") as string)
@@ -292,41 +324,66 @@ export async function addEmployeeCompany(employeeId: number, formData: FormData)
       )
     }
 
-    // Check if this company already exists for this employee
-    const { data: existingCompany } = await supabase
+    // Check if this company-branch combination already exists for this employee
+    const { data: existingAllocation } = await supabase
       .from("employee_companies")
       .select("*")
-      .eq("employee_id", employeeId)
-      .eq("company_id", formData.get("company_id") ? Number.parseInt(formData.get("company_id") as string) : null)
+      .eq("employee_id", numericEmployeeId)
+      .eq("company_id", companyId)
+      .eq("branch_id", branchId)
       .maybeSingle()
+
+    // Prepare the data object without start_date and end_date
+    const baseData = {
+      employee_id: numericEmployeeId,
+      company_id: companyId,
+      branch_id: branchId,
+      allocation_percentage: newAllocationPercentage,
+      is_primary: formData.get("is_primary") === "true",
+    }
+
+    // Check if the table has start_date and end_date columns
+    const { data: columnsData } = await supabase
+      .from("information_schema.columns")
+      .select("column_name")
+      .eq("table_name", "employee_companies")
+      .in("column_name", ["start_date", "end_date"])
+
+    // Create a map of column existence
+    const columnExists = {
+      start_date: columnsData?.some((col) => col.column_name === "start_date") || false,
+      end_date: columnsData?.some((col) => col.column_name === "end_date") || false,
+      project_id: columnsData?.some((col) => col.column_name === "project_id") || false,
+    }
+
+    // Add optional fields if they exist in the table
+    const fullData: any = { ...baseData }
+
+    if (columnExists.start_date && formData.get("start_date")) {
+      fullData.start_date = formData.get("start_date")
+    }
+
+    if (columnExists.end_date && formData.get("end_date")) {
+      fullData.end_date = formData.get("end_date")
+    }
+
+    if (columnExists.project_id && formData.get("project_id")) {
+      fullData.project_id = Number.parseInt(formData.get("project_id") as string)
+    }
 
     let result
 
-    if (existingCompany) {
+    if (existingAllocation) {
       // Update existing allocation
       result = await supabase
         .from("employee_companies")
-        .update({
-          branch_id: formData.get("branch_id") ? Number.parseInt(formData.get("branch_id") as string) : null,
-          allocation_percentage: Number.parseInt(formData.get("allocation_percentage") as string),
-          is_primary: formData.get("is_primary") === "true",
-        })
-        .eq("id", existingCompany.id)
+        .update(fullData)
+        .eq("id", existingAllocation.id)
         .select()
         .single()
     } else {
       // Insert new allocation
-      result = await supabase
-        .from("employee_companies")
-        .insert({
-          employee_id: employeeId,
-          company_id: formData.get("company_id") ? Number.parseInt(formData.get("company_id") as string) : null,
-          branch_id: formData.get("branch_id") ? Number.parseInt(formData.get("branch_id") as string) : null,
-          allocation_percentage: Number.parseInt(formData.get("allocation_percentage") as string),
-          is_primary: formData.get("is_primary") === "true",
-        })
-        .select()
-        .single()
+      result = await supabase.from("employee_companies").insert(fullData).select().single()
     }
 
     if (result.error) {
@@ -339,20 +396,21 @@ export async function addEmployeeCompany(employeeId: number, formData: FormData)
       await supabase
         .from("employee_companies")
         .update({ is_primary: false })
-        .eq("employee_id", employeeId)
-        .neq("company_id", formData.get("company_id") ? Number.parseInt(formData.get("company_id") as string) : null)
+        .eq("employee_id", numericEmployeeId)
+        .neq("id", result.data.id)
 
       // Update employee record
       await supabase
         .from("employees")
         .update({
-          primary_company_id: formData.get("company_id") ? Number.parseInt(formData.get("company_id") as string) : null,
-          home_branch_id: formData.get("branch_id") ? Number.parseInt(formData.get("branch_id") as string) : null,
+          primary_company_id: companyId,
+          home_branch_id: branchId,
         })
-        .eq("id", employeeId)
+        .eq("id", numericEmployeeId)
     }
 
-    revalidatePath(`/people/employees/${employeeId}`)
+    revalidatePath(`/people/employees/${numericEmployeeId}`)
+    revalidatePath(`/people/employees/${numericEmployeeId}/edit`)
     return { success: true, data: result.data }
   } catch (error: any) {
     console.error("Error managing employee company:", error)

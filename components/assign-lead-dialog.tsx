@@ -241,14 +241,21 @@ export function AssignLeadDialog({ lead, open, onOpenChange, onAssignComplete, o
                             )}
                           </div>
 
-                          {employee.allocation_percentage !== undefined && lead && (
-                            <div className="mt-1 bg-green-50 text-green-700 text-xs p-1 rounded flex items-center gap-1">
+                          {lead && lead.company_id && (
+                            <div
+                              className={`mt-1 text-xs p-1 rounded flex items-center gap-1 ${
+                                employee.allocation_percentage > 0
+                                  ? "bg-green-50 text-green-700"
+                                  : "bg-amber-50 text-amber-700"
+                              }`}
+                            >
                               <Building className="h-3 w-3" />
                               <span>
                                 {lead.company_name || "Company"}
                                 {lead.branch_name && ` - ${lead.branch_name}`}
                                 {employee.is_primary && " (Primary)"}
-                                {employee.allocation_percentage < 100 && ` (${employee.allocation_percentage}%)`}
+                                {employee.allocation_percentage > 0 && ` (${employee.allocation_percentage}%)`}
+                                {employee.allocation_percentage === 0 && " (No allocation)"}
                               </span>
                             </div>
                           )}

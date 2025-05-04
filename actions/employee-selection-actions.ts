@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/server"
 import type { Employee } from "@/types/employee"
 
-// Get employees for lead assignment, prioritizing sales roles in the same location
+// Replace the getEmployeesForLeadAssignment function with this fixed version
 export async function getEmployeesForLeadAssignment(
   companyId?: number | undefined,
   branchId?: number | undefined,
@@ -12,61 +12,24 @@ export async function getEmployeesForLeadAssignment(
   const supabase = createClient()
 
   try {
-    // First try to use the stored function if it exists
-    try {
-      const { data, error } = await supabase.rpc("get_sales_employees_for_lead", {
-        lead_company_id: companyId || null,
-        lead_location: branchId ? undefined : null, // Only use location if branchId is not provided
-      })
-
-      if (!error && data) {
-        console.log(`Successfully fetched ${data.length} employees using RPC function`)
-        return data
-      }
-
-      // If there's an error, we'll fall through to the fallback query
-      console.warn("RPC function failed, using fallback query:", error)
-    } catch (rpcError) {
-      console.warn("RPC function not available, using fallback query:", rpcError)
-    }
-
-    // Fallback query - direct database query
-    console.log("Using fallback query to fetch employees")
-
-    // Get the table columns first to check what's available
-    const { data: columnInfo, error: columnError } = await supabase.from("employees").select().limit(1)
-
-    if (columnError) {
-      console.error("Error checking employee table schema:", columnError)
-      return []
-    }
-
-    // Determine available columns
-    const sampleEmployee = columnInfo && columnInfo.length > 0 ? columnInfo[0] : {}
-    const availableColumns = Object.keys(sampleEmployee)
-
-    console.log("Available columns:", availableColumns)
-
-    // Build a dynamic select statement based on available columns
-    const selectColumns = [
-      "id",
-      "employee_id",
-      ...(availableColumns.includes("first_name") ? ["first_name"] : []),
-      ...(availableColumns.includes("last_name") ? ["last_name"] : []),
-      ...(availableColumns.includes("job_title") ? ["job_title"] : []),
-      ...(availableColumns.includes("department") ? ["department"] : []),
-      ...(availableColumns.includes("location") ? ["location"] : []),
-      ...(availableColumns.includes("status") ? ["status"] : []),
-      ...(availableColumns.includes("company_id") ? ["company_id"] : []),
-      ...(availableColumns.includes("branch_id") ? ["branch_id"] : []),
-      ...(availableColumns.includes("department_id") ? ["department_id"] : []),
-      ...(availableColumns.includes("designation") ? ["designation"] : []),
-    ].join(", ")
+    console.log(
+      `Fetching employees for lead assignment - Company: ${companyId}, Branch: ${branchId}, Role: ${roleFilter}`,
+    )
 
     // First, get all active employees
     const { data: allEmployees, error: employeesError } = await supabase
       .from("employees")
-      .select(selectColumns)
+      .select(`
+        id, 
+        employee_id, 
+        first_name, 
+        last_name, 
+        job_title, 
+        status, 
+        department_id,
+        departments(name),
+        designations(name)
+      `)
       .eq("status", "active")
       .order("first_name")
 
@@ -75,102 +38,158 @@ export async function getEmployeesForLeadAssignment(
       return []
     }
 
-    // Then, get employee-company allocations if we need to filter by company
-    let employeeAllocations = []
-    if (companyId) {
-      const { data: allocations, error: allocationsError } = await supabase
-        .from("employee_companies")
-        .select(`
-          employee_id,
-          company_id,
-          branch_id,
-          allocation_percentage,
-          is_primary
-        `)
-        .eq("company_id", companyId)
+    // Get all employee allocations
+    const { data: allAllocations, error: allocationsError } = await supabase
+      .from("employee_companies")
+      .select(`
+        id,
+        employee_id,
+        company_id,
+        branch_id,
+        project_id,
+        allocation_percentage,
+        is_primary,
+        start_date,
+        end_date,
+        status
+      `)
+      .is("end_date", null) // Only get active allocations (no end date)
+      .order("is_primary", { ascending: false })
 
-      if (allocationsError) {
-        console.error("Error fetching employee allocations:", allocationsError)
-      } else {
-        employeeAllocations = allocations || []
-      }
+    if (allocationsError) {
+      console.error("Error fetching employee allocations:", allocationsError)
+      return []
     }
 
-    // Filter employees based on company if needed
-    let filteredEmployees = allEmployees
-    if (companyId) {
-      // Get employees directly assigned to the company
-      const directEmployees = allEmployees.filter((emp) => emp.company_id === companyId)
+    // Get all departments to identify sales departments
+    const { data: departments, error: departmentsError } = await supabase.from("departments").select("id, name")
 
-      // Get employees assigned through allocations
-      const allocatedEmployeeIds = employeeAllocations.map((alloc) => alloc.employee_id)
-      const allocatedEmployees = allEmployees.filter((emp) => allocatedEmployeeIds.includes(emp.id))
-
-      // Combine both sets
-      const combinedEmployeeIds = new Set([
-        ...directEmployees.map((emp) => emp.id),
-        ...allocatedEmployees.map((emp) => emp.id),
-      ])
-
-      filteredEmployees = allEmployees.filter((emp) => combinedEmployeeIds.has(emp.id))
+    if (departmentsError) {
+      console.error("Error fetching departments:", departmentsError)
+      return []
     }
 
-    // Filter for sales-related roles based on available columns
-    const salesEmployees = filteredEmployees.filter((emp) => {
+    // Identify sales department IDs
+    const salesDepartmentIds = departments
+      .filter((dept) => dept.name.toLowerCase().includes("sales"))
+      .map((dept) => dept.id)
+
+    console.log(`Identified sales department IDs: ${salesDepartmentIds.join(", ")}`)
+
+    // Filter employees based on allocations and role
+    let eligibleEmployees = allEmployees.map((emp) => {
+      // Get all allocations for this employee
+      const employeeAllocations = allAllocations.filter((alloc) => alloc.employee_id === emp.id)
+
+      // Check if employee has an allocation to the specified company
+      const hasCompanyAllocation = !companyId || employeeAllocations.some((alloc) => alloc.company_id === companyId)
+
+      // Check if employee has an allocation to the specified branch
+      const hasBranchAllocation = !branchId || employeeAllocations.some((alloc) => alloc.branch_id === branchId)
+
+      // Check if employee is in a sales role
       const isSalesRole =
+        // Check job title
         (emp.job_title && emp.job_title.toLowerCase().includes("sales")) ||
-        (emp.department && emp.department.toLowerCase().includes("sales")) ||
-        (emp.job_title && emp.job_title.toLowerCase().includes("account manager")) ||
-        (emp.job_title && emp.job_title.toLowerCase().includes("business development")) ||
-        (emp.designation && emp.designation.toLowerCase().includes("sales"))
+        // Check department
+        (emp.departments && emp.departments.name.toLowerCase().includes("sales")) ||
+        // Check department ID
+        (emp.department_id && salesDepartmentIds.includes(emp.department_id)) ||
+        // Check designation
+        (emp.designations && emp.designations.name.toLowerCase().includes("sales"))
 
-      // We can't check for executives without the role field, so we'll just use job_title
-      const isNotExecutive = !(
-        emp.job_title &&
-        /ceo|cto|cfo|coo|president|vice president|vp|chief|director|head of|founder|owner/i.test(emp.job_title)
-      )
-
-      return isSalesRole && isNotExecutive
-    })
-
-    // Format the data to match the expected structure
-    return salesEmployees.map((emp) => {
-      // Find allocation data if available
-      const allocation = employeeAllocations.find((alloc) => alloc.employee_id === emp.id)
-
-      // Generate full name from first and last name
-      const firstName = emp.first_name || ""
-      const lastName = emp.last_name || ""
-      const fullName = `${firstName} ${lastName}`.trim()
-
+      // Format the employee data with allocation information
       return {
         id: emp.id,
         employee_id: emp.employee_id,
-        name: fullName,
-        first_name: firstName,
-        last_name: lastName,
-        full_name: fullName,
+        name: `${emp.first_name || ""} ${emp.last_name || ""}`.trim(),
+        first_name: emp.first_name,
+        last_name: emp.last_name,
+        full_name: `${emp.first_name || ""} ${emp.last_name || ""}`.trim(),
         job_title: emp.job_title || "",
-        role: emp.designation || emp.job_title || "", // Use designation as role if available
-        department: emp.department || "",
-        location: emp.location || "",
+        department: emp.departments?.name || "",
+        designation: emp.designations?.name || "",
         status: emp.status || "active",
-        company_id: emp.company_id,
-        branch_id: emp.branch_id,
-        department_id: emp.department_id,
-        designation: emp.designation || emp.job_title || "",
-        is_sales: true,
-        allocation_percentage: allocation?.allocation_percentage,
-        is_primary: allocation?.is_primary || false,
+        is_sales: isSalesRole,
+        allocations: employeeAllocations,
+        hasCompanyAllocation,
+        hasBranchAllocation,
+        // Find the relevant allocation for this company/branch
+        relevantAllocation: employeeAllocations.find(
+          (alloc) => (!companyId || alloc.company_id === companyId) && (!branchId || alloc.branch_id === branchId),
+        ),
+        // Primary allocation
+        primaryAllocation: employeeAllocations.find((alloc) => alloc.is_primary),
       }
     })
+
+    // Apply filters
+    eligibleEmployees = eligibleEmployees.filter((emp) => {
+      // Must be in sales role if roleFilter is specified
+      if (roleFilter && roleFilter.toLowerCase() === "sales" && !emp.is_sales) {
+        return false
+      }
+
+      // Must have allocation to the specified company if companyId is provided
+      if (companyId && !emp.hasCompanyAllocation) {
+        return false
+      }
+
+      // Must have allocation to the specified branch if branchId is provided
+      if (branchId && !emp.hasBranchAllocation) {
+        return false
+      }
+
+      return true
+    })
+
+    // Sort employees: prioritize those with direct allocations to the company/branch
+    eligibleEmployees.sort((a, b) => {
+      // First priority: has relevant allocation
+      if (a.relevantAllocation && !b.relevantAllocation) return -1
+      if (!a.relevantAllocation && b.relevantAllocation) return 1
+
+      // Second priority: is primary allocation
+      if (a.relevantAllocation?.is_primary && !b.relevantAllocation?.is_primary) return -1
+      if (!a.relevantAllocation?.is_primary && b.relevantAllocation?.is_primary) return 1
+
+      // Third priority: allocation percentage (higher first)
+      if (a.relevantAllocation && b.relevantAllocation) {
+        return (b.relevantAllocation.allocation_percentage || 0) - (a.relevantAllocation.allocation_percentage || 0)
+      }
+
+      // Fourth priority: alphabetical by name
+      return a.name.localeCompare(b.name)
+    })
+
+    console.log(`Found ${eligibleEmployees.length} eligible employees for lead assignment`)
+
+    // Format the final result
+    return eligibleEmployees.map((emp) => ({
+      id: emp.id,
+      employee_id: emp.employee_id,
+      name: emp.name,
+      first_name: emp.first_name,
+      last_name: emp.last_name,
+      full_name: emp.full_name,
+      job_title: emp.job_title,
+      role: emp.job_title,
+      department: emp.department,
+      designation: emp.designation,
+      status: emp.status,
+      is_sales: emp.is_sales,
+      is_primary: emp.relevantAllocation?.is_primary || false,
+      allocation_percentage: emp.relevantAllocation?.allocation_percentage || 0,
+      company_id: emp.relevantAllocation?.company_id || emp.primaryAllocation?.company_id,
+      branch_id: emp.relevantAllocation?.branch_id || emp.primaryAllocation?.branch_id,
+    }))
   } catch (error) {
     console.error("Exception in getEmployeesForLeadAssignment:", error)
     return []
   }
 }
 
-// Assign a lead to an employee (simplified version)
+// Update the assignLeadToEmployee function
 export async function assignLeadToEmployee(
   leadId: number,
   employeeId: number,
@@ -178,7 +197,60 @@ export async function assignLeadToEmployee(
   const supabase = createClient()
 
   try {
-    const { error } = await supabase
+    console.log(`Assigning lead ${leadId} to employee ${employeeId}`)
+
+    // Get the lead details first
+    const { data: lead, error: leadError } = await supabase
+      .from("leads")
+      .select("id, company_id, branch_id, status")
+      .eq("id", leadId)
+      .single()
+
+    if (leadError) {
+      console.error("Error fetching lead:", leadError)
+      return { success: false, message: `Failed to fetch lead: ${leadError.message}` }
+    }
+
+    // Get the employee details
+    const { data: employee, error: employeeError } = await supabase
+      .from("employees")
+      .select("id, first_name, last_name, status")
+      .eq("id", employeeId)
+      .single()
+
+    if (employeeError) {
+      console.error("Error fetching employee:", employeeError)
+      return { success: false, message: `Failed to fetch employee: ${employeeError.message}` }
+    }
+
+    // Verify employee is active
+    if (employee.status !== "active") {
+      return {
+        success: false,
+        message: `Cannot assign lead to inactive employee: ${employee.first_name} ${employee.last_name}`,
+      }
+    }
+
+    // Check if employee has allocation to the lead's company
+    if (lead.company_id) {
+      const { data: allocations, error: allocError } = await supabase
+        .from("employee_companies")
+        .select("id")
+        .eq("employee_id", employeeId)
+        .eq("company_id", lead.company_id)
+        .is("end_date", null) // Only active allocations
+
+      if (allocError) {
+        console.error("Error checking employee allocation:", allocError)
+      } else if (!allocations || allocations.length === 0) {
+        console.warn(
+          `Employee ${employeeId} has no allocation to company ${lead.company_id}, but proceeding with assignment`,
+        )
+      }
+    }
+
+    // Update the lead
+    const { error: updateError } = await supabase
       .from("leads")
       .update({
         assigned_to: employeeId,
@@ -187,12 +259,38 @@ export async function assignLeadToEmployee(
       })
       .eq("id", leadId)
 
-    if (error) {
-      console.error("Error assigning lead:", error)
-      return { success: false, message: `Failed to assign lead: ${error.message}` }
+    if (updateError) {
+      console.error("Error assigning lead:", updateError)
+      return { success: false, message: `Failed to assign lead: ${updateError.message}` }
     }
 
-    return { success: true, message: `Lead successfully assigned to employee ${employeeId}` }
+    // Log the assignment in the activity log if the table exists
+    try {
+      const { data: tableExists } = await supabase
+        .from("information_schema.tables")
+        .select("table_name")
+        .eq("table_name", "activity_log")
+        .maybeSingle()
+
+      if (tableExists) {
+        await supabase.from("activity_log").insert({
+          activity_type: "lead_assignment",
+          entity_type: "lead",
+          entity_id: leadId,
+          user_id: null, // System action
+          description: `Lead #${leadId} assigned to ${employee.first_name} ${employee.last_name}`,
+          created_at: new Date().toISOString(),
+        })
+      }
+    } catch (logError) {
+      console.error("Error logging activity:", logError)
+      // Don't fail the assignment if logging fails
+    }
+
+    return {
+      success: true,
+      message: `Lead successfully assigned to ${employee.first_name} ${employee.last_name}`,
+    }
   } catch (error) {
     console.error("Exception assigning lead:", error)
     return { success: false, message: `An unexpected error occurred: ${error}` }
