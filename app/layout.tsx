@@ -1,16 +1,7 @@
 import type React from "react"
-import "@/app/globals.css"
-import { Inter } from "next/font/google"
-import { Toaster } from "@/components/toaster"
-import { Header } from "@/components/header"
-
-const inter = Inter({ subsets: ["latin"] })
-
-export const metadata = {
-  title: "Company & Branch Manager",
-  description: "Manage your companies and their branches",
-    generator: 'v0.dev'
-}
+import "./globals.css"
+import { AuthProvider } from "@/components/auth-provider"
+import { Toaster } from "@/components/ui/toaster"
 
 export default function RootLayout({
   children,
@@ -19,13 +10,16 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
-        <div className="relative flex min-h-screen flex-col">
-          <Header />
-          <div className="flex-1">{children}</div>
-        </div>
-        <Toaster />
+      <body>
+        <AuthProvider>
+          <main>{children}</main>
+          <Toaster />
+        </AuthProvider>
       </body>
     </html>
   )
 }
+
+export const metadata = {
+      generator: 'v0.dev'
+    };
