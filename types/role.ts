@@ -71,6 +71,11 @@ export const applicationMenus: MenuPermission[] = [
         name: "User Roles",
         permission: { ...defaultPermission },
       },
+      {
+        id: "organization.account-creation",
+        name: "Account Creation",
+        permission: { ...defaultPermission },
+      },
     ],
   },
   {
