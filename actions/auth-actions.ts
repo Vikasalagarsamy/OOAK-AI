@@ -4,7 +4,7 @@ import { cookies } from "next/headers"
 import { createClient } from "@/lib/supabase"
 import { redirect } from "next/navigation"
 import bcrypt from "bcryptjs"
-import { SignJWT, jwtVerify } from "jose" // Using jose instead of jsonwebtoken
+import { SignJWT, jwtVerify } from "jose"
 
 // Define types
 type AuthResult = {
@@ -16,6 +16,7 @@ type AuthResult = {
 // Authentication function
 export async function authenticate(username: string, password: string): Promise<AuthResult> {
   try {
+    console.log("Authentication started for user:", username)
     const supabase = createClient()
 
     // Get user account from database
@@ -47,29 +48,41 @@ export async function authenticate(username: string, password: string): Promise<
 
     if (userError || !userAccount) {
       console.error("User not found:", userError?.message || "No user with that username")
-      // Log the attempt for security auditing
-      await logAuthAttempt(username, false, "User not found")
       return { success: false, error: "Invalid username or password" }
     }
+
+    console.log("User found, verifying password")
 
     // Check if account is active
     if (!userAccount.is_active) {
-      await logAuthAttempt(username, false, "Account inactive")
+      console.log("Account is inactive")
       return { success: false, error: "This account has been deactivated. Please contact your administrator." }
     }
 
-    // Verify password
-    const passwordValid = await bcrypt.compare(password, userAccount.password_hash)
-    if (!passwordValid) {
-      await logAuthAttempt(username, false, "Invalid password")
-      return { success: false, error: "Invalid username or password" }
+    // Verify password - ensure password_hash exists
+    if (!userAccount.password_hash) {
+      console.error("User has no password hash")
+      return { success: false, error: "Account not properly configured. Contact administrator." }
     }
+
+    try {
+      const passwordValid = await bcrypt.compare(password, userAccount.password_hash)
+      if (!passwordValid) {
+        console.log("Password invalid")
+        return { success: false, error: "Invalid username or password" }
+      }
+    } catch (passwordError) {
+      console.error("Password verification error:", passwordError)
+      return { success: false, error: "Error verifying credentials" }
+    }
+
+    console.log("Password verified, creating user object and token")
 
     // Create a user object without sensitive data
     const user = {
       id: userAccount.id,
       username: userAccount.username,
-      email: userAccount.email,
+      email: userAccount.email || "",
       employeeId: userAccount.employee_id,
       roleId: userAccount.role_id,
       firstName: userAccount.employees?.first_name || "",
@@ -77,25 +90,31 @@ export async function authenticate(username: string, password: string): Promise<
       roleName: userAccount.roles?.title || "",
     }
 
-    // Create session token
-    const token = await createSessionToken(user)
+    try {
+      // Create session token
+      const token = await createSessionToken(user)
+      console.log("Token created")
 
-    // Store in cookie
-    const cookieStore = cookies()
-    cookieStore.set("auth_token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      maxAge: 60 * 60 * 24 * 7, // 1 week
-      path: "/",
-    })
+      // Store in cookie
+      const cookieStore = cookies()
+      cookieStore.set("auth_token", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        maxAge: 60 * 60 * 24 * 7, // 1 week
+        path: "/",
+        sameSite: "lax",
+      })
+      console.log("Cookie set")
 
-    // Update last login timestamp
-    await supabase.from("user_accounts").update({ last_login: new Date().toISOString() }).eq("id", userAccount.id)
+      // Update last login timestamp
+      await supabase.from("user_accounts").update({ last_login: new Date().toISOString() }).eq("id", userAccount.id)
+      console.log("Last login updated")
 
-    // Log successful login
-    await logAuthAttempt(username, true, "Authentication successful")
-
-    return { success: true, user }
+      return { success: true, user }
+    } catch (tokenError) {
+      console.error("Token creation error:", tokenError)
+      return { success: false, error: "Error creating session" }
+    }
   } catch (error) {
     console.error("Authentication error:", error)
     return { success: false, error: "An error occurred during authentication" }
@@ -105,6 +124,10 @@ export async function authenticate(username: string, password: string): Promise<
 // Create JWT token for session using jose library
 async function createSessionToken(user: any) {
   const secret = process.env.JWT_SECRET || "fallback-secret-only-for-development"
+  if (!secret) {
+    console.error("JWT_SECRET is not defined!")
+  }
+
   const secretKey = new TextEncoder().encode(secret)
 
   return await new SignJWT({
@@ -119,104 +142,79 @@ async function createSessionToken(user: any) {
     .sign(secretKey)
 }
 
-// Log authentication attempts for security auditing
-async function logAuthAttempt(username: string, success: boolean, message: string) {
-  try {
-    const supabase = createClient()
-
-    // First, check if the auth_logs table exists
-    const { data: tableExists } = await supabase
-      .from("information_schema.tables")
-      .select("table_name")
-      .eq("table_name", "auth_logs")
-      .eq("table_schema", "public")
-
-    // If table doesn't exist, create it
-    if (!tableExists || tableExists.length === 0) {
-      console.log("auth_logs table doesn't exist yet, skipping logging")
-      return // Skip logging if table doesn't exist
-    }
-
-    // Insert the log entry
-    const { error } = await supabase.from("auth_logs").insert({
-      username,
-      success,
-      message,
-      ip_address: "IP capture disabled in this implementation",
-      user_agent: "User agent capture disabled in this implementation",
-      timestamp: new Date().toISOString(),
-    })
-
-    if (error) {
-      console.error("Error logging auth attempt:", error)
-    }
-  } catch (error) {
-    console.error("Failed to log auth attempt:", error)
-    // Non-critical, so we don't throw the error
-  }
-}
-
 // Get current user from session
 export async function getCurrentUser() {
   try {
     const cookieStore = cookies()
     const token = cookieStore.get("auth_token")?.value
 
-    if (!token) return null
+    if (!token) {
+      console.log("No auth token found in cookies")
+      return null
+    }
 
     const secret = process.env.JWT_SECRET || "fallback-secret-only-for-development"
     const secretKey = new TextEncoder().encode(secret)
 
-    const { payload } = await jwtVerify(token, secretKey, {
-      algorithms: ["HS256"],
-    })
+    try {
+      const { payload } = await jwtVerify(token, secretKey, {
+        algorithms: ["HS256"],
+      })
 
-    // Fetch fresh user data from database
-    const supabase = createClient()
-    const { data: user, error } = await supabase
-      .from("user_accounts")
-      .select(`
-        id, 
-        username, 
-        email, 
-        is_active, 
-        employee_id, 
-        role_id,
-        employees:employee_id (
+      console.log("Token verified, payload:", payload)
+
+      // Fetch fresh user data from database
+      const supabase = createClient()
+      const { data: user, error } = await supabase
+        .from("user_accounts")
+        .select(`
           id, 
+          username, 
+          email, 
+          is_active, 
           employee_id, 
-          first_name, 
-          last_name
-        ),
-        roles:role_id (
-          id, 
-          title
-        )
-      `)
-      .eq("id", payload.sub)
-      .single()
+          role_id,
+          employees:employee_id (
+            id, 
+            employee_id, 
+            first_name, 
+            last_name
+          ),
+          roles:role_id (
+            id, 
+            title
+          )
+        `)
+        .eq("id", payload.sub)
+        .single()
 
-    if (error || !user || !user.is_active) {
-      // Invalid or inactive user
-      logout()
+      if (error) {
+        console.error("Error fetching user data:", error)
+        return null
+      }
+
+      if (!user || !user.is_active) {
+        console.log("User not found or inactive")
+        return null
+      }
+
+      return {
+        id: user.id,
+        username: user.username,
+        email: user.email || "",
+        employeeId: user.employee_id,
+        roleId: user.role_id,
+        firstName: user.employees?.first_name || "",
+        lastName: user.employees?.last_name || "",
+        roleName: user.roles?.title || "",
+        isAdmin: user.roles?.title === "Administrator",
+      }
+    } catch (verifyError) {
+      console.error("Token verification error:", verifyError)
       return null
-    }
-
-    return {
-      id: user.id,
-      username: user.username,
-      email: user.email,
-      employeeId: user.employee_id,
-      roleId: user.role_id,
-      firstName: user.employees?.first_name || "",
-      lastName: user.employees?.last_name || "",
-      roleName: user.roles?.title || "",
-      isAdmin: user.roles?.title === "Administrator",
     }
   } catch (error) {
     console.error("Session validation error:", error)
-    // Clear invalid session
-    logout()
     return null
   }
 }

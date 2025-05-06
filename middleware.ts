@@ -2,15 +2,21 @@ import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 import { jwtVerify } from "jose"
 
-// This middleware replaces the previous one that was bypassing authentication
 export async function middleware(req: NextRequest) {
   // Public paths that don't require authentication
   const publicPaths = ["/login", "/forgot-password"]
-
   const path = req.nextUrl.pathname
 
-  // Allow public paths
-  if (publicPaths.includes(path) || path.startsWith("/_next") || path.startsWith("/api/")) {
+  // Allow access to public paths and static files
+  if (
+    publicPaths.includes(path) ||
+    path.startsWith("/_next") ||
+    path.startsWith("/api/") ||
+    path.includes("favicon.ico") ||
+    path.includes(".png") ||
+    path.includes(".jpg") ||
+    path.includes(".svg")
+  ) {
     return NextResponse.next()
   }
 
@@ -18,9 +24,11 @@ export async function middleware(req: NextRequest) {
   const authToken = req.cookies.get("auth_token")?.value
 
   if (!authToken) {
+    console.log("No auth token, redirecting to login")
     // Redirect to login if no token exists
     const url = new URL("/login", req.url)
-    url.searchParams.set("redirectTo", path)
+    url.searchParams.set("reason", "unauthenticated")
+    url.searchParams.set("from", path)
     return NextResponse.redirect(url)
   }
 
@@ -44,17 +52,8 @@ export async function middleware(req: NextRequest) {
       }
     }
 
-    // Update headers with user info for use in the application
-    const requestHeaders = new Headers(req.headers)
-    requestHeaders.set("x-user-id", payload.sub as string)
-    requestHeaders.set("x-user-role", payload.roleName as string)
-
-    // Allow the request to proceed with the additional headers
-    return NextResponse.next({
-      request: {
-        headers: requestHeaders,
-      },
-    })
+    // Allow the request to proceed
+    return NextResponse.next()
   } catch (error) {
     console.error("Auth middleware error:", error)
 
