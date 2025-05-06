@@ -1,5 +1,4 @@
 import Link from "next/link"
-import { DynamicMenu } from "./dynamic-menu/dynamic-menu"
 import { LogOut, User } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu"
 import { Button } from "./ui/button"
@@ -26,7 +25,21 @@ export async function Header() {
         </Link>
 
         <div className="flex items-center justify-between flex-1">
-          <DynamicMenu className="mx-6" />
+          {/* HARDCODED MENU - Replace DynamicMenu with this */}
+          <nav className="mx-6 flex items-center space-x-4">
+            <Link href="/" className="text-sm font-medium transition-colors hover:text-primary">
+              Dashboard
+            </Link>
+            <Link href="/organization" className="text-sm font-medium transition-colors hover:text-primary">
+              Organization
+            </Link>
+            <Link href="/people" className="text-sm font-medium transition-colors hover:text-primary">
+              People
+            </Link>
+            <Link href="/sales" className="text-sm font-medium transition-colors hover:text-primary">
+              Sales
+            </Link>
+          </nav>
 
           <div className="flex items-center gap-2">
             {user ? (

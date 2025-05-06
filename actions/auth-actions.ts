@@ -145,11 +145,12 @@ async function createSessionToken(user: any) {
 // Get current user from session
 export async function getCurrentUser() {
   try {
+    console.log("getCurrentUser: Starting to get current user")
     const cookieStore = cookies()
     const token = cookieStore.get("auth_token")?.value
 
     if (!token) {
-      console.log("No auth token found in cookies")
+      console.log("getCurrentUser: No auth token found in cookies")
       return null
     }
 
@@ -161,7 +162,12 @@ export async function getCurrentUser() {
         algorithms: ["HS256"],
       })
 
-      console.log("Token verified, payload:", payload)
+      console.log("getCurrentUser: Token verified, payload:", payload)
+
+      if (!payload.sub) {
+        console.error("getCurrentUser: Token payload missing subject (user ID)")
+        return null
+      }
 
       // Fetch fresh user data from database
       const supabase = createClient()
@@ -174,12 +180,6 @@ export async function getCurrentUser() {
           is_active, 
           employee_id, 
           role_id,
-          employees:employee_id (
-            id, 
-            employee_id, 
-            first_name, 
-            last_name
-          ),
           roles:role_id (
             id, 
             title
@@ -189,14 +189,21 @@ export async function getCurrentUser() {
         .single()
 
       if (error) {
-        console.error("Error fetching user data:", error)
+        console.error("getCurrentUser: Error fetching user data:", error)
         return null
       }
 
       if (!user || !user.is_active) {
-        console.log("User not found or inactive")
+        console.log("getCurrentUser: User not found or inactive")
         return null
       }
+
+      console.log("getCurrentUser: User data retrieved successfully:", {
+        id: user.id,
+        username: user.username,
+        roleId: user.role_id,
+        roleName: user.roles?.title,
+      })
 
       return {
         id: user.id,
@@ -204,17 +211,15 @@ export async function getCurrentUser() {
         email: user.email || "",
         employeeId: user.employee_id,
         roleId: user.role_id,
-        firstName: user.employees?.first_name || "",
-        lastName: user.employees?.last_name || "",
         roleName: user.roles?.title || "",
-        isAdmin: user.roles?.title === "Administrator",
+        isAdmin: user.roles?.title === "Administrator" || user.role_id === 1,
       }
     } catch (verifyError) {
-      console.error("Token verification error:", verifyError)
+      console.error("getCurrentUser: Token verification error:", verifyError)
       return null
     }
   } catch (error) {
-    console.error("Session validation error:", error)
+    console.error("getCurrentUser: Session validation error:", error)
     return null
   }
 }
@@ -232,7 +237,7 @@ export async function hasPermission(requiredRole: string) {
   if (!user) return false
 
   // Admin has all permissions
-  if (user.roleName === "Administrator") return true
+  if (user.roleName === "Administrator" || user.roleId === 1) return true
 
   // Check specific role match
   return user.roleName === requiredRole

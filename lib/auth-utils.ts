@@ -33,17 +33,20 @@ export async function checkPermission(resourceName: string, actionType: string) 
     const token = cookies().get("auth_token")?.value
 
     if (!token) {
+      console.log("No auth token found")
       return false
     }
 
     const { valid, payload } = await verifyAuth(token)
 
     if (!valid || !payload) {
+      console.log("Invalid token or payload")
       return false
     }
 
     // Administrator role has all permissions
     if (payload.roleName === "Administrator") {
+      console.log("User is Administrator, granting permission automatically")
       return true
     }
 
@@ -60,13 +63,22 @@ export async function checkPermission(resourceName: string, actionType: string) 
       .eq("role_id", payload.role)
       .eq("status", "ACTIVE")
 
-    if (error || !data) {
+    if (error) {
       console.error("Permission check error:", error)
       return false
     }
 
+    if (!data || data.length === 0) {
+      console.log("No permissions found for role:", payload.role)
+      return false
+    }
+
     // Check if user has the specific permission
-    return data.some((rp) => rp.permissions?.resource === resourceName && rp.permissions?.action === actionType)
+    const hasPermission = data.some(
+      (rp) => rp.permissions?.resource === resourceName && rp.permissions?.action === actionType,
+    )
+    console.log(`Permission check for ${resourceName}:${actionType} - Result: ${hasPermission}`)
+    return hasPermission
   } catch (error) {
     console.error("Permission check error:", error)
     return false

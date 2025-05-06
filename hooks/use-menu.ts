@@ -6,14 +6,26 @@ import type { MenuItemWithPermission } from "@/types/menu"
 // Function to fetch the menu from the API
 async function fetchMenu() {
   try {
-    const response = await fetch("/api/menu")
+    console.log("Fetching menu from API")
+    const response = await fetch("/api/menu", {
+      method: "GET",
+      headers: {
+        "Cache-Control": "no-cache",
+      },
+    })
+
     if (!response.ok) {
-      throw new Error(`Failed to fetch menu: ${response.status}`)
+      const errorText = await response.text()
+      console.error(`Failed to fetch menu: ${response.status}`, errorText)
+      throw new Error(`Failed to fetch menu: ${response.status} - ${errorText}`)
     }
-    return await response.json()
+
+    const data = await response.json()
+    console.log("Menu data received:", data)
+    return data
   } catch (error) {
     console.error("Error fetching menu:", error)
-    return []
+    throw error
   }
 }
 
@@ -25,20 +37,24 @@ export function useMenu() {
 
   useEffect(() => {
     let isMounted = true
+    console.log("useMenu hook initialized")
 
     async function loadMenu() {
       try {
         setLoading(true)
+        console.log("Loading menu data...")
         const data = await fetchMenu()
 
         if (isMounted) {
+          console.log("Setting menu data in state:", data)
           setMenu(data)
           setError(null)
         }
       } catch (err: any) {
         if (isMounted) {
-          setError(err.message || "Failed to load menu")
-          console.error(err)
+          const errorMessage = err.message || "Failed to load menu"
+          console.error("Error in useMenu hook:", errorMessage)
+          setError(errorMessage)
         }
       } finally {
         if (isMounted) {
@@ -47,10 +63,18 @@ export function useMenu() {
       }
     }
 
+    // Load menu immediately
     loadMenu()
+
+    // Set up a refresh interval (every 30 seconds)
+    const refreshInterval = setInterval(() => {
+      console.log("Refreshing menu data...")
+      loadMenu()
+    }, 30000)
 
     return () => {
       isMounted = false
+      clearInterval(refreshInterval)
     }
   }, [])
 
