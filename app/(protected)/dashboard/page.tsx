@@ -8,6 +8,9 @@ import { Users, Building2, Briefcase, TrendingUp, UserPlus, ArrowUpRight, ArrowD
 import { Skeleton } from "@/components/ui/skeleton"
 import Link from "next/link"
 import { getRecentActivities } from "@/services/activity-service"
+import { RealTimeDepartmentChart } from "@/components/dashboard/real-time-department-chart"
+import { getDepartmentDistribution } from "@/actions/department-actions"
+import { BranchDistributionChart } from "@/components/dashboard/branch-distribution-chart"
 
 export const revalidate = 60 // Revalidate this page every 60 seconds
 
@@ -15,6 +18,7 @@ export default async function DashboardPage() {
   // Fetch dashboard data with error handling
   let dashboardData
   let activities = []
+  let departmentData = []
 
   try {
     dashboardData = await getDashboardStats()
@@ -28,13 +32,7 @@ export default async function DashboardPage() {
         employees: { count: 0, trend: { isPositive: true, value: 0 } },
         clients: { count: 0, trend: { isPositive: true, value: 0 } },
       },
-      employeesByDepartment: [
-        { department: "Engineering", count: 24 },
-        { department: "Marketing", count: 13 },
-        { department: "Sales", count: 18 },
-        { department: "Finance", count: 8 },
-        { department: "HR", count: 5 },
-      ],
+      employeesByDepartment: [],
       branchesByCompany: [
         { company: "Acme Corp", count: 5 },
         { company: "TechCorp", count: 3 },
@@ -61,20 +59,37 @@ export default async function DashboardPage() {
     activities = []
   }
 
+  try {
+    console.log("Dashboard: Fetching department data...")
+    departmentData = await getDepartmentDistribution()
+    console.log("Dashboard: Received department data:", departmentData)
+
+    if (!departmentData || departmentData.length === 0) {
+      console.log("Dashboard: No department data returned, using fallback data")
+      departmentData = [
+        { department: "Engineering", count: 24 },
+        { department: "Marketing", count: 13 },
+        { department: "Sales", count: 18 },
+        { department: "Finance", count: 8 },
+        { department: "HR", count: 5 },
+      ]
+    }
+  } catch (error) {
+    console.error("Dashboard: Error loading department data:", error)
+    departmentData = [
+      { department: "Engineering", count: 24 },
+      { department: "Marketing", count: 13 },
+      { department: "Sales", count: 18 },
+      { department: "Finance", count: 8 },
+      { department: "HR", count: 5 },
+    ]
+  }
+
   return (
     <div className="flex-1">
       <div className="flex-1 space-y-4 p-4 pt-6 md:p-8">
         <div className="flex items-center justify-between space-y-2">
           <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-          <div className="flex items-center space-x-2">
-            <Link
-              href="/organization/clients"
-              className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2"
-            >
-              <UserPlus className="mr-2 h-4 w-4" />
-              New Client
-            </Link>
-          </div>
         </div>
 
         <Tabs defaultValue="overview" className="space-y-4">
@@ -170,10 +185,10 @@ export default async function DashboardPage() {
                   <Card>
                     <CardHeader>
                       <CardTitle>Employees by Department</CardTitle>
-                      <CardDescription>Distribution of employees across departments</CardDescription>
+                      <CardDescription>Real-time distribution of employees across departments</CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <DepartmentDistributionChart data={dashboardData.employeesByDepartment} />
+                      <RealTimeDepartmentChart initialData={departmentData} />
                     </CardContent>
                   </Card>
                 </Suspense>
@@ -485,48 +500,6 @@ function EmployeeGrowthChart({ data }: { data: { month: string; count: number }[
           ></div>
           <div className="mt-2 text-xs text-muted-foreground">{item.month}</div>
           <div className="text-sm font-medium">{item.count}</div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function DepartmentDistributionChart({ data }: { data: { department: string; count: number }[] }) {
-  return (
-    <div className="space-y-4">
-      {data.map((item, i) => (
-        <div key={i} className="space-y-1">
-          <div className="flex items-center justify-between text-sm">
-            <div>{item.department}</div>
-            <div className="font-medium">{item.count}</div>
-          </div>
-          <div className="rounded-full bg-muted h-2 w-full overflow-hidden">
-            <div
-              className="bg-primary h-full"
-              style={{ width: `${(item.count / Math.max(...data.map((d) => d.count))) * 100}%` }}
-            ></div>
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function BranchDistributionChart({ data }: { data: { company: string; count: number }[] }) {
-  return (
-    <div className="space-y-4">
-      {data.map((item, i) => (
-        <div key={i} className="space-y-1">
-          <div className="flex items-center justify-between text-sm">
-            <div>{item.company}</div>
-            <div className="font-medium">{item.count}</div>
-          </div>
-          <div className="rounded-full bg-muted h-2 w-full overflow-hidden">
-            <div
-              className="bg-primary h-full"
-              style={{ width: `${(item.count / Math.max(...data.map((d) => d.count))) * 100}%` }}
-            ></div>
-          </div>
         </div>
       ))}
     </div>

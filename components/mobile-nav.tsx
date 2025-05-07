@@ -63,6 +63,11 @@ export function MobileNav({ className, ...props }: MobileNavProps) {
       active: pathname === "/organization/account-creation",
     },
     {
+      href: "/organization/user-accounts",
+      label: "User Accounts",
+      active: pathname === "/organization/user-accounts",
+    },
+    {
       href: "/people",
       label: "People",
       active: pathname === "/people",
@@ -99,7 +104,7 @@ export function MobileNav({ className, ...props }: MobileNavProps) {
     },
     {
       href: "/sales/manage-lead",
-      label: "Manage Lead",
+      label: "Manage Leads",
       active: pathname === "/sales/manage-lead",
     },
     {
@@ -187,6 +192,207 @@ export function MobileNav({ className, ...props }: MobileNavProps) {
                     </div>
                   )
                 }
+
+                if (route.label === "Sales") {
+                  return (
+                    <div key={route.href}>
+                      <Link
+                        href={route.href}
+                        className={cn(
+                          "text-sm transition-colors hover:text-primary",
+                          route.active ? "text-black dark:text-white font-semibold" : "text-muted-foreground",
+                        )}
+                        onClick={() => setOpen(false)}
+                      >
+                        {route.label}
+                      </Link>
+                      <div className="px-4 py-2">
+                        <h4 className="text-sm font-medium mb-2 px-3">Sales</h4>
+                        <div className="flex flex-col gap-1 pl-2">
+                          <Link
+                            href="/sales/my-leads"
+                            onClick={() => setOpen(false)}
+                            className={cn(
+                              "flex items-center px-3 py-2 text-sm rounded-md",
+                              pathname === "/sales/my-leads"
+                                ? "bg-accent text-accent-foreground font-medium"
+                                : "text-muted-foreground",
+                            )}
+                          >
+                            My Leads
+                          </Link>
+                          <Link
+                            href="/sales/create-lead"
+                            onClick={() => setOpen(false)}
+                            className={cn(
+                              "flex items-center px-3 py-2 text-sm rounded-md",
+                              pathname === "/sales/create-lead"
+                                ? "bg-accent text-accent-foreground font-medium"
+                                : "text-muted-foreground",
+                            )}
+                          >
+                            Create Lead
+                          </Link>
+                          <Link
+                            href="/sales/manage-lead"
+                            onClick={() => setOpen(false)}
+                            className={cn(
+                              "flex items-center px-3 py-2 text-sm rounded-md",
+                              pathname === "/sales/manage-lead"
+                                ? "bg-accent text-accent-foreground font-medium"
+                                : "text-muted-foreground",
+                            )}
+                          >
+                            Manage Leads
+                          </Link>
+                          <Link
+                            href="/sales/unassigned-lead"
+                            onClick={() => setOpen(false)}
+                            className={cn(
+                              "flex items-center px-3 py-2 text-sm rounded-md",
+                              pathname === "/sales/unassigned-lead"
+                                ? "bg-accent text-accent-foreground font-medium"
+                                : "text-muted-foreground",
+                            )}
+                          >
+                            Unassigned Leads
+                          </Link>
+                          <Link
+                            href="/sales/lead-sources"
+                            onClick={() => setOpen(false)}
+                            className={cn(
+                              "flex items-center px-3 py-2 text-sm rounded-md",
+                              pathname === "/sales/lead-sources"
+                                ? "bg-accent text-accent-foreground font-medium"
+                                : "text-muted-foreground",
+                            )}
+                          >
+                            Lead Sources
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                }
+
+                if (route.label === "Organization") {
+                  return (
+                    <div key={route.href}>
+                      <Link
+                        href={route.href}
+                        className={cn(
+                          "text-sm transition-colors hover:text-primary",
+                          route.active ? "text-black dark:text-white font-semibold" : "text-muted-foreground",
+                        )}
+                        onClick={() => setOpen(false)}
+                      >
+                        {route.label}
+                      </Link>
+                      <div className="px-4 py-2">
+                        <h4 className="text-sm font-medium mb-2 px-3">Organization</h4>
+                        <div className="flex flex-col gap-1 pl-2">
+                          <Link
+                            href="/organization/companies"
+                            onClick={() => setOpen(false)}
+                            className={cn(
+                              "flex items-center px-3 py-2 text-sm rounded-md",
+                              pathname === "/organization/companies"
+                                ? "bg-accent text-accent-foreground font-medium"
+                                : "text-muted-foreground",
+                            )}
+                          >
+                            Companies
+                          </Link>
+                          <Link
+                            href="/organization/branches"
+                            onClick={() => setOpen(false)}
+                            className={cn(
+                              "flex items-center px-3 py-2 text-sm rounded-md",
+                              pathname === "/organization/branches"
+                                ? "bg-accent text-accent-foreground font-medium"
+                                : "text-muted-foreground",
+                            )}
+                          >
+                            Branches
+                          </Link>
+                          <Link
+                            href="/organization/roles"
+                            onClick={() => setOpen(false)}
+                            className={cn(
+                              "flex items-center px-3 py-2 text-sm rounded-md",
+                              pathname === "/organization/roles"
+                                ? "bg-accent text-accent-foreground font-medium"
+                                : "text-muted-foreground",
+                            )}
+                          >
+                            Roles
+                          </Link>
+                          <Link
+                            href="/organization/account-creation"
+                            onClick={() => setOpen(false)}
+                            className={cn(
+                              "flex items-center px-3 py-2 text-sm rounded-md",
+                              pathname === "/organization/account-creation"
+                                ? "bg-accent text-accent-foreground font-medium"
+                                : "text-muted-foreground",
+                            )}
+                          >
+                            Account Creation
+                          </Link>
+                          <Link
+                            href="/organization/user-accounts"
+                            onClick={() => setOpen(false)}
+                            className={cn(
+                              "flex items-center px-3 py-2 text-sm rounded-md",
+                              pathname === "/organization/user-accounts"
+                                ? "bg-accent text-accent-foreground font-medium"
+                                : "text-muted-foreground",
+                            )}
+                          >
+                            User Accounts
+                          </Link>
+                          <Link
+                            href="/organization/vendors"
+                            onClick={() => setOpen(false)}
+                            className={cn(
+                              "flex items-center px-3 py-2 text-sm rounded-md",
+                              pathname === "/organization/vendors"
+                                ? "bg-accent text-accent-foreground font-medium"
+                                : "text-muted-foreground",
+                            )}
+                          >
+                            Vendors
+                          </Link>
+                          <Link
+                            href="/organization/suppliers"
+                            onClick={() => setOpen(false)}
+                            className={cn(
+                              "flex items-center px-3 py-2 text-sm rounded-md",
+                              pathname === "/organization/suppliers"
+                                ? "bg-accent text-accent-foreground font-medium"
+                                : "text-muted-foreground",
+                            )}
+                          >
+                            Suppliers
+                          </Link>
+                          <Link
+                            href="/organization/clients"
+                            onClick={() => setOpen(false)}
+                            className={cn(
+                              "flex items-center px-3 py-2 text-sm rounded-md",
+                              pathname === "/organization/clients"
+                                ? "bg-accent text-accent-foreground font-medium"
+                                : "text-muted-foreground",
+                            )}
+                          >
+                            Clients
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                }
+
                 return (
                   <Link
                     key={route.href}

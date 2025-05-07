@@ -85,6 +85,34 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
                 </Link>
               </li>
               <li>
+                <Link href="/organization/account-creation" legacyBehavior passHref>
+                  <NavigationMenuLink
+                    className={cn(
+                      "block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
+                      pathname === "/organization/account-creation" && "bg-accent text-accent-foreground",
+                    )}
+                  >
+                    <div className="text-sm font-medium leading-none">Account Creation</div>
+                    <p className="line-clamp-2 text-sm leading-snug text-muted-foreground">
+                      Create user accounts for employees
+                    </p>
+                  </NavigationMenuLink>
+                </Link>
+              </li>
+              <li>
+                <Link href="/organization/user-accounts" legacyBehavior passHref>
+                  <NavigationMenuLink
+                    className={cn(
+                      "block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
+                      pathname === "/organization/user-accounts" && "bg-accent text-accent-foreground",
+                    )}
+                  >
+                    <div className="text-sm font-medium leading-none">User Accounts</div>
+                    <p className="line-clamp-2 text-sm leading-snug text-muted-foreground">Manage user accounts</p>
+                  </NavigationMenuLink>
+                </Link>
+              </li>
+              <li>
                 <Link href="/organization/vendors" legacyBehavior passHref>
                   <NavigationMenuLink
                     className={cn(
@@ -120,21 +148,6 @@ export function MainNav({ className, ...props }: React.HTMLAttributes<HTMLElemen
                   >
                     <div className="text-sm font-medium leading-none">Clients</div>
                     <p className="line-clamp-2 text-sm leading-snug text-muted-foreground">Manage your clients</p>
-                  </NavigationMenuLink>
-                </Link>
-              </li>
-              <li>
-                <Link href="/organization/account-creation" legacyBehavior passHref>
-                  <NavigationMenuLink
-                    className={cn(
-                      "block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
-                      pathname === "/organization/account-creation" && "bg-accent text-accent-foreground",
-                    )}
-                  >
-                    <div className="text-sm font-medium leading-none">Account Creation</div>
-                    <p className="line-clamp-2 text-sm leading-snug text-muted-foreground">
-                      Create user accounts for employees
-                    </p>
                   </NavigationMenuLink>
                 </Link>
               </li>
