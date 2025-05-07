@@ -225,7 +225,7 @@ export default async function DashboardPage() {
                         <ActionButton
                           href="/organization/clients"
                           icon={<Briefcase className="h-4 w-4" />}
-                          title="Add Client"
+                          title="View Clients"
                         />
                         <ActionButton
                           href="/sales/create-lead"
@@ -235,7 +235,7 @@ export default async function DashboardPage() {
                         <ActionButton
                           href="/organization/companies"
                           icon={<Building2 className="h-4 w-4" />}
-                          title="Add Company"
+                          title="View Companies"
                         />
                       </div>
                     </CardContent>

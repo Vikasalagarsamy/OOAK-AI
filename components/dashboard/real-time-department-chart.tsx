@@ -10,9 +10,13 @@ type DepartmentData = {
   id?: string | number
 }
 
-export function RealTimeDepartmentChart({ initialData }: { initialData: DepartmentData[] }) {
+interface RealTimeDepartmentChartProps {
+  initialData: DepartmentData[]
+}
+
+export function RealTimeDepartmentChart({ initialData }: RealTimeDepartmentChartProps) {
   const [data, setData] = useState<DepartmentData[]>(
-    initialData.length > 0
+    initialData && initialData.length > 0
       ? initialData
       : [
           { department: "Engineering", count: 24 },
@@ -53,7 +57,7 @@ export function RealTimeDepartmentChart({ initialData }: { initialData: Departme
   // Refresh data on mount and every 30 seconds
   useEffect(() => {
     // Initial refresh if no data
-    if (initialData.length === 0) {
+    if (!initialData || initialData.length === 0) {
       refreshData()
     }
 
@@ -62,7 +66,7 @@ export function RealTimeDepartmentChart({ initialData }: { initialData: Departme
     }, 30000) // 30 seconds
 
     return () => clearInterval(interval)
-  }, [initialData.length])
+  }, [initialData])
 
   // Calculate maximum count for percentage calculations
   const maxCount = Math.max(...data.map((d) => d.count), 1)
