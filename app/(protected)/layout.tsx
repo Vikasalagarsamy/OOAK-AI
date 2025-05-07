@@ -4,8 +4,10 @@ import { redirect } from "next/navigation"
 import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import { LogOut, LayoutDashboard, Building2, Users, BarChart } from "lucide-react"
+import { LogOut } from "lucide-react"
 import AuthCheck from "@/components/auth-check"
+import { NavigationMenu } from "@/components/navigation-menu"
+import { MobileNavigation } from "@/components/mobile-navigation"
 
 export default async function ProtectedLayout({
   children,
@@ -22,48 +24,23 @@ export default async function ProtectedLayout({
     <div className="min-h-screen flex flex-col">
       <AuthCheck />
 
-      {/* Static Header with Hardcoded Navigation */}
+      {/* Enhanced Header with Hover-based Navigation */}
       <header className="sticky top-0 z-50 w-full border-b bg-background">
         <div className="container flex h-16 items-center justify-between">
-          <div className="flex items-center">
+          <div className="flex items-center flex-1">
+            <MobileNavigation />
             <Link href="/" className="font-bold text-lg mr-8">
-              Photography Portal
+              ONE OF A KIND PORTAL
             </Link>
 
-            {/* Hardcoded Navigation Links */}
-            <nav className="flex items-center space-x-6">
-              <Link href="/" className="flex items-center text-sm font-medium transition-colors hover:text-primary">
-                <LayoutDashboard className="mr-2 h-4 w-4" />
-                Dashboard
-              </Link>
-              <Link
-                href="/organization"
-                className="flex items-center text-sm font-medium transition-colors hover:text-primary"
-              >
-                <Building2 className="mr-2 h-4 w-4" />
-                Organization
-              </Link>
-              <Link
-                href="/people"
-                className="flex items-center text-sm font-medium transition-colors hover:text-primary"
-              >
-                <Users className="mr-2 h-4 w-4" />
-                People
-              </Link>
-              <Link
-                href="/sales"
-                className="flex items-center text-sm font-medium transition-colors hover:text-primary"
-              >
-                <BarChart className="mr-2 h-4 w-4" />
-                Sales
-              </Link>
-            </nav>
+            {/* Desktop Navigation Menu Component with hover-based submenus */}
+            <NavigationMenu />
           </div>
 
           <div className="flex items-center gap-4">
             {user && (
               <div className="flex items-center gap-2">
-                <div className="text-right">
+                <div className="text-right hidden sm:block">
                   <p className="text-sm font-medium">{user.username}</p>
                   <p className="text-xs text-muted-foreground">Role: {user.roleName || "Administrator"}</p>
                 </div>
