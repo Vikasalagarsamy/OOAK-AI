@@ -6,6 +6,7 @@ import { Avatar, AvatarFallback } from "./ui/avatar"
 import { getCurrentUser } from "@/actions/auth-actions"
 import { redirect } from "next/navigation"
 import { cookies } from "next/headers"
+import { DynamicMenu } from "./dynamic-menu/dynamic-menu"
 
 // Server action for logout
 async function handleLogout() {
@@ -21,25 +22,12 @@ export async function Header() {
     <header className="sticky top-0 z-40 w-full border-b bg-background">
       <div className="container flex h-16 items-center">
         <Link href="/" className="flex items-center space-x-2">
-          <span className="font-bold">Photography Portal</span>
+          <span className="font-bold">ONE OF A KIND PORTAL</span>
         </Link>
 
         <div className="flex items-center justify-between flex-1">
-          {/* HARDCODED MENU - Replace DynamicMenu with this */}
-          <nav className="mx-6 flex items-center space-x-4">
-            <Link href="/" className="text-sm font-medium transition-colors hover:text-primary">
-              Dashboard
-            </Link>
-            <Link href="/organization" className="text-sm font-medium transition-colors hover:text-primary">
-              Organization
-            </Link>
-            <Link href="/people" className="text-sm font-medium transition-colors hover:text-primary">
-              People
-            </Link>
-            <Link href="/sales" className="text-sm font-medium transition-colors hover:text-primary">
-              Sales
-            </Link>
-          </nav>
+          {/* Use the DynamicMenu component instead of hard-coded links */}
+          <DynamicMenu className="mx-6" />
 
           <div className="flex items-center gap-2">
             {user ? (

@@ -92,6 +92,8 @@ export async function getMenuForCurrentUser(): Promise<MenuItemWithPermission[]>
     const roleId = user.roleId || 1 // Default to role ID 1 if not set
     const permissions = await getMenuPermissionsByRoleId(roleId)
 
+    console.log(`getMenuForCurrentUser: Retrieved ${permissions.length} permissions for role ID ${roleId}`)
+
     // Map permissions to menu items
     const menuWithPermissions = allMenuItems.map((menuItem) => {
       // If user is admin (role ID 1), grant all permissions automatically

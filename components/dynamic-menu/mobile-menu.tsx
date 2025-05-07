@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -17,6 +17,14 @@ export function MobileMenu({ className }: MobileMenuProps) {
   const [open, setOpen] = useState(false)
   const { menu, loading, error } = useMenu()
   const pathname = usePathname()
+
+  useEffect(() => {
+    console.log("MobileMenu rendered with:", {
+      menuItems: menu?.length || 0,
+      loading,
+      error,
+    })
+  }, [menu, loading, error])
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>

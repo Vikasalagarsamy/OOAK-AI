@@ -6,12 +6,24 @@ import {
   NavigationMenu as Nav,
   NavigationMenuContent,
   NavigationMenuItem,
-  NavigationMenuLink,
   NavigationMenuList,
   NavigationMenuTrigger,
+  NavigationMenuLink,
 } from "@/components/ui/navigation-menu"
 import { cn } from "@/lib/utils"
-import { LayoutDashboard, Building2, Users, BarChart, UserCog, Briefcase, Building } from "lucide-react"
+import {
+  LayoutDashboard,
+  Building2,
+  Users,
+  BarChart,
+  UserCog,
+  Briefcase,
+  Building,
+  PieChart,
+  GitBranch,
+  TrendingUp,
+  Settings,
+} from "lucide-react"
 
 export function NavigationMenu() {
   const pathname = usePathname()
@@ -89,6 +101,39 @@ export function NavigationMenu() {
               </ListItem>
               <ListItem href="/sales/lead-sources" title="Lead Sources" icon={<Briefcase className="h-4 w-4" />}>
                 Manage lead sources
+              </ListItem>
+            </ul>
+          </NavigationMenuContent>
+        </NavigationMenuItem>
+
+        <NavigationMenuItem>
+          <NavigationMenuTrigger>
+            <BarChart className="mr-2 h-4 w-4" /> Reports
+          </NavigationMenuTrigger>
+          <NavigationMenuContent>
+            <ul className="grid w-[400px] gap-3 p-4 md:w-[500px] md:grid-cols-2 lg:w-[600px]">
+              <ListItem
+                href="/reports/lead-sources"
+                title="Lead Source Analysis"
+                icon={<PieChart className="h-4 w-4" />}
+              >
+                Analyze performance of different lead sources
+              </ListItem>
+              <ListItem
+                href="/reports/conversion-funnel"
+                title="Conversion Funnel"
+                icon={<GitBranch className="h-4 w-4" />}
+              >
+                Track lead progression through sales stages
+              </ListItem>
+              <ListItem href="/reports/team-performance" title="Team Performance" icon={<Users className="h-4 w-4" />}>
+                Compare sales team performance metrics
+              </ListItem>
+              <ListItem href="/reports/trends" title="Trend Analysis" icon={<TrendingUp className="h-4 w-4" />}>
+                Analyze lead and conversion trends over time
+              </ListItem>
+              <ListItem href="/reports/custom" title="Custom Reports" icon={<Settings className="h-4 w-4" />}>
+                Create and save custom report configurations
               </ListItem>
             </ul>
           </NavigationMenuContent>

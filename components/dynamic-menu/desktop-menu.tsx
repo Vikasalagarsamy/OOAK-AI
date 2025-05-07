@@ -15,7 +15,25 @@ export function DesktopMenu({ className }: DesktopMenuProps) {
   const pathname = usePathname()
 
   useEffect(() => {
-    console.log("DesktopMenu rendered with:", { menu, loading, error })
+    console.log("DesktopMenu rendered with:", {
+      menuItems: menu?.length || 0,
+      loading,
+      error,
+    })
+
+    // Log the actual menu items for debugging
+    if (menu && menu.length > 0) {
+      console.log(
+        "Menu items:",
+        menu.map((item) => ({
+          id: item.id,
+          name: item.name,
+          path: item.path,
+          permissions: item.permissions,
+          children: item.children?.length || 0,
+        })),
+      )
+    }
   }, [menu, loading, error])
 
   return (

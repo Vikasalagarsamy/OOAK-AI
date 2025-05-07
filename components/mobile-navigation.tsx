@@ -18,6 +18,10 @@ import {
   UserCog,
   Briefcase,
   Building,
+  PieChart,
+  GitBranch,
+  TrendingUp,
+  Settings,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -147,6 +151,42 @@ const navigationItems: NavItem[] = [
       },
     ],
   },
+  {
+    title: "Reports",
+    icon: <BarChart className="h-4 w-4" />,
+    submenu: [
+      {
+        title: "Lead Source Analysis",
+        href: "/reports/lead-sources",
+        icon: <PieChart className="h-4 w-4" />,
+        description: "Analyze performance of different lead sources",
+      },
+      {
+        title: "Conversion Funnel",
+        href: "/reports/conversion-funnel",
+        icon: <GitBranch className="h-4 w-4" />,
+        description: "Track lead progression through sales stages",
+      },
+      {
+        title: "Team Performance",
+        href: "/reports/team-performance",
+        icon: <Users className="h-4 w-4" />,
+        description: "Compare sales team performance metrics",
+      },
+      {
+        title: "Trend Analysis",
+        href: "/reports/trends",
+        icon: <TrendingUp className="h-4 w-4" />,
+        description: "Analyze lead and conversion trends over time",
+      },
+      {
+        title: "Custom Reports",
+        href: "/reports/custom",
+        icon: <Settings className="h-4 w-4" />,
+        description: "Create and save custom report configurations",
+      },
+    ],
+  },
 ]
 
 export function MobileNavigation() {
@@ -169,7 +209,7 @@ export function MobileNavigation() {
       <SheetContent side="left" className="p-0 w-[280px]">
         <div className="flex flex-col h-full">
           <div className="border-b p-4 flex items-center justify-between">
-            <h2 className="font-semibold">Photography Portal</h2>
+            <h2 className="font-semibold">ONE OF A KIND PORTAL</h2>
             <Button variant="ghost" size="icon" onClick={() => setOpen(false)}>
               <X className="h-4 w-4" />
             </Button>

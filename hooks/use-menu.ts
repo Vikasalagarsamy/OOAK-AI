@@ -29,15 +29,54 @@ async function fetchMenu() {
   }
 }
 
+// Function to fetch the current user's role
+async function fetchUserRole() {
+  try {
+    const response = await fetch("/api/auth/status", {
+      method: "GET",
+      headers: {
+        "Cache-Control": "no-cache",
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch user status: ${response.status}`)
+    }
+
+    const data = await response.json()
+    return data.user?.roleId || null
+  } catch (error) {
+    console.error("Error fetching user role:", error)
+    return null
+  }
+}
+
 // Hook for using the menu in components
 export function useMenu() {
   const [menu, setMenu] = useState<MenuItemWithPermission[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [currentRoleId, setCurrentRoleId] = useState<number | null>(null)
 
   useEffect(() => {
     let isMounted = true
     console.log("useMenu hook initialized")
+
+    // Check for role changes
+    const checkRoleChanges = async () => {
+      try {
+        const roleId = await fetchUserRole()
+        if (isMounted && roleId !== currentRoleId) {
+          console.log(`Role changed from ${currentRoleId} to ${roleId}, refreshing menu`)
+          setCurrentRoleId(roleId)
+          return true
+        }
+        return false
+      } catch (err) {
+        console.error("Error checking role changes:", err)
+        return false
+      }
+    }
 
     async function loadMenu() {
       try {
@@ -66,17 +105,25 @@ export function useMenu() {
     // Load menu immediately
     loadMenu()
 
-    // Set up a refresh interval (every 30 seconds)
-    const refreshInterval = setInterval(() => {
-      console.log("Refreshing menu data...")
-      loadMenu()
-    }, 30000)
+    // Also check for role changes
+    checkRoleChanges()
+
+    // Set up a refresh interval (every 10 seconds)
+    const refreshInterval = setInterval(async () => {
+      console.log("Checking for role changes...")
+      const roleChanged = await checkRoleChanges()
+
+      if (roleChanged) {
+        console.log("Role changed, refreshing menu data...")
+        loadMenu()
+      }
+    }, 10000)
 
     return () => {
       isMounted = false
       clearInterval(refreshInterval)
     }
-  }, [])
+  }, [currentRoleId])
 
   return { menu, loading, error }
 }

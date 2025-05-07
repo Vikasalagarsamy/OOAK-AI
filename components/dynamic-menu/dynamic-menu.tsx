@@ -12,8 +12,6 @@ export function DynamicMenu({ className }: { className?: string }) {
 
   return (
     <div className="flex items-center">
-      {/* Add a visible debug element */}
-      <span className="text-xs text-muted-foreground mr-2">Menu:</span>
       <DesktopMenu className={className} />
       <MobileMenu className={className} />
     </div>
