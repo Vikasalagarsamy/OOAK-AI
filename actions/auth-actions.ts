@@ -2,7 +2,6 @@
 
 import { cookies } from "next/headers"
 import { createClient } from "@/lib/supabase"
-import { redirect } from "next/navigation"
 import bcrypt from "bcryptjs"
 import { SignJWT, jwtVerify } from "jose"
 
@@ -224,11 +223,20 @@ export async function getCurrentUser() {
   }
 }
 
-// Logout functionality
+// Logout functionality - FIXED to properly handle client-side redirects
 export async function logout() {
-  const cookieStore = cookies()
-  cookieStore.delete("auth_token")
-  redirect("/login")
+  try {
+    // Clear the auth token cookie
+    const cookieStore = cookies()
+    cookieStore.delete("auth_token")
+
+    // Return success instead of redirecting
+    // This allows client components to handle the redirect
+    return { success: true }
+  } catch (error) {
+    console.error("Logout error:", error)
+    return { success: false, error: "Failed to log out" }
+  }
 }
 
 // Check if user has required permission

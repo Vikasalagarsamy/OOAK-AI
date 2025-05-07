@@ -4,7 +4,7 @@ import { jwtVerify } from "jose"
 
 export async function middleware(req: NextRequest) {
   // Public paths that don't require authentication
-  const publicPaths = ["/login", "/forgot-password"]
+  const publicPaths = ["/login", "/forgot-password", "/api/auth/logout"]
   const path = req.nextUrl.pathname
 
   // Allow access to public paths and static files

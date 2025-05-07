@@ -1,11 +1,12 @@
 import Link from "next/link"
-import { LogOut, User } from "lucide-react"
+import { User } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu"
 import { Button } from "./ui/button"
 import { Avatar, AvatarFallback } from "./ui/avatar"
 import { getCurrentUser } from "@/actions/auth-actions"
+import { LogoutButton } from "./logout-button"
 
-export async function Header() {
+export async function HeaderWithClientLogout() {
   const user = await getCurrentUser()
 
   return (
@@ -40,11 +41,8 @@ export async function Header() {
                     <p className="text-xs text-muted-foreground">{user.email || user.username}</p>
                     <p className="text-xs text-muted-foreground">Role: {user.roleName || "Unknown"}</p>
                   </div>
-                  <DropdownMenuItem asChild>
-                    <Link href="/auth/logout" className="flex w-full items-center">
-                      <LogOut className="mr-2 h-4 w-4" />
-                      <span>Log out</span>
-                    </Link>
+                  <DropdownMenuItem>
+                    <LogoutButton />
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

@@ -150,12 +150,32 @@ export async function getMenuForCurrentUser(): Promise<MenuItemWithPermission[]>
 // Helper function to build a nested menu tree
 function buildMenuTree(items: MenuItemWithPermission[], parentId: number | null = null): MenuItemWithPermission[] {
   try {
-    return items
-      .filter((item) => item.parentId === parentId)
-      .map((item) => ({
-        ...item,
-        children: buildMenuTree(items, item.id),
-      }))
+    // First, get all items that match the current parentId
+    const currentLevelItems = items.filter((item) => item.parentId === parentId)
+
+    // For each item at this level, recursively build its children
+    return currentLevelItems
+      .map((item) => {
+        // Get all children for this item
+        const children = buildMenuTree(items, item.id)
+
+        // If this is a parent item with no visible children, we need to check if it should be shown
+        if (children.length === 0 && item.parentId !== null) {
+          // Keep the item as is
+          return { ...item, children }
+        }
+
+        // Otherwise, include the item with its children
+        return { ...item, children }
+      })
+      .filter((item) => {
+        // Filter out parent items with no children and no direct path
+        // This prevents empty categories from showing in the menu
+        if (item.children.length === 0 && !item.path) {
+          return false
+        }
+        return true
+      })
       .sort((a, b) => a.sortOrder - b.sortOrder)
   } catch (error) {
     console.error("Error in buildMenuTree:", error)

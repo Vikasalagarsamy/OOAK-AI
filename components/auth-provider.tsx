@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
 import { useRouter, usePathname } from "next/navigation"
-import { getCurrentUser, logout } from "@/actions/auth-actions"
+import { getCurrentUser } from "@/actions/auth-actions"
 import { useToast } from "@/components/ui/use-toast"
 
 // Define the user type
@@ -21,7 +21,7 @@ type User = {
 type AuthContextType = {
   user: User
   loading: boolean
-  logout: () => Promise<void>
+  logout: () => void
   refreshUser: () => Promise<void>
   isAdmin: boolean
   hasPermission: (resource: string, action: string) => Promise<boolean>
@@ -30,7 +30,7 @@ type AuthContextType = {
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
-  logout: async () => {},
+  logout: () => {},
   refreshUser: async () => {},
   isAdmin: false,
   hasPermission: async () => false,
@@ -60,24 +60,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  // Handle logout
-  const handleLogout = async () => {
-    try {
-      await logout()
-      setUser(null)
-      toast({
-        title: "Logged out successfully",
-        description: "You have been logged out of your account.",
-      })
-      router.push("/login")
-    } catch (error) {
-      console.error("Logout error:", error)
-      toast({
-        variant: "destructive",
-        title: "Logout failed",
-        description: "There was an error logging you out. Please try again.",
-      })
-    }
+  // Simplified logout that uses direct navigation
+  const handleLogout = () => {
+    // Navigate directly to the logout API endpoint
+    window.location.href = "/api/auth/logout"
   }
 
   // Check permission function that can be used in components
