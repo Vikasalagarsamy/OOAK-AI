@@ -1,6 +1,7 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { UsersByRole } from "@/components/admin/users-by-role-client"
 import { AssignRoleForm } from "@/components/admin/assign-role-form"
+import { MenuPermissionsManager } from "@/components/admin/menu-permissions-manager"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { CheckCircle2 } from "lucide-react"
 
@@ -9,13 +10,17 @@ export default function RolePermissionsPage() {
     <div className="container mx-auto py-6">
       <h1 className="text-2xl font-bold mb-6">Role Management</h1>
 
-      <Tabs defaultValue="users" className="w-full">
+      <Tabs defaultValue="menu" className="w-full">
         <TabsList className="mb-4">
+          <TabsTrigger value="menu">Menu Permissions</TabsTrigger>
           <TabsTrigger value="users">Users by Role</TabsTrigger>
           <TabsTrigger value="assign">Assign Roles</TabsTrigger>
           <TabsTrigger value="verify">Verify Permissions</TabsTrigger>
-          <TabsTrigger value="permissions">Menu Permissions</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="menu">
+          <MenuPermissionsManager />
+        </TabsContent>
 
         <TabsContent value="users">
           <UsersByRole />
@@ -91,15 +96,6 @@ export default function RolePermissionsPage() {
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
-
-        <TabsContent value="permissions">
-          {/* Your existing role permissions component */}
-          <div className="bg-gray-100 p-6 rounded-md">
-            <p className="text-muted-foreground">
-              Configure which menu items are visible to each role and what actions they can perform.
-            </p>
-          </div>
         </TabsContent>
       </Tabs>
     </div>
