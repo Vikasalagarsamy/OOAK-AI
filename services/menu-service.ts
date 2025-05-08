@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase"
-import type { MenuItem, MenuPermission, MenuItemWithPermission } from "@/types/menu"
+import type { MenuItem, MenuItemWithPermission } from "@/types/menu"
 import { getCurrentUser } from "@/actions/auth-actions"
 
 // Function to get all menu items
@@ -33,34 +33,6 @@ export async function getAllMenuItems(): Promise<MenuItem[]> {
   }
 }
 
-// Function to get menu permissions for a specific role
-export async function getMenuPermissionsByRoleId(roleId: number): Promise<MenuPermission[]> {
-  console.log(`getMenuPermissionsByRoleId: Fetching permissions for role ID ${roleId}`)
-  try {
-    const supabase = createClient()
-
-    const { data, error } = await supabase.from("role_menu_permissions").select("*").eq("role_id", roleId)
-
-    if (error) {
-      console.error("Error fetching menu permissions:", error)
-      return []
-    }
-
-    console.log(`getMenuPermissionsByRoleId: Found ${data?.length || 0} permissions for role ID ${roleId}`)
-
-    return (data || []).map((permission) => ({
-      menuItemId: permission.menu_item_id,
-      canView: permission.can_view,
-      canAdd: permission.can_add,
-      canEdit: permission.can_edit,
-      canDelete: permission.can_delete,
-    }))
-  } catch (error) {
-    console.error(`Unexpected error in getMenuPermissionsByRoleId for roleId ${roleId}:`, error)
-    return []
-  }
-}
-
 // Function to get menu items with permissions for the current user
 export async function getMenuForCurrentUser(): Promise<MenuItemWithPermission[]> {
   try {
@@ -81,63 +53,39 @@ export async function getMenuForCurrentUser(): Promise<MenuItemWithPermission[]>
       isAdmin: user.isAdmin,
     })
 
-    // Get all menu items and permissions
-    const allMenuItems = await getAllMenuItems()
+    // Use our new database function to get menu permissions for the user
+    const supabase = createClient()
+    const { data, error } = await supabase.rpc("get_user_menu_permissions", {
+      p_user_id: user.id,
+    })
 
-    if (allMenuItems.length === 0) {
-      console.warn("getMenuForCurrentUser: No menu items found in the database")
+    if (error) {
+      console.error("Error fetching menu permissions:", error)
       return []
     }
 
-    const roleId = user.roleId || 1 // Default to role ID 1 if not set
-    const permissions = await getMenuPermissionsByRoleId(roleId)
+    console.log(`getMenuForCurrentUser: Retrieved ${data?.length || 0} menu items with permissions`)
 
-    console.log(`getMenuForCurrentUser: Retrieved ${permissions.length} permissions for role ID ${roleId}`)
-
-    // Map permissions to menu items
-    const menuWithPermissions = allMenuItems.map((menuItem) => {
-      // If user is admin (role ID 1), grant all permissions automatically
-      if (user.isAdmin || roleId === 1) {
-        return {
-          ...menuItem,
-          permissions: {
-            canView: true,
-            canAdd: true,
-            canEdit: true,
-            canDelete: true,
-          },
-        }
-      }
-
-      // Otherwise, check permissions from the database
-      const permission = permissions.find((p) => p.menuItemId === menuItem.id) || {
-        menuItemId: menuItem.id,
-        canView: false,
-        canAdd: false,
-        canEdit: false,
-        canDelete: false,
-      }
-
-      return {
-        ...menuItem,
-        permissions: {
-          canView: permission.canView,
-          canAdd: permission.canAdd,
-          canEdit: permission.canEdit,
-          canDelete: permission.canDelete,
-        },
-      }
-    })
-
-    // Only include visible items and those the user can view
-    const filteredMenuItems = menuWithPermissions.filter(
-      (item) => item.isVisible && (user.isAdmin || roleId === 1 || item.permissions.canView),
-    )
-
-    console.log(`getMenuForCurrentUser: Filtered to ${filteredMenuItems.length} visible menu items`)
+    // Convert the data to our expected format
+    const menuWithPermissions = (data || []).map((item) => ({
+      id: item.menu_item_id,
+      parentId: item.parent_id,
+      name: item.menu_name,
+      path: item.menu_path,
+      icon: item.icon,
+      isVisible: item.is_visible,
+      sortOrder: 0, // We'll sort them later
+      permissions: {
+        canView: item.can_view,
+        canAdd: item.can_add,
+        canEdit: item.can_edit,
+        canDelete: item.can_delete,
+      },
+      children: [],
+    }))
 
     // Build menu tree
-    const menuTree = buildMenuTree(filteredMenuItems)
+    const menuTree = buildMenuTree(menuWithPermissions)
     console.log(`getMenuForCurrentUser: Final menu tree has ${menuTree.length} top-level items`)
 
     return menuTree

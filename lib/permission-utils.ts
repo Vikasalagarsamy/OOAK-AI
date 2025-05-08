@@ -1,32 +1,126 @@
-// This file has been modified to bypass permission checks
+import { jwtVerify } from "jose" // Using jose instead of jsonwebtoken
+import { cookies } from "next/headers"
+import { createClient } from "./supabase"
 
-// Check if a user has a specific permission - always returns true
-export async function hasPermission(userId: string, permissionPath: string, action = "view"): Promise<boolean> {
-  // Always return true to bypass permission checks
-  return true
+// Helper to verify auth token
+export async function verifyAuth(token: string) {
+  try {
+    const secret = process.env.JWT_SECRET || "fallback-secret-only-for-development"
+    const secretKey = new TextEncoder().encode(secret)
+
+    const { payload } = await jwtVerify(token, secretKey, {
+      algorithms: ["HS256"],
+    })
+
+    // Verify that the user still exists and is active
+    const supabase = createClient()
+    const { data, error } = await supabase.from("user_accounts").select("is_active").eq("id", payload.sub).single()
+
+    if (error || !data || !data.is_active) {
+      return { valid: false, payload: null }
+    }
+
+    return { valid: true, payload }
+  } catch (error) {
+    console.error("Token verification error:", error)
+    return { valid: false, payload: null }
+  }
 }
 
-// Get current user - returns a mock user
+// Check user's permission for a specific resource and action
+export async function hasPermission(userId: string, menuPath: string, action = "view") {
+  try {
+    console.log(`Checking permission for user ${userId}, menu ${menuPath}, action ${action}`)
+
+    const supabase = createClient()
+
+    // Use our new database function to check permissions
+    const { data, error } = await supabase.rpc("check_user_menu_permission", {
+      p_user_id: userId,
+      p_menu_path: menuPath,
+      p_permission: action,
+    })
+
+    if (error) {
+      console.error("Permission check error:", error)
+      return false
+    }
+
+    console.log(`Permission check result: ${data}`)
+    return data
+  } catch (error) {
+    console.error("Permission check error:", error)
+    return false
+  }
+}
+
+// Get current user from session
 export async function getCurrentUser() {
-  // Return a mock user
-  return {
-    id: "00000000-0000-0000-0000-000000000000",
-    email: "admin@example.com",
-    role: "admin",
+  try {
+    const cookieStore = cookies()
+    const token = cookieStore.get("auth_token")?.value
+
+    if (!token) {
+      console.log("No auth token found in cookies")
+      return null
+    }
+
+    const { valid, payload } = await verifyAuth(token)
+
+    if (!valid || !payload) {
+      console.log("Invalid token or payload")
+      return null
+    }
+
+    // Get user ID from token
+    const userId = payload.sub
+
+    // Get user details from database
+    const supabase = createClient()
+    const { data: user, error } = await supabase
+      .from("user_accounts")
+      .select(`
+        id, 
+        username, 
+        email, 
+        is_active, 
+        employee_id, 
+        role_id,
+        roles:role_id (
+          id, 
+          title
+        )
+      `)
+      .eq("id", userId)
+      .single()
+
+    if (error || !user || !user.is_active) {
+      console.log("User not found or inactive")
+      return null
+    }
+
+    return {
+      id: user.id,
+      username: user.username,
+      email: user.email || "",
+      employeeId: user.employee_id,
+      roleId: user.role_id,
+      roleName: user.roles?.title || "",
+      isAdmin: user.roles?.title === "Administrator" || user.role_id === 1,
+    }
+  } catch (error) {
+    console.error("Session validation error:", error)
+    return null
   }
 }
 
-// Check multiple permissions at once - always returns true for all
-export async function checkPermissions(
-  userId: string,
-  permissions: { path: string; action?: string }[],
-): Promise<Record<string, boolean>> {
-  const results: Record<string, boolean> = {}
-
-  // Set all permissions to true
-  for (const { path } of permissions) {
-    results[path] = true
-  }
-
+// Check permissions for multiple paths
+export async function checkPermissions(userId: string, permissionsToCheck: { path: string; action?: string }[]) {
+  const results = {}
+  await Promise.all(
+    permissionsToCheck.map(async (perm) => {
+      results[perm.path] = await hasPermission(userId, perm.path, perm.action || "view")
+    }),
+  )
   return results
 }

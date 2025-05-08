@@ -27,54 +27,23 @@ export async function GET(request: Request) {
       )
     }
 
-    // Admin has all permissions
-    if (user.isAdmin || user.roleId === 1) {
-      return NextResponse.json(
-        { canView: true, canAdd: true, canEdit: true, canDelete: true },
-        {
-          status: 200,
-          headers: {
-            "Cache-Control": "no-store, max-age=0, must-revalidate",
-            Pragma: "no-cache",
-            Expires: "0",
-          },
-        },
-      )
-    }
-
-    // Get menu item by path
+    // Use our new database function to check permissions
     const supabase = createClient()
-    const { data: menuItem, error: menuError } = await supabase
-      .from("menu_items")
-      .select("id")
-      .eq("path", path)
-      .single()
 
-    if (menuError || !menuItem) {
-      console.error("Error finding menu item for path:", path, menuError)
-      return NextResponse.json(
-        { canView: false, canAdd: false, canEdit: false, canDelete: false },
-        {
-          status: 200,
-          headers: {
-            "Cache-Control": "no-store, max-age=0, must-revalidate",
-            Pragma: "no-cache",
-            Expires: "0",
-          },
-        },
+    // Check each permission type
+    const [viewResult, addResult, editResult, deleteResult] = await Promise.all([
+      supabase.rpc("check_user_menu_permission", { p_user_id: user.id, p_menu_path: path, p_permission: "view" }),
+      supabase.rpc("check_user_menu_permission", { p_user_id: user.id, p_menu_path: path, p_permission: "add" }),
+      supabase.rpc("check_user_menu_permission", { p_user_id: user.id, p_menu_path: path, p_permission: "edit" }),
+      supabase.rpc("check_user_menu_permission", { p_user_id: user.id, p_menu_path: path, p_permission: "delete" }),
+    ])
+
+    // Handle any errors
+    if (viewResult.error || addResult.error || editResult.error || deleteResult.error) {
+      console.error(
+        "Error checking permissions:",
+        viewResult.error || addResult.error || editResult.error || deleteResult.error,
       )
-    }
-
-    // Get permissions for this menu item and role
-    const { data: permission, error: permError } = await supabase
-      .from("role_menu_permissions")
-      .select("can_view, can_add, can_edit, can_delete")
-      .eq("role_id", user.roleId)
-      .eq("menu_item_id", menuItem.id)
-      .single()
-
-    if (permError) {
-      console.error("Error finding permissions:", permError)
       return NextResponse.json(
         { canView: false, canAdd: false, canEdit: false, canDelete: false },
         {
@@ -91,10 +60,10 @@ export async function GET(request: Request) {
     // Return permissions
     return NextResponse.json(
       {
-        canView: permission?.can_view || false,
-        canAdd: permission?.can_add || false,
-        canEdit: permission?.can_edit || false,
-        canDelete: permission?.can_delete || false,
+        canView: viewResult.data || false,
+        canAdd: addResult.data || false,
+        canEdit: editResult.data || false,
+        canDelete: deleteResult.data || false,
       },
       {
         status: 200,
