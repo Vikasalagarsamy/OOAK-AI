@@ -1,6 +1,13 @@
 import { jwtVerify } from "jose" // Using jose instead of jsonwebtoken
-import { cookies } from "next/headers"
-import { createClient } from "./supabase"
+import { createClient } from "@supabase/supabase-js"
+
+// Create a Supabase client for permission operations
+export function createPermissionClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ""
+
+  return createClient(supabaseUrl, supabaseKey)
+}
 
 // Helper to verify auth token
 export async function verifyAuth(token: string) {
@@ -13,7 +20,7 @@ export async function verifyAuth(token: string) {
     })
 
     // Verify that the user still exists and is active
-    const supabase = createClient()
+    const supabase = createPermissionClient()
     const { data, error } = await supabase.from("user_accounts").select("is_active").eq("id", payload.sub).single()
 
     if (error || !data || !data.is_active) {
@@ -32,7 +39,7 @@ export async function hasPermission(userId: string, menuPath: string, action = "
   try {
     console.log(`Checking permission for user ${userId}, menu ${menuPath}, action ${action}`)
 
-    const supabase = createClient()
+    const supabase = createPermissionClient()
 
     // Use our new database function to check permissions
     const { data, error } = await supabase.rpc("check_user_menu_permission", {
@@ -57,11 +64,12 @@ export async function hasPermission(userId: string, menuPath: string, action = "
 // Get current user from session
 export async function getCurrentUser() {
   try {
-    const cookieStore = cookies()
-    const token = cookieStore.get("auth_token")?.value
+    // In a non-server environment, we need to get the token from localStorage or cookies
+    // This is a simplified version that would need to be adapted based on your auth flow
+    const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
 
     if (!token) {
-      console.log("No auth token found in cookies")
+      console.log("No auth token found")
       return null
     }
 
@@ -76,7 +84,7 @@ export async function getCurrentUser() {
     const userId = payload.sub
 
     // Get user details from database
-    const supabase = createClient()
+    const supabase = createPermissionClient()
     const { data: user, error } = await supabase
       .from("user_accounts")
       .select(`

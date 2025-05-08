@@ -116,3 +116,18 @@ export function createClient() {
 
 // Also export the original createClient from supabase for maximum compatibility
 export const originalCreateClient = supabaseCreateClient
+
+// Create a singleton to prevent multiple instances
+let supabaseClient: any = null
+
+export function createSingletonClient() {
+  if (supabaseClient) return supabaseClient
+
+  // Create a new client if one doesn't exist
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
+
+  supabaseClient = supabaseCreateClient(supabaseUrl, supabaseKey)
+
+  return supabaseClient
+}

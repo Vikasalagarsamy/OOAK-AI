@@ -1,6 +1,27 @@
 import { jwtVerify } from "jose" // Using jose instead of jsonwebtoken
 import { cookies } from "next/headers"
 import { createClient } from "./supabase"
+import { createClient as createSupabaseClient } from "@supabase/supabase-js"
+
+// Create a Supabase client for auth operations
+export function createAuthClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
+
+  return createSupabaseClient(supabaseUrl, supabaseKey)
+}
+
+// Check if a user is authenticated
+export async function isAuthenticated() {
+  const supabase = createAuthClient()
+  const { data, error } = await supabase.auth.getSession()
+
+  if (error || !data.session) {
+    return false
+  }
+
+  return true
+}
 
 // Helper to verify auth token
 export async function verifyAuth(token: string) {
