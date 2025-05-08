@@ -134,6 +134,9 @@ async function createSessionToken(user: any) {
     username: user.username,
     role: user.roleId,
     roleName: user.roleName,
+    // Add a timestamp to ensure the token is unique even if other data is the same
+    iat: Math.floor(Date.now() / 1000),
+    jti: `${user.id}-${Date.now()}`,
   })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
@@ -249,4 +252,78 @@ export async function hasPermission(requiredRole: string) {
 
   // Check specific role match
   return user.roleName === requiredRole
+}
+
+// Add this function to refresh user session with fresh permissions
+export async function refreshUserSession() {
+  try {
+    // First, get the current user data
+    const currentUser = await getCurrentUser()
+
+    if (!currentUser) {
+      console.error("No user found to refresh session")
+      return { success: false, error: "No active session found" }
+    }
+
+    // Create a new JWT token with fresh data
+    const supabase = createClient()
+    const { data: userData, error: userError } = await supabase
+      .from("user_accounts")
+      .select(`
+        id, 
+        username, 
+        email, 
+        is_active, 
+        employee_id, 
+        role_id,
+        employees:employee_id (
+          id, 
+          first_name, 
+          last_name
+        ),
+        roles:role_id (
+          id, 
+          title
+        )
+      `)
+      .eq("id", currentUser.id)
+      .single()
+
+    if (userError || !userData) {
+      console.error("Error refreshing user session:", userError)
+      return { success: false, error: "Failed to fetch updated user data" }
+    }
+
+    // Create a user object without sensitive data
+    const user = {
+      id: userData.id,
+      username: userData.username,
+      email: userData.email || "",
+      employeeId: userData.employee_id,
+      roleId: userData.role_id,
+      firstName: userData.employees?.first_name || "",
+      lastName: userData.employees?.last_name || "",
+      roleName: userData.roles?.title || "",
+    }
+
+    // Create a new token
+    const token = await createSessionToken(user)
+
+    // Store in cookie
+    const cookieStore = cookies()
+    cookieStore.set("auth_token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 60 * 60 * 24 * 7, // 1 week
+      path: "/",
+      sameSite: "lax",
+    })
+
+    console.log("Session refreshed for user:", user.username)
+
+    return { success: true, user }
+  } catch (error) {
+    console.error("Error in refreshUserSession:", error)
+    return { success: false, error: "Failed to refresh session" }
+  }
 }

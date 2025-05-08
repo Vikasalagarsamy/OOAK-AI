@@ -7,13 +7,14 @@ import type { MenuItemWithPermission } from "@/types/menu"
 async function fetchMenu() {
   try {
     console.log("Fetching menu from API")
-    const response = await fetch("/api/menu", {
+    // Add a timestamp to prevent caching
+    const timestamp = new Date().getTime()
+    const response = await fetch(`/api/menu?t=${timestamp}`, {
       method: "GET",
       headers: {
         "Cache-Control": "no-cache",
         Pragma: "no-cache",
       },
-      // Add a timestamp to prevent caching
       cache: "no-store",
     })
 
@@ -35,13 +36,14 @@ async function fetchMenu() {
 // Function to fetch the current user's role
 async function fetchUserRole() {
   try {
-    const response = await fetch("/api/auth/status", {
+    // Add a timestamp to prevent caching
+    const timestamp = new Date().getTime()
+    const response = await fetch(`/api/auth/status?t=${timestamp}`, {
       method: "GET",
       headers: {
         "Cache-Control": "no-cache",
         Pragma: "no-cache",
       },
-      // Add a timestamp to prevent caching
       cache: "no-store",
     })
 
@@ -63,6 +65,7 @@ export function useMenu() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [currentRoleId, setCurrentRoleId] = useState<number | null>(null)
+  const [lastRefresh, setLastRefresh] = useState<number>(0)
 
   // Memoize the loadMenu function to prevent unnecessary re-renders
   const loadMenu = useCallback(async () => {
@@ -73,6 +76,7 @@ export function useMenu() {
       console.log("Setting menu data in state:", data)
       setMenu(data)
       setError(null)
+      setLastRefresh(Date.now())
     } catch (err: any) {
       const errorMessage = err.message || "Failed to load menu"
       console.error("Error in useMenu hook:", errorMessage)
@@ -98,6 +102,12 @@ export function useMenu() {
     }
   }, [currentRoleId])
 
+  // Force refresh function that can be called from outside
+  const forceRefresh = useCallback(async () => {
+    console.log("Force refreshing menu...")
+    await loadMenu()
+  }, [loadMenu])
+
   useEffect(() => {
     let isMounted = true
     console.log("useMenu hook initialized")
@@ -108,16 +118,22 @@ export function useMenu() {
     // Also check for role changes
     checkRoleChanges()
 
-    // Set up a refresh interval (every 5 seconds)
+    // Set up a refresh interval (every 30 seconds)
     const refreshInterval = setInterval(async () => {
       if (!isMounted) return
 
-      console.log("Checking for role changes...")
-      const roleChanged = await checkRoleChanges()
-
-      if (roleChanged) {
-        console.log("Role changed, refreshing menu data...")
+      // Always refresh the menu periodically, not just on role changes
+      if (Date.now() - lastRefresh > 30000) {
+        console.log("Periodic menu refresh...")
         loadMenu()
+      } else {
+        console.log("Checking for role changes...")
+        const roleChanged = await checkRoleChanges()
+
+        if (roleChanged) {
+          console.log("Role changed, refreshing menu data...")
+          loadMenu()
+        }
       }
     }, 5000)
 
@@ -125,7 +141,7 @@ export function useMenu() {
       isMounted = false
       clearInterval(refreshInterval)
     }
-  }, [loadMenu, checkRoleChanges])
+  }, [loadMenu, checkRoleChanges, lastRefresh])
 
   // Force refresh when role changes
   useEffect(() => {
@@ -134,7 +150,7 @@ export function useMenu() {
     }
   }, [currentRoleId, loadMenu])
 
-  return { menu, loading, error, refreshMenu: loadMenu }
+  return { menu, loading, error, refreshMenu: forceRefresh }
 }
 
 // Hook to check if the current user has specific permissions for a path
