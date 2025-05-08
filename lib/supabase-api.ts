@@ -1,9 +1,12 @@
-import { createClient } from "@supabase/supabase-js"
+import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 
 // Create a Supabase client for API routes
 export function createApiClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ""
 
-  return createClient(supabaseUrl, supabaseKey)
+  return createSupabaseClient(supabaseUrl, supabaseKey)
 }
+
+// Export createClient as a named export for compatibility
+export { createApiClient as createClient }
