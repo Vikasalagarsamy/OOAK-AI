@@ -28,7 +28,7 @@ export function UsersByRole({ roleId }: UsersByRoleProps) {
     setError(null)
 
     try {
-      // Fetch users with the selected role from Supabase
+      // Fetch users with the selected role from the Pages Router API
       const response = await fetch(`/api/roles/${roleId}/users`)
 
       if (!response.ok) {

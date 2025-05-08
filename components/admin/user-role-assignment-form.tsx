@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/use-toast"
-import { createClient } from "@/lib/supabase-browser"
+import { createClient } from "@supabase/supabase-js"
 
 interface Employee {
   id: number
@@ -22,6 +22,14 @@ interface Role {
   name: string
 }
 
+// Create a client-side Supabase client
+const createSupabaseClient = () => {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
+
+  return createClient(supabaseUrl, supabaseKey)
+}
+
 export function UserRoleAssignmentForm() {
   const [employees, setEmployees] = useState<Employee[]>([])
   const [roles, setRoles] = useState<Role[]>([])
@@ -29,7 +37,7 @@ export function UserRoleAssignmentForm() {
   const [selectedRole, setSelectedRole] = useState<string>("")
   const [saving, setSaving] = useState<boolean>(false)
   const [error, setError] = useState<string | null>(null)
-  const supabase = createClient()
+  const supabase = createSupabaseClient()
 
   useEffect(() => {
     const fetchData = async () => {
@@ -95,58 +103,29 @@ export function UserRoleAssignmentForm() {
 
       if (!employee) throw new Error("Selected employee not found")
 
-      // Check if employee already has an account
-      if (employee.has_account) {
-        // Get the user account ID
-        const { data: existingAccount, error: fetchError } = await supabase
-          .from("user_accounts")
-          .select("id")
-          .eq("employee_id", employeeId)
-          .single()
+      // Use the API to handle role assignment
+      const response = await fetch("/api/user-role-assignment", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          employeeId,
+          roleId,
+        }),
+      })
 
-        if (fetchError) throw fetchError
-
-        // Update the role
-        const { error: updateError } = await supabase
-          .from("user_accounts")
-          .update({ role_id: roleId })
-          .eq("id", existingAccount.id)
-
-        if (updateError) throw updateError
-
-        toast({
-          title: "Success",
-          description: `Updated role for ${employee.first_name} ${employee.last_name}`,
-        })
-      } else {
-        // Create new account
-        if (!employee.email) {
-          throw new Error("Employee must have an email to create an account")
-        }
-
-        // Generate a username from first name and last name
-        const username = `${employee.first_name.toLowerCase()}.${employee.last_name.toLowerCase()}`.replace(/\s+/g, "")
-
-        // Generate a temporary password
-        const tempPassword = Math.random().toString(36).slice(-8)
-
-        // Create the account
-        const { error: createError } = await supabase.from("user_accounts").insert({
-          username,
-          email: employee.email,
-          password_hash: tempPassword, // Note: In a real app, this should be properly hashed
-          employee_id: employeeId,
-          role_id: roleId,
-          is_active: true,
-        })
-
-        if (createError) throw createError
-
-        toast({
-          title: "Success",
-          description: `Created account for ${employee.first_name} ${employee.last_name} with username: ${username} and temporary password: ${tempPassword}`,
-        })
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to assign role")
       }
+
+      const result = await response.json()
+
+      toast({
+        title: "Success",
+        description: result.message,
+      })
 
       // Reset form
       setSelectedEmployee("")
