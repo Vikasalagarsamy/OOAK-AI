@@ -1,14 +1,14 @@
+import { RolePermissionManager } from "@/components/admin/role-permission-manager"
 import { UserRoleAssignmentManager } from "@/components/admin/user-role-assignment-manager"
 
 export default function RolePermissionsPage() {
   return (
-    <div className="container py-6 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Role Permissions</h1>
-        <p className="text-muted-foreground">Manage menu access and permissions for different user roles</p>
+    <div className="container mx-auto py-10 space-y-8">
+      <h1 className="text-3xl font-bold">Role Permissions</h1>
+      <div className="grid grid-cols-1 gap-8">
+        <RolePermissionManager />
+        <UserRoleAssignmentManager />
       </div>
-
-      <UserRoleAssignmentManager />
     </div>
   )
 }
