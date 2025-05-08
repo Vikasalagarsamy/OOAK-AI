@@ -3,8 +3,8 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent } from "@/components/ui/card"
 import { useState } from "react"
-import { UsersByRole } from "./users-by-role"
-import { UserRoleAssignmentForm } from "./user-role-assignment-form"
+import { UsersByRole } from "./users-by-role-client"
+import { UserRoleAssignmentForm } from "./user-role-assignment-client"
 import { RolePermissionManager } from "./role-permission-manager"
 
 export function UserRoleAssignmentManager() {

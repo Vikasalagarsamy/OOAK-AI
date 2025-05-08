@@ -1,52 +1,92 @@
 "use client"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { toast } from "@/components/ui/use-toast"
-import { useEffect, useState } from "react"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Loader2 } from "lucide-react"
 
-interface UserWithRole {
+import { useEffect, useState } from "react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { createClient } from "@/lib/supabase-browser"
+import { Skeleton } from "@/components/ui/skeleton"
+import { toast } from "@/components/ui/use-toast"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { AlertCircle, User } from "lucide-react"
+
+interface Role {
   id: number
-  name: string
+  title: string
+}
+
+interface UserWithEmployee {
+  id: string
   email: string
+  employee_id: number
+  first_name: string
+  last_name: string
+  role_id: number
   role_name: string
 }
 
 interface UsersByRoleProps {
-  roleId: string | undefined
+  roleId?: string
 }
 
-export function UsersByRole({ roleId }: UsersByRoleProps) {
-  const [users, setUsers] = useState<UserWithRole[]>([])
-  const [loading, setLoading] = useState(false)
+export function UsersByRole({ roleId: initialRoleId }: UsersByRoleProps) {
+  const [roles, setRoles] = useState<Role[]>([])
+  const [users, setUsers] = useState<UserWithEmployee[]>([])
+  const [selectedRole, setSelectedRole] = useState<string | undefined>(initialRoleId)
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const supabase = createClient()
+
+  // Load roles
   useEffect(() => {
-    const loadUsers = async () => {
-      if (!roleId) {
-        setUsers([])
-        return
-      }
-
-      setLoading(true)
-      setError(null)
-
+    async function loadRoles() {
       try {
-        // Use fetch directly without any utility functions
-        const response = await fetch(`/api/roles/${roleId}/users`)
+        setError(null)
+        const { data, error } = await supabase.from("roles").select("id, title").order("title")
 
-        if (!response.ok) {
-          throw new Error(`Failed to fetch users: ${response.statusText}`)
+        if (error) throw error
+
+        setRoles(data || [])
+        if (!selectedRole && data && data.length > 0) {
+          setSelectedRole(data[0].id.toString())
         }
-
-        const data = await response.json()
-        setUsers(data || [])
-      } catch (err: any) {
-        console.error("Error loading users:", err)
-        setError(`Failed to load users: ${err.message}`)
+      } catch (error: any) {
+        console.error("Error loading roles:", error)
+        setError(`Failed to load roles: ${error.message}`)
         toast({
           title: "Error",
-          description: "Failed to load users for this role",
+          description: "Failed to load roles",
+          variant: "destructive",
+        })
+      }
+    }
+
+    loadRoles()
+  }, [])
+
+  // Load users for selected role
+  useEffect(() => {
+    async function loadUsers() {
+      if (!selectedRole) return
+
+      setLoading(true)
+      try {
+        setError(null)
+        // Use a custom RPC function or a complex query to get users with their employee details and role
+        const { data, error } = await supabase.rpc("get_users_by_role", {
+          p_role_id: Number.parseInt(selectedRole),
+        })
+
+        if (error) throw error
+
+        setUsers(data || [])
+      } catch (error: any) {
+        console.error("Error loading users:", error)
+        setError(`Failed to load users: ${error.message}`)
+        toast({
+          title: "Error",
+          description: "Failed to load users",
           variant: "destructive",
         })
       } finally {
@@ -55,42 +95,78 @@ export function UsersByRole({ roleId }: UsersByRoleProps) {
     }
 
     loadUsers()
-  }, [roleId])
+  }, [selectedRole])
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Users in this Role</CardTitle>
-        <CardDescription>A list of all users currently assigned to this role.</CardDescription>
+        <CardTitle>Users by Role</CardTitle>
+        <CardDescription>View all users assigned to a specific role</CardDescription>
       </CardHeader>
       <CardContent>
-        {loading ? (
-          <div className="flex items-center justify-center">
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            Loading users...
-          </div>
-        ) : error ? (
-          <div className="text-red-500">Error: {error}</div>
-        ) : users.length === 0 ? (
-          <div className="text-center py-4 text-muted-foreground">No users found with this role.</div>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Email</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {users.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell>{user.name}</TableCell>
-                  <TableCell>{user.email}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+        {error && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         )}
+
+        <div className="space-y-4">
+          <Select value={selectedRole} onValueChange={setSelectedRole} disabled={roles.length === 0 || loading}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Select a role" />
+            </SelectTrigger>
+            <SelectContent>
+              {roles.map((role) => (
+                <SelectItem key={role.id} value={role.id.toString()}>
+                  {role.title}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {loading ? (
+            <div className="space-y-2">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+          ) : (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Role</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {users.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-center py-6 text-muted-foreground">
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          <User className="h-8 w-8 text-gray-300" />
+                          <p>No users found with this role</p>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    users.map((user) => (
+                      <TableRow key={user.id}>
+                        <TableCell className="font-medium">
+                          {user.first_name} {user.last_name}
+                        </TableCell>
+                        <TableCell>{user.email}</TableCell>
+                        <TableCell>{user.role_name}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   )

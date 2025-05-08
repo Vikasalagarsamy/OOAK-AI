@@ -4,7 +4,16 @@ import { redirect } from "next/navigation"
 import Link from "next/link"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import { LogOut } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  DropdownMenuGroup,
+} from "@/components/ui/dropdown-menu"
+import { LogOut, Settings, Shield, Wrench, Bug, CheckCircle } from "lucide-react"
 import AuthCheck from "@/components/auth-check"
 import { NavigationMenu } from "@/components/navigation-menu"
 import { MobileNavigation } from "@/components/mobile-navigation"
@@ -44,14 +53,68 @@ export default async function ProtectedLayout({
                   <p className="text-sm font-medium">{user.username}</p>
                   <p className="text-xs text-muted-foreground">Role: {user.roleName || "Administrator"}</p>
                 </div>
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback>{user.username?.substring(0, 2).toUpperCase() || "U"}</AvatarFallback>
-                </Avatar>
-                <form action="/api/auth/logout" method="post">
-                  <Button variant="ghost" size="sm" type="submit">
-                    <LogOut className="h-4 w-4" />
-                  </Button>
-                </form>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+                      <Avatar className="h-8 w-8">
+                        <AvatarFallback>{user.username?.substring(0, 2).toUpperCase() || "U"}</AvatarFallback>
+                      </Avatar>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <div className="flex flex-col space-y-1 p-2">
+                      <p className="text-sm font-medium">{user.username}</p>
+                      <p className="text-xs text-muted-foreground">Role: {user.roleName || "Administrator"}</p>
+                    </div>
+                    <DropdownMenuSeparator />
+
+                    {/* Admin Menu Items */}
+                    <DropdownMenuGroup>
+                      <DropdownMenuLabel>Administration</DropdownMenuLabel>
+                      <DropdownMenuItem asChild>
+                        <Link href="/admin/menu-permissions">
+                          <Settings className="mr-2 h-4 w-4" />
+                          Menu Permissions
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/admin/role-permissions">
+                          <Shield className="mr-2 h-4 w-4" />
+                          Role Permissions
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/admin/menu-repair">
+                          <Wrench className="mr-2 h-4 w-4" />
+                          Menu Repair
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/admin/menu-debug">
+                          <Bug className="mr-2 h-4 w-4" />
+                          Menu Debug
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/admin/test-permissions">
+                          <CheckCircle className="mr-2 h-4 w-4" />
+                          Test Permissions
+                        </Link>
+                      </DropdownMenuItem>
+                    </DropdownMenuGroup>
+
+                    <DropdownMenuSeparator />
+
+                    <DropdownMenuItem asChild>
+                      <form action="/api/auth/logout" method="post" className="w-full">
+                        <Button variant="ghost" size="sm" type="submit" className="w-full justify-start">
+                          <LogOut className="mr-2 h-4 w-4" />
+                          Logout
+                        </Button>
+                      </form>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             )}
           </div>
