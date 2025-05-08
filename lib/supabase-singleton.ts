@@ -110,24 +110,43 @@ export function createServiceClient() {
 
 // IMPORTANT: Export createClient for backward compatibility
 // This is the function used by dashboard-service.ts and other services
+// Create a singleton Supabase client
+let supabaseClient: ReturnType<typeof supabaseCreateClient> | null = null
+
 export function createClient() {
-  return createServiceClient()
+  if (!supabaseClient) {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      throw new Error("Supabase URL and anon key must be provided")
+    }
+
+    supabaseClient = supabaseCreateClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+      },
+    })
+  }
+
+  return supabaseClient
 }
 
 // Also export the original createClient from supabase for maximum compatibility
 export const originalCreateClient = supabaseCreateClient
 
 // Create a singleton to prevent multiple instances
-let supabaseClient: any = null
+let supabaseClientOld: any = null
 
 export function createSingletonClient() {
-  if (supabaseClient) return supabaseClient
+  if (supabaseClientOld) return supabaseClientOld
 
   // Create a new client if one doesn't exist
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
 
-  supabaseClient = supabaseCreateClient(supabaseUrl, supabaseKey)
+  supabaseClientOld = supabaseCreateClient(supabaseUrl, supabaseKey)
 
-  return supabaseClient
+  return supabaseClientOld
 }
