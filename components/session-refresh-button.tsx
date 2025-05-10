@@ -1,15 +1,13 @@
 "use client"
 
 import { useState } from "react"
-import { RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { RefreshCw } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
-import { useRouter } from "next/navigation"
 
 export function SessionRefreshButton() {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const { toast } = useToast()
-  const router = useRouter()
 
   const handleRefresh = async () => {
     setIsRefreshing(true)
@@ -27,15 +25,14 @@ export function SessionRefreshButton() {
         toast({
           title: "Session Refreshed",
           description: "Your session has been refreshed with the latest permissions.",
-          variant: "default",
         })
 
-        // Refresh the current page to apply new permissions
-        router.refresh()
+        // Force reload the page to apply new permissions
+        window.location.reload()
       } else {
         toast({
           title: "Refresh Failed",
-          description: data.error || "Failed to refresh session. Please try logging out and back in.",
+          description: data.error || "Failed to refresh session",
           variant: "destructive",
         })
       }
@@ -43,7 +40,7 @@ export function SessionRefreshButton() {
       console.error("Error refreshing session:", error)
       toast({
         title: "Refresh Failed",
-        description: "An error occurred while refreshing your session.",
+        description: "An error occurred while refreshing your session",
         variant: "destructive",
       })
     } finally {
@@ -52,9 +49,9 @@ export function SessionRefreshButton() {
   }
 
   return (
-    <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isRefreshing}>
-      <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`} />
-      Refresh Session
+    <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isRefreshing} className="gap-1">
+      <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+      <span>Refresh Session</span>
     </Button>
   )
 }

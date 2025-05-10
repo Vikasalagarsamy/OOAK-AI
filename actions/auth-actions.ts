@@ -306,8 +306,11 @@ export async function refreshUserSession() {
       roleName: userData.roles?.title || "",
     }
 
-    // Create a new token
-    const token = await createSessionToken(user)
+    // Create a new token with a unique timestamp to ensure it's different
+    const token = await createSessionToken({
+      ...user,
+      timestamp: Date.now(), // Add timestamp to make token unique
+    })
 
     // Store in cookie
     const cookieStore = cookies()

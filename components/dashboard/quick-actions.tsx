@@ -1,48 +1,27 @@
-import Link from "next/link"
+import type React from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Users, Building, GitBranch, UserPlus, FileText, ShoppingBag } from "lucide-react"
+import { UserPlus, Building2, Briefcase, TrendingUp } from "lucide-react"
+import Link from "next/link"
+
+interface ActionButtonProps {
+  href: string
+  icon: React.ReactNode
+  label: string
+}
+
+function ActionButton({ href, icon, label }: ActionButtonProps) {
+  return (
+    <Link
+      href={href}
+      className="flex flex-col items-center justify-center p-4 border rounded-md hover:bg-accent transition-colors"
+    >
+      <div className="mb-2">{icon}</div>
+      <span className="text-sm text-center">{label}</span>
+    </Link>
+  )
+}
 
 export function QuickActions() {
-  const actions = [
-    {
-      title: "Add Company",
-      description: "Create a new company record",
-      icon: <Building className="h-4 w-4 mr-2" />,
-      href: "/organization/companies",
-    },
-    {
-      title: "Add Branch",
-      description: "Create a new branch location",
-      icon: <GitBranch className="h-4 w-4 mr-2" />,
-      href: "/organization/branches",
-    },
-    {
-      title: "Add Employee",
-      description: "Add a new employee record",
-      icon: <UserPlus className="h-4 w-4 mr-2" />,
-      href: "/people/employees",
-    },
-    {
-      title: "Add Client",
-      description: "Register a new client",
-      icon: <Users className="h-4 w-4 mr-2" />,
-      href: "/organization/clients",
-    },
-    {
-      title: "Add Vendor",
-      description: "Register a new vendor",
-      icon: <ShoppingBag className="h-4 w-4 mr-2" />,
-      href: "/organization/vendors",
-    },
-    {
-      title: "Reports",
-      description: "View organization reports",
-      icon: <FileText className="h-4 w-4 mr-2" />,
-      href: "#",
-    },
-  ]
-
   return (
     <Card>
       <CardHeader>
@@ -50,20 +29,15 @@ export function QuickActions() {
         <CardDescription>Common tasks and shortcuts</CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {actions.map((action) => (
-            <Link key={action.title} href={action.href}>
-              <Button variant="outline" className="w-full justify-start h-auto py-3">
-                <div className="flex items-center">
-                  {action.icon}
-                  <div className="text-left">
-                    <div className="font-medium">{action.title}</div>
-                    <div className="text-xs text-muted-foreground">{action.description}</div>
-                  </div>
-                </div>
-              </Button>
-            </Link>
-          ))}
+        <div className="grid grid-cols-2 gap-3">
+          <ActionButton href="/people/employees/add" icon={<UserPlus className="h-4 w-4" />} label="Add Employee" />
+          <ActionButton
+            href="/organization/companies"
+            icon={<Building2 className="h-4 w-4" />}
+            label="View Companies"
+          />
+          <ActionButton href="/organization/clients" icon={<Briefcase className="h-4 w-4" />} label="View Clients" />
+          <ActionButton href="/sales/create-lead" icon={<TrendingUp className="h-4 w-4" />} label="Create Lead" />
         </div>
       </CardContent>
     </Card>

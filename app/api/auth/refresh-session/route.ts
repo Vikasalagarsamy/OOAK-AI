@@ -1,7 +1,7 @@
-import { type NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import { refreshUserSession } from "@/actions/auth-actions"
 
-export async function POST(req: NextRequest) {
+export async function POST() {
   try {
     const result = await refreshUserSession()
 
@@ -9,6 +9,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         success: true,
         message: "Session refreshed successfully",
+        timestamp: new Date().toISOString(),
       })
     } else {
       return NextResponse.json(
@@ -20,11 +21,11 @@ export async function POST(req: NextRequest) {
       )
     }
   } catch (error) {
-    console.error("Error in refresh session API:", error)
+    console.error("Session refresh error:", error)
     return NextResponse.json(
       {
         success: false,
-        error: "An error occurred while refreshing the session",
+        error: "An unexpected error occurred",
       },
       { status: 500 },
     )
