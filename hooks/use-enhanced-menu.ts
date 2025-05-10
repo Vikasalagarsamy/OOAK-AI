@@ -1,45 +1,53 @@
 "use client"
 
-import { useState, useEffect } from "react"
-
-interface MenuItem {
-  id: number
-  name: string
-  path: string
-  icon?: string
-  parentId?: number | null
-  sortOrder?: number
-}
+import { useState, useEffect, useCallback } from "react"
+import type { MenuItemWithPermission } from "@/types/menu"
 
 export function useEnhancedMenu() {
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  const [menu, setMenu] = useState<MenuItemWithPermission[]>([])
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [lastRefresh, setLastRefresh] = useState<number | null>(null)
 
-  useEffect(() => {
-    async function fetchMenu() {
-      try {
-        setIsLoading(true)
-        const response = await fetch("/api/enhanced-menu")
-        const data = await response.json()
+  const fetchMenu = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
 
-        if (!response.ok) {
-          throw new Error(data.error || "Failed to fetch menu")
-        }
+      const response = await fetch("/api/enhanced-menu")
 
-        setMenuItems(data.items || [])
-        setError(null)
-      } catch (err) {
-        console.error("Error fetching menu:", err)
-        setError(err instanceof Error ? err.message : "Failed to load menu")
-        setMenuItems([])
-      } finally {
-        setIsLoading(false)
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`Failed to fetch menu: ${response.status} ${errorText}`)
       }
-    }
 
-    fetchMenu()
+      const data = await response.json()
+
+      // Ensure we have a valid array
+      if (!Array.isArray(data.menu)) {
+        setMenu([])
+        throw new Error("Invalid menu data received")
+      }
+
+      setMenu(data.menu)
+      setLastRefresh(Date.now())
+    } catch (err) {
+      console.error("Error fetching menu:", err)
+      setError(err instanceof Error ? err.message : "Unknown error fetching menu")
+      // Set empty array to prevent undefined errors
+      setMenu([])
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
-  return { menuItems, isLoading, error }
+  useEffect(() => {
+    fetchMenu()
+  }, [fetchMenu])
+
+  const refreshMenu = useCallback(async () => {
+    await fetchMenu()
+  }, [fetchMenu])
+
+  return { menu, loading, error, refreshMenu, lastRefresh }
 }

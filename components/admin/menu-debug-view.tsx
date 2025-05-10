@@ -10,7 +10,8 @@ import { MenuIcon } from "@/components/dynamic-menu/menu-icon"
 import { AlertCircle, RefreshCw } from "lucide-react"
 
 export function MenuDebugView() {
-  const { menu, loading, error, refreshMenu, lastRefresh } = useEnhancedMenu()
+  // Initialize with empty array to prevent undefined errors
+  const { menu = [], loading, error, refreshMenu, lastRefresh } = useEnhancedMenu()
   const [showFullData, setShowFullData] = useState(false)
   const [activeTab, setActiveTab] = useState("all")
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -21,30 +22,37 @@ export function MenuDebugView() {
     setTimeout(() => setIsRefreshing(false), 500) // Show spinner for at least 500ms
   }
 
-  // Filter menu items based on tab
+  // Filter menu items based on tab - with null checks
   const getFilteredMenuItems = () => {
-    if (activeTab === "all") return menu
-    if (activeTab === "topLevel") return menu.filter((item) => item.parentId === null)
-    if (activeTab === "withChildren") return menu.filter((item) => item.children && item.children.length > 0)
-    if (activeTab === "withoutChildren") return menu.filter((item) => !item.children || item.children.length === 0)
-    if (activeTab === "withPath") return menu.filter((item) => item.path && item.path.length > 0)
-    if (activeTab === "withoutPath") return menu.filter((item) => !item.path || item.path.length === 0)
-    return menu
+    // Ensure menu is an array
+    const safeMenu = Array.isArray(menu) ? menu : []
+
+    if (activeTab === "all") return safeMenu
+    if (activeTab === "topLevel") return safeMenu.filter((item) => item?.parentId === null)
+    if (activeTab === "withChildren") return safeMenu.filter((item) => item?.children && item.children.length > 0)
+    if (activeTab === "withoutChildren") return safeMenu.filter((item) => !item?.children || item.children.length === 0)
+    if (activeTab === "withPath") return safeMenu.filter((item) => item?.path && item.path.length > 0)
+    if (activeTab === "withoutPath") return safeMenu.filter((item) => !item?.path || item.path.length === 0)
+    return safeMenu
   }
 
-  // Render a menu item with its children
+  // Render a menu item with its children - with null checks
   const renderMenuItem = (item: any, depth = 0) => {
+    if (!item) return null
+
     const hasViewPermission = item.permissions?.canView
     const hasAddPermission = item.permissions?.canAdd
     const hasEditPermission = item.permissions?.canEdit
     const hasDeletePermission = item.permissions?.canDelete
 
     return (
-      <div key={item.id} className="mb-2">
+      <div key={item.id || `item-${depth}-${Math.random()}`} className="mb-2">
         <div className="flex items-center p-2 rounded hover:bg-gray-100" style={{ marginLeft: `${depth * 20}px` }}>
           <div className="flex items-center flex-1 gap-2">
             {item.icon && <MenuIcon name={item.icon} className="h-4 w-4" />}
-            <span className={`font-medium ${!item.isVisible ? "text-gray-400" : ""}`}>{item.name}</span>
+            <span className={`font-medium ${!item.isVisible ? "text-gray-400" : ""}`}>
+              {item.name || "Unnamed Item"}
+            </span>
             {item.path && <span className="text-xs text-gray-500">{item.path}</span>}
             {!item.isVisible && <span className="text-xs bg-gray-200 px-2 py-1 rounded">Hidden</span>}
           </div>
@@ -72,12 +80,15 @@ export function MenuDebugView() {
           </div>
         </div>
 
-        {item.children && item.children.length > 0 && (
+        {item.children && Array.isArray(item.children) && item.children.length > 0 && (
           <div>{item.children.map((child: any) => renderMenuItem(child, depth + 1))}</div>
         )}
       </div>
     )
   }
+
+  // Ensure we have a valid array for filtered items
+  const filteredItems = getFilteredMenuItems() || []
 
   return (
     <Card>
@@ -106,11 +117,11 @@ export function MenuDebugView() {
         <div className="mb-4">
           <div className="flex justify-between items-center">
             <div>
-              <span className="font-medium">Total Items:</span> {menu.length}
+              <span className="font-medium">Total Items:</span> {Array.isArray(menu) ? menu.length : 0}
             </div>
             <div>
               <span className="font-medium">Top-level Items:</span>{" "}
-              {menu.filter((item) => item.parentId === null).length}
+              {Array.isArray(menu) ? menu.filter((item) => item?.parentId === null).length : 0}
             </div>
             <div>
               <span className="font-medium">Last Refresh:</span>{" "}
@@ -121,7 +132,7 @@ export function MenuDebugView() {
 
         {showFullData ? (
           <pre className="text-xs bg-gray-50 p-4 rounded overflow-auto max-h-96 border">
-            {JSON.stringify(menu, null, 2)}
+            {JSON.stringify(Array.isArray(menu) ? menu : [], null, 2)}
           </pre>
         ) : (
           <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
@@ -143,10 +154,10 @@ export function MenuDebugView() {
                 </div>
               ) : (
                 <div className="border rounded-md">
-                  {getFilteredMenuItems().length === 0 ? (
+                  {filteredItems.length === 0 ? (
                     <div className="p-4 text-center text-gray-500">No menu items found</div>
                   ) : (
-                    <div className="p-2">{getFilteredMenuItems().map((item) => renderMenuItem(item))}</div>
+                    <div className="p-2">{filteredItems.map((item) => renderMenuItem(item))}</div>
                   )}
                 </div>
               )}

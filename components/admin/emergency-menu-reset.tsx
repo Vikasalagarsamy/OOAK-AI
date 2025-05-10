@@ -2,75 +2,62 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { AlertCircle, Loader2 } from "lucide-react"
-import { useRouter } from "next/navigation"
-import { useToast } from "@/components/ui/use-toast"
+import { AlertCircle, RefreshCw } from "lucide-react"
 
 export function EmergencyMenuReset() {
   const [isResetting, setIsResetting] = useState(false)
-  const { toast } = useToast()
-  const router = useRouter()
+  const [result, setResult] = useState<{ success: boolean; message: string } | null>(null)
 
   const handleReset = async () => {
-    if (!confirm("This will reset the entire menu system and force a page reload. Continue?")) {
+    if (!confirm("Are you sure you want to reset the menu system? This action cannot be undone.")) {
       return
     }
 
     setIsResetting(true)
+    setResult(null)
+
     try {
-      // Call the emergency reset endpoint
-      const res = await fetch("/api/admin/reset-menu-system", {
+      const response = await fetch("/api/admin/reset-menu-system", {
         method: "POST",
-        headers: {
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-          Pragma: "no-cache",
-        },
       })
 
-      const data = await res.json()
-
-      if (data.success) {
-        toast({
-          title: "Menu system reset",
-          description: "Changes will take effect after page reload",
-        })
-
-        // Force reload from server
-        setTimeout(() => {
-          window.location.href = window.location.pathname + "?t=" + Date.now()
-        }, 1000)
-      } else {
-        toast({
-          title: "Reset failed",
-          description: data.error || "Something went wrong",
-          variant: "destructive",
-        })
-      }
+      const data = await response.json()
+      setResult({
+        success: response.ok,
+        message: data.message || (response.ok ? "Menu system reset successfully" : "Failed to reset menu system"),
+      })
     } catch (error) {
-      console.error("Emergency reset error:", error)
-      toast({
-        title: "Reset failed",
-        description: "An unexpected error occurred",
-        variant: "destructive",
+      setResult({
+        success: false,
+        message: "An error occurred while resetting the menu system",
       })
+      console.error("Error resetting menu system:", error)
     } finally {
       setIsResetting(false)
     }
   }
 
   return (
-    <Button variant="destructive" onClick={handleReset} disabled={isResetting}>
-      {isResetting ? (
-        <>
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          Resetting...
-        </>
-      ) : (
-        <>
-          <AlertCircle className="mr-2 h-4 w-4" />
-          Emergency Menu Reset
-        </>
+    <div>
+      {result && (
+        <div
+          className={`mb-4 p-3 rounded ${
+            result.success
+              ? "bg-green-100 border border-green-400 text-green-700"
+              : "bg-red-100 border border-red-400 text-red-700"
+          }`}
+        >
+          <div className="flex items-center">
+            <AlertCircle className="h-4 w-4 mr-2" />
+            <span>{result.message}</span>
+          </div>
+        </div>
       )}
-    </Button>
+
+      <Button variant="destructive" onClick={handleReset} disabled={isResetting}>
+        {isResetting ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : <AlertCircle className="h-4 w-4 mr-2" />}
+        Reset Menu System
+      </Button>
+    </div>
   )
 }
