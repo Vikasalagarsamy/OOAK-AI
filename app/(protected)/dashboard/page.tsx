@@ -10,7 +10,7 @@ import Link from "next/link"
 import { getRecentActivities } from "@/services/activity-service"
 import { RealTimeDepartmentChart } from "@/components/dashboard/real-time-department-chart"
 import { getDepartmentDistribution } from "@/actions/department-actions"
-import BranchDistributionChart from "@/components/dashboard/branch-distribution-chart"
+import { BranchDistributionChart } from "@/components/dashboard/branch-distribution-chart"
 
 export const revalidate = 60 // Revalidate this page every 60 seconds
 

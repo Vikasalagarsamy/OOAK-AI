@@ -1,25 +1,22 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Skeleton } from "@/components/ui/skeleton"
 
-interface ChartLoadingProps {
-  title?: string
-  subtitle?: string
-}
-
-export function ChartLoading({
-  title = "Loading Chart Data...",
-  subtitle = "Please wait while we load the chart data",
-}: ChartLoadingProps) {
+export function ChartLoading() {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{subtitle}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="h-[300px] w-full flex items-center justify-center">
-          <div className="animate-pulse rounded-md bg-muted h-[250px] w-full"></div>
+    <div className="space-y-4 pt-2">
+      <div className="flex justify-between items-center">
+        <Skeleton className="h-4 w-28" />
+        <Skeleton className="h-4 w-14" />
+      </div>
+
+      {[1, 2, 3, 4, 5].map((item) => (
+        <div key={item} className="space-y-2">
+          <div className="flex justify-between">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-4 w-8" />
+          </div>
+          <Skeleton className="h-2 w-full" />
         </div>
-      </CardContent>
-    </Card>
+      ))}
+    </div>
   )
 }

@@ -6,26 +6,74 @@ type SupabaseClient = ReturnType<typeof supabaseCreateClient>
 // Global variable to store the client instance
 let clientSingleton: SupabaseClient | null = null
 
-// Function to get the Supabase URL and key with better error handling
+// Function to get the Supabase URL and key
 function getSupabaseCredentials() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-  // Log available environment variables for debugging
-  console.log("Environment variables check:", {
-    hasUrl: !!supabaseUrl,
-    hasAnonKey: !!supabaseAnonKey,
-    nodeEnv: process.env.NODE_ENV,
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error("Supabase URL or anonymous key is missing from environment variables")
+  }
+
+  return { supabaseUrl, supabaseAnonKey }
+}
+
+// Create the Supabase client singleton
+function createSupabaseClient(): SupabaseClient {
+  if (clientSingleton) {
+    return clientSingleton
+  }
+
+  const { supabaseUrl, supabaseAnonKey } = getSupabaseCredentials()
+
+  // Create a new client with explicit configuration
+  clientSingleton = supabaseCreateClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: true,
+      storageKey: "app-supabase-auth",
+    },
   })
 
-  // Return what we have, even if empty - we'll handle this later
-  return { supabaseUrl, supabaseAnonKey }
+  return clientSingleton
+}
+
+// Export a singleton instance
+export const supabase = createSupabaseClient()
+
+// Server-side Supabase client (uses service role key)
+export function createServiceClient() {
+  // Use environment variables with fallbacks
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseServiceKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  // Log available keys for debugging (remove in production)
+  console.log("Available env vars:", {
+    hasUrl: !!supabaseUrl,
+    hasServiceKey: !!supabaseServiceKey,
+  })
+
+  // Use anon key as fallback if service key is not available
+  if (!supabaseUrl) {
+    console.error("Supabase URL is missing from environment variables")
+    // Return a mock client that won't throw errors but won't work either
+    return createMockClient()
+  }
+
+  if (!supabaseServiceKey) {
+    console.warn("Supabase service role key is missing, falling back to anon key")
+    // Continue with anon key as fallback
+  }
+
+  return supabaseCreateClient(supabaseUrl, supabaseServiceKey || "", {
+    auth: {
+      persistSession: false,
+    },
+  })
 }
 
 // Create a mock client that won't throw errors
 function createMockClient() {
-  console.warn("Creating mock Supabase client due to missing credentials")
-
   return {
     from: () => ({
       select: () => ({
@@ -39,94 +87,27 @@ function createMockClient() {
       update: () => Promise.resolve({ data: null, error: new Error("Mock client - no connection") }),
       delete: () => Promise.resolve({ data: null, error: new Error("Mock client - no connection") }),
     }),
-    rpc: () => Promise.resolve({ data: null, error: new Error("Mock client - no connection") }),
-    auth: {
-      getUser: () => Promise.resolve({ data: { user: null }, error: null }),
-      getSession: () => Promise.resolve({ data: { session: null }, error: null }),
-    },
+    channel: () => ({
+      on: () => ({
+        subscribe: (callback: () => void) => {
+          if (callback) callback()
+          return {
+            unsubscribe: () => {},
+          }
+        },
+      }),
+    }),
     // Add other methods as needed
   } as unknown as SupabaseClient
 }
 
-// Create the Supabase client singleton with better error handling
-function createSupabaseClient(): SupabaseClient {
-  if (clientSingleton) {
-    return clientSingleton
-  }
-
-  try {
-    const { supabaseUrl, supabaseAnonKey } = getSupabaseCredentials()
-
-    // Check if we have the required credentials
-    if (!supabaseUrl || !supabaseAnonKey) {
-      console.warn("Missing Supabase credentials, using mock client")
-      return createMockClient()
-    }
-
-    // Create a new client with explicit configuration
-    clientSingleton = supabaseCreateClient(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        persistSession: true,
-        storageKey: "app-supabase-auth",
-      },
-    })
-
-    return clientSingleton
-  } catch (error) {
-    console.error("Error creating Supabase client:", error)
-    return createMockClient()
-  }
-}
-
-// Export a singleton instance
-export const supabase = createSupabaseClient()
-
-// Server-side Supabase client (uses service role key)
-export function createServiceClient() {
-  try {
-    // Use environment variables with fallbacks
-    const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ""
-    const supabaseServiceKey =
-      process.env.SUPABASE_SERVICE_ROLE_KEY ||
-      process.env.SUPABASE_ANON_KEY ||
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-      ""
-
-    // Log available keys for debugging
-    console.log("Available env vars for service client:", {
-      hasUrl: !!supabaseUrl,
-      hasServiceKey: !!supabaseServiceKey,
-    })
-
-    // Check if we have the required credentials
-    if (!supabaseUrl || !supabaseServiceKey) {
-      console.warn("Missing Supabase service credentials, using mock client")
-      return createMockClient()
-    }
-
-    return supabaseCreateClient(supabaseUrl, supabaseServiceKey, {
-      auth: {
-        persistSession: false,
-      },
-    })
-  } catch (error) {
-    console.error("Error creating Supabase service client:", error)
-    return createMockClient()
-  }
-}
-
 // IMPORTANT: Export createClient for backward compatibility
+// This is the function used by employee-actions.ts and other services
 export function createClient() {
   try {
-    // For server-side, use the service client
-    if (typeof window === "undefined") {
-      return createServiceClient()
-    }
-
-    // For client-side, use the singleton client
-    return createSupabaseClient()
+    return createServiceClient()
   } catch (error) {
-    console.error("Error in createClient:", error)
+    console.error("Error creating Supabase client:", error)
     return createMockClient()
   }
 }

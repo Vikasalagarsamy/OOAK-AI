@@ -1,7 +1,5 @@
 "use client"
 
-import type React from "react"
-
 import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -9,30 +7,8 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { createClient } from "@/lib/supabase"
 import type { ActivityType } from "@/services/activity-service"
 import { useToast } from "@/components/ui/use-toast"
-import { Users, FileText, Mail, Calendar } from "lucide-react"
 
-interface ActivityItemProps {
-  icon: React.ReactNode
-  title: string
-  description: string
-  timestamp: string
-}
-
-function ActivityItem({ icon, title, description, timestamp }: ActivityItemProps) {
-  return (
-    <div className="flex items-start space-x-4">
-      <div className="mt-1 bg-muted rounded-full p-2">{icon}</div>
-      <div className="flex-1">
-        <p className="text-sm font-medium">{title}</p>
-        <p className="text-sm text-muted-foreground">
-          {description} · {timestamp}
-        </p>
-      </div>
-    </div>
-  )
-}
-
-interface ActivityItemType {
+interface ActivityItem {
   id: string
   title: string
   description: string
@@ -45,11 +21,11 @@ interface ActivityItemType {
 }
 
 interface RecentActivityProps {
-  activities: ActivityItemType[]
+  activities: ActivityItem[]
 }
 
 export function RecentActivity({ activities: initialActivities }: RecentActivityProps) {
-  const [activities, setActivities] = useState<ActivityItemType[]>(initialActivities || [])
+  const [activities, setActivities] = useState<ActivityItem[]>(initialActivities || [])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { toast } = useToast()
@@ -134,7 +110,7 @@ export function RecentActivity({ activities: initialActivities }: RecentActivity
     }
   }, [initialActivities, toast])
 
-  const getActivityIcon = (type?: ActivityItemType["type"]) => {
+  const getActivityIcon = (type?: ActivityItem["type"]) => {
     // Return a default value if type is undefined
     if (!type) return "AC"
 
@@ -164,7 +140,7 @@ export function RecentActivity({ activities: initialActivities }: RecentActivity
     }
   }
 
-  const getActivityColor = (type?: ActivityItemType["type"]) => {
+  const getActivityColor = (type?: ActivityItem["type"]) => {
     // Return a default value if type is undefined
     if (!type) return "bg-gray-100 text-gray-700"
 
@@ -193,34 +169,6 @@ export function RecentActivity({ activities: initialActivities }: RecentActivity
         return "bg-gray-100 text-gray-700"
     }
   }
-
-  // This would normally come from an API or database
-  const mockActivities = [
-    {
-      icon: <Users className="h-4 w-4" />,
-      title: "New employee added",
-      description: "John Doe was added to Engineering",
-      timestamp: "2 hours ago",
-    },
-    {
-      icon: <FileText className="h-4 w-4" />,
-      title: "Report generated",
-      description: "Monthly sales report was generated",
-      timestamp: "5 hours ago",
-    },
-    {
-      icon: <Mail className="h-4 w-4" />,
-      title: "Email campaign sent",
-      description: "Quarterly newsletter was sent to 142 subscribers",
-      timestamp: "1 day ago",
-    },
-    {
-      icon: <Calendar className="h-4 w-4" />,
-      title: "Event scheduled",
-      description: "Team building event scheduled for next month",
-      timestamp: "2 days ago",
-    },
-  ]
 
   return (
     <Card className="col-span-1 md:col-span-2 lg:col-span-1">

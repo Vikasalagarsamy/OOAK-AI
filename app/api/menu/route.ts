@@ -11,7 +11,6 @@ export async function GET() {
       Pragma: "no-cache",
       Expires: "0",
       "Surrogate-Control": "no-store",
-      "X-Menu-Timestamp": new Date().toISOString(),
     }
 
     const menu = await getMenuForCurrentUser()
