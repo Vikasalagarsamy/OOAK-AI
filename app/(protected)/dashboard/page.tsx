@@ -1,20 +1,24 @@
 import type React from "react"
 import { Suspense } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { getDashboardStats } from "@/services/dashboard-service"
-import { ErrorBoundary } from "@/components/error-boundary"
-import { Users, Building2, Briefcase, TrendingUp, UserPlus, ArrowUpRight, ArrowDownRight } from "lucide-react"
+import { Users, ArrowUpRight, ArrowDownRight } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import Link from "next/link"
 import { getRecentActivities } from "@/services/activity-service"
-import { RealTimeDepartmentChart } from "@/components/dashboard/real-time-department-chart"
 import { getDepartmentDistribution } from "@/actions/department-actions"
-import { BranchDistributionChart } from "@/components/dashboard/branch-distribution-chart"
+import { getCurrentUser } from "@/actions/auth-actions"
+import { redirect } from "next/navigation"
 
 export const revalidate = 60 // Revalidate this page every 60 seconds
 
 export default async function DashboardPage() {
+  const user = await getCurrentUser()
+
+  if (!user) {
+    redirect("/login?reason=unauthenticated")
+  }
+
   // Fetch dashboard data with error handling
   let dashboardData
   let activities = []
@@ -86,332 +90,62 @@ export default async function DashboardPage() {
   }
 
   return (
-    <div className="flex-1">
-      <div className="flex-1 space-y-4 p-4 pt-6 md:p-8">
-        <div className="flex items-center justify-between space-y-2">
-          <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-        </div>
+    <div className="container py-10">
+      <h1 className="text-3xl font-bold mb-8">Dashboard</h1>
 
-        <Tabs defaultValue="overview" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="organization">Organization</TabsTrigger>
-            <TabsTrigger value="people">People</TabsTrigger>
-            <TabsTrigger value="sales">Sales</TabsTrigger>
-          </TabsList>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Welcome, {user.username || user.email || "User"}!</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground">You are logged in as {user.roleName || "User"}.</p>
+          </CardContent>
+        </Card>
 
-          <TabsContent value="overview" className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <ErrorBoundary fallback={<StatCardSkeleton />}>
-                <Suspense fallback={<StatCardSkeleton />}>
-                  <StatCard
-                    title="Total Companies"
-                    value={dashboardData.stats.companies.count}
-                    trend={dashboardData.stats.companies.trend}
-                    icon={<Building2 className="h-4 w-4 text-muted-foreground" />}
-                  />
-                </Suspense>
-              </ErrorBoundary>
+        <Suspense fallback={<DashboardCardSkeleton />}>
+          <Card>
+            <CardHeader>
+              <CardTitle>Recent Activity</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground">Your recent system activity will appear here.</p>
+            </CardContent>
+          </Card>
+        </Suspense>
 
-              <ErrorBoundary fallback={<StatCardSkeleton />}>
-                <Suspense fallback={<StatCardSkeleton />}>
-                  <StatCard
-                    title="Total Branches"
-                    value={dashboardData.stats.branches.count}
-                    trend={dashboardData.stats.branches.trend}
-                    icon={<Building2 className="h-4 w-4 text-muted-foreground" />}
-                  />
-                </Suspense>
-              </ErrorBoundary>
-
-              <ErrorBoundary fallback={<StatCardSkeleton />}>
-                <Suspense fallback={<StatCardSkeleton />}>
-                  <StatCard
-                    title="Employees"
-                    value={dashboardData.stats.employees.count}
-                    trend={dashboardData.stats.employees.trend}
-                    icon={<Users className="h-4 w-4 text-muted-foreground" />}
-                  />
-                </Suspense>
-              </ErrorBoundary>
-
-              <ErrorBoundary fallback={<StatCardSkeleton />}>
-                <Suspense fallback={<StatCardSkeleton />}>
-                  <StatCard
-                    title="Clients"
-                    value={dashboardData.stats.clients.count}
-                    trend={dashboardData.stats.clients.trend}
-                    icon={<Briefcase className="h-4 w-4 text-muted-foreground" />}
-                  />
-                </Suspense>
-              </ErrorBoundary>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-              <ErrorBoundary fallback={<ChartCardSkeleton className="col-span-4" />}>
-                <Suspense fallback={<ChartCardSkeleton className="col-span-4" />}>
-                  <Card className="col-span-4">
-                    <CardHeader>
-                      <CardTitle>Employee Growth</CardTitle>
-                      <CardDescription>Monthly employee growth for the current year</CardDescription>
-                    </CardHeader>
-                    <CardContent className="pl-2">
-                      <EmployeeGrowthChart data={dashboardData.employeeGrowth} />
-                    </CardContent>
-                  </Card>
-                </Suspense>
-              </ErrorBoundary>
-
-              <ErrorBoundary fallback={<ActivityCardSkeleton className="col-span-3" />}>
-                <Suspense fallback={<ActivityCardSkeleton className="col-span-3" />}>
-                  <Card className="col-span-3">
-                    <CardHeader>
-                      <CardTitle>Recent Activity</CardTitle>
-                      <CardDescription>Latest actions in the system</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <RecentActivityList
-                        activities={activities.length > 0 ? activities : dashboardData.recentActivities}
-                      />
-                    </CardContent>
-                  </Card>
-                </Suspense>
-              </ErrorBoundary>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              <ErrorBoundary fallback={<ChartCardSkeleton />}>
-                <Suspense fallback={<ChartCardSkeleton />}>
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Employees by Department</CardTitle>
-                      <CardDescription>Real-time distribution of employees across departments</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <RealTimeDepartmentChart initialData={departmentData} />
-                    </CardContent>
-                  </Card>
-                </Suspense>
-              </ErrorBoundary>
-
-              <ErrorBoundary fallback={<ChartCardSkeleton />}>
-                <Suspense fallback={<ChartCardSkeleton />}>
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Branches by Company</CardTitle>
-                      <CardDescription>Distribution of branches across companies</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <BranchDistributionChart data={dashboardData.branchesByCompany} />
-                    </CardContent>
-                  </Card>
-                </Suspense>
-              </ErrorBoundary>
-
-              <ErrorBoundary fallback={<ChartCardSkeleton />}>
-                <Suspense fallback={<ChartCardSkeleton />}>
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Quick Actions</CardTitle>
-                      <CardDescription>Common tasks and shortcuts</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="grid grid-cols-2 gap-2">
-                        <ActionButton
-                          href="/people/employees/add"
-                          icon={<UserPlus className="h-4 w-4" />}
-                          title="Add Employee"
-                        />
-                        <ActionButton
-                          href="/organization/clients"
-                          icon={<Briefcase className="h-4 w-4" />}
-                          title="View Clients"
-                        />
-                        <ActionButton
-                          href="/sales/create-lead"
-                          icon={<TrendingUp className="h-4 w-4" />}
-                          title="Create Lead"
-                        />
-                        <ActionButton
-                          href="/organization/companies"
-                          icon={<Building2 className="h-4 w-4" />}
-                          title="View Companies"
-                        />
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Suspense>
-              </ErrorBoundary>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="organization" className="space-y-4">
-            <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Companies</CardTitle>
-                  <CardDescription>Manage your organization's companies</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    <Link
-                      href="/organization/companies"
-                      className="inline-flex w-full items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2"
-                    >
-                      View All Companies
-                    </Link>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Branches</CardTitle>
-                  <CardDescription>Manage your organization's branch locations</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    <Link
-                      href="/organization/branches"
-                      className="inline-flex w-full items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2"
-                    >
-                      View All Branches
-                    </Link>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Clients</CardTitle>
-                  <CardDescription>Manage your organization's clients</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    <Link
-                      href="/organization/clients"
-                      className="inline-flex w-full items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2"
-                    >
-                      View All Clients
-                    </Link>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="people" className="space-y-4">
-            <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Employees</CardTitle>
-                  <CardDescription>Manage your organization's employees</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    <Link
-                      href="/people/employees"
-                      className="inline-flex w-full items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2"
-                    >
-                      View All Employees
-                    </Link>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Departments</CardTitle>
-                  <CardDescription>Manage your organization's departments</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    <Link
-                      href="/people/departments"
-                      className="inline-flex w-full items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2"
-                    >
-                      View All Departments
-                    </Link>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Designations</CardTitle>
-                  <CardDescription>Manage your organization's designations</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    <Link
-                      href="/people/designations"
-                      className="inline-flex w-full items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2"
-                    >
-                      View All Designations
-                    </Link>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="sales" className="space-y-4">
-            <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-              <Card>
-                <CardHeader>
-                  <CardTitle>My Leads</CardTitle>
-                  <CardDescription>View and manage your assigned leads</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    <Link
-                      href="/sales/my-leads"
-                      className="inline-flex w-full items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2"
-                    >
-                      View My Leads
-                    </Link>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>New Lead</CardTitle>
-                  <CardDescription>Create a new sales lead</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    <Link
-                      href="/sales/create-lead"
-                      className="inline-flex w-full items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2"
-                    >
-                      Create Lead
-                    </Link>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Lead Sources</CardTitle>
-                  <CardDescription>Manage your lead sources</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    <Link
-                      href="/sales/lead-sources"
-                      className="inline-flex w-full items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2"
-                    >
-                      View Lead Sources
-                    </Link>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-        </Tabs>
+        <Suspense fallback={<DashboardCardSkeleton />}>
+          <Card>
+            <CardHeader>
+              <CardTitle>Quick Actions</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                <button className="w-full text-left px-4 py-2 text-sm rounded-md hover:bg-muted">View Profile</button>
+                <button className="w-full text-left px-4 py-2 text-sm rounded-md hover:bg-muted">
+                  Update Settings
+                </button>
+                <button className="w-full text-left px-4 py-2 text-sm rounded-md hover:bg-muted">View Reports</button>
+              </div>
+            </CardContent>
+          </Card>
+        </Suspense>
       </div>
     </div>
+  )
+}
+
+function DashboardCardSkeleton() {
+  return (
+    <Card>
+      <CardHeader>
+        <Skeleton className="h-8 w-3/4" />
+      </CardHeader>
+      <CardContent>
+        <Skeleton className="h-4 w-full mb-2" />
+        <Skeleton className="h-4 w-5/6" />
+      </CardContent>
+    </Card>
   )
 }
 

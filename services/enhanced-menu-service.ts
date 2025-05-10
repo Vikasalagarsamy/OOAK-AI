@@ -1,31 +1,60 @@
-import { createClient } from "@/lib/supabase"
-import type { MenuItemWithPermission } from "@/types/menu"
-import { getCurrentUser } from "@/actions/auth-actions"
+import { createClient } from "@/lib/supabase-server"
+import type { MenuItem } from "@/types/menu"
 
-// Function to get menu items with permissions using our new database function
-export async function getEnhancedMenuForCurrentUser(): Promise<MenuItemWithPermission[]> {
+// Get the current user ID from the session
+export async function getCurrentUserId(): Promise<string | null> {
   try {
-    console.log("getEnhancedMenuForCurrentUser: Starting to fetch menu for current user")
+    const supabase = createClient()
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
 
-    const user = await getCurrentUser()
-
-    if (!user) {
-      console.log("getEnhancedMenuForCurrentUser: No user found, returning empty menu")
-      return []
+    if (!session) {
+      console.warn("No authenticated session found when getting current user ID")
+      return null
     }
 
-    console.log("getEnhancedMenuForCurrentUser: User info:", {
-      id: user.id,
-      username: user.username,
-      roleId: user.roleId,
-      roleName: user.roleName,
-      isAdmin: user.isAdmin,
-    })
+    return session.user.id
+  } catch (error) {
+    console.error("Error getting current user ID:", error)
+    return null
+  }
+}
 
-    // Use our new database function to get complete menu hierarchy
+// Get the role ID for the current user
+export async function getUserRoleId(userId: string | null): Promise<number | null> {
+  if (!userId) {
+    console.warn("No user ID provided when getting user role")
+    return null
+  }
+
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase.from("user_accounts").select("role_id").eq("user_id", userId).single()
+
+    if (error) {
+      console.error("Error fetching user role:", error)
+      return null
+    }
+
+    return data?.role_id || null
+  } catch (error) {
+    console.error("Error in getUserRoleId:", error)
+    return null
+  }
+}
+
+// Get menu items for a specific role
+export async function getMenuItemsForRole(roleId: number | null): Promise<MenuItem[]> {
+  if (!roleId) {
+    console.warn("No role ID provided when getting menu items")
+    return []
+  }
+
+  try {
     const supabase = createClient()
     const { data, error } = await supabase.rpc("get_complete_menu_hierarchy", {
-      p_user_id: user.id,
+      p_role_id: roleId,
     })
 
     if (error) {
@@ -33,87 +62,34 @@ export async function getEnhancedMenuForCurrentUser(): Promise<MenuItemWithPermi
       return []
     }
 
-    console.log(`getEnhancedMenuForCurrentUser: Retrieved ${data?.length || 0} menu items with permissions`)
-
-    // Convert the data to our expected format
-    const menuItems = (data || []).map((item) => ({
-      id: item.id,
-      parentId: item.parent_id,
-      name: item.name,
-      path: item.path,
-      icon: item.icon,
-      isVisible: item.is_visible,
-      sortOrder: item.sort_order,
-      permissions: {
-        canView: item.can_view,
-        canAdd: item.can_add,
-        canEdit: item.can_edit,
-        canDelete: item.can_delete,
-      },
-    }))
-
-    // Build menu tree with improved logic
-    const menuTree = buildEnhancedMenuTree(menuItems)
-    console.log(`getEnhancedMenuForCurrentUser: Final menu tree has ${menuTree.length} top-level items`)
-
-    return menuTree
+    return data || []
   } catch (error) {
-    console.error("Error getting enhanced menu for current user:", error)
-    throw error
-  }
-}
-
-// Improved menu tree building function
-function buildEnhancedMenuTree(
-  items: MenuItemWithPermission[],
-  parentId: number | null = null,
-): MenuItemWithPermission[] {
-  try {
-    // First, get all items that match the current parentId
-    const currentLevelItems = items.filter((item) => item.parentId === parentId)
-
-    // For each item at this level, recursively build its children
-    return currentLevelItems
-      .map((item) => {
-        // Get all children for this item
-        const children = buildEnhancedMenuTree(items, item.id)
-
-        // Always include the item with its children
-        return { ...item, children }
-      })
-      .filter((item) => {
-        // Only filter out items that are explicitly marked as not visible
-        // This ensures we don't accidentally hide menu items
-        return item.isVisible !== false
-      })
-      .sort((a, b) => a.sortOrder - b.sortOrder)
-  } catch (error) {
-    console.error("Error in buildEnhancedMenuTree:", error)
+    console.error("Error in getMenuItemsForRole:", error)
     return []
   }
 }
 
-// Function to get a flat list of all accessible paths for the current user
-export async function getEnhancedAccessiblePaths(): Promise<string[]> {
+// Get enhanced menu for the current user
+export async function getEnhancedMenuForCurrentUser(userId?: string | null): Promise<MenuItem[]> {
   try {
-    const menu = await getEnhancedMenuForCurrentUser()
-    const paths: string[] = []
+    // If userId is provided, use it; otherwise, get it from the session
+    const currentUserId = userId || (await getCurrentUserId())
 
-    function extractPaths(items: MenuItemWithPermission[]) {
-      for (const item of items) {
-        if (item.path) {
-          paths.push(item.path)
-        }
-        if (item.children && item.children.length > 0) {
-          extractPaths(item.children)
-        }
-      }
+    if (!currentUserId) {
+      console.warn("No user ID available for menu retrieval")
+      return []
     }
 
-    extractPaths(menu)
-    return paths
+    const roleId = await getUserRoleId(currentUserId)
+
+    if (!roleId) {
+      console.warn(`No role found for user ${currentUserId}`)
+      return []
+    }
+
+    return await getMenuItemsForRole(roleId)
   } catch (error) {
-    console.error("Error in getEnhancedAccessiblePaths:", error)
+    console.error("Error getting enhanced menu:", error)
     return []
   }
 }

@@ -52,6 +52,9 @@ export async function middleware(req: NextRequest) {
       }
     }
 
+    // Add debugging
+    console.log("Token verified successfully, user allowed to access:", path)
+
     // Allow the request to proceed
     return NextResponse.next()
   } catch (error) {

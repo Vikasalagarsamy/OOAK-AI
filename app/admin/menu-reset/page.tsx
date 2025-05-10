@@ -3,33 +3,44 @@ import { EmergencyMenuReset } from "@/components/admin/emergency-menu-reset"
 export default function MenuResetPage() {
   return (
     <div className="container mx-auto py-6 space-y-6">
-      <h1 className="text-2xl font-bold">Menu System Reset</h1>
-      <p className="text-gray-500">
-        This page provides tools to reset the menu system when it's not working correctly.
-      </p>
+      <div className="flex flex-col gap-2">
+        <h1 className="text-3xl font-bold">Menu System Reset</h1>
+        <p className="text-muted-foreground">Use this page to reset the menu system if you're experiencing issues.</p>
+      </div>
 
-      <div className="grid gap-6">
-        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                <path
-                  fillRule="evenodd"
-                  d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </div>
-            <div className="ml-3">
-              <p className="text-sm text-yellow-700">
-                <strong>Warning:</strong> Use this tool only as a last resort. It will reset all menu permissions for
-                the Administrator role.
-              </p>
-            </div>
+      <div className="p-6 border rounded-md bg-amber-50">
+        <h2 className="text-xl font-semibold mb-4">Emergency Menu Reset</h2>
+        <div className="space-y-4">
+          <div className="bg-white p-4 rounded-md border border-amber-200">
+            <h3 className="font-medium text-amber-800 mb-2">What this does:</h3>
+            <ul className="list-disc pl-5 space-y-1 text-sm">
+              <li>Clears all menu caches</li>
+              <li>Ensures all menu items are properly assigned to the Administrator role</li>
+              <li>Forces a complete reload of the menu system</li>
+              <li>Logs the reset action for audit purposes</li>
+            </ul>
           </div>
-        </div>
 
-        <EmergencyMenuReset />
+          <div className="bg-white p-4 rounded-md border border-amber-200">
+            <h3 className="font-medium text-amber-800 mb-2">When to use:</h3>
+            <ul className="list-disc pl-5 space-y-1 text-sm">
+              <li>Menu items are missing for administrators</li>
+              <li>Menu permissions are not working correctly</li>
+              <li>Changes to menu items are not appearing</li>
+              <li>As a last resort when other troubleshooting steps have failed</li>
+            </ul>
+          </div>
+
+          <div className="bg-red-50 p-4 rounded-md border border-red-200">
+            <h3 className="font-medium text-red-800 mb-2">Warning:</h3>
+            <p className="text-sm text-red-700">
+              This action will force all users to reload their menu. It should only be used when necessary and
+              preferably during low-traffic periods.
+            </p>
+          </div>
+
+          <EmergencyMenuReset />
+        </div>
       </div>
     </div>
   )

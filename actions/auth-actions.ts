@@ -87,15 +87,21 @@ export async function authenticate(username: string, password: string): Promise<
       firstName: userAccount.employees?.first_name || "",
       lastName: userAccount.employees?.last_name || "",
       roleName: userAccount.roles?.title || "",
+      isAdmin: userAccount.roles?.title === "Administrator" || userAccount.role_id === 1,
     }
 
     try {
       // Create session token
       const token = await createSessionToken(user)
-      console.log("Token created")
+      console.log("Token created successfully")
 
       // Store in cookie
       const cookieStore = cookies()
+
+      // First clear any existing auth cookie to prevent conflicts
+      cookieStore.delete("auth_token")
+
+      // Set new cookie with proper attributes
       cookieStore.set("auth_token", token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
@@ -103,7 +109,7 @@ export async function authenticate(username: string, password: string): Promise<
         path: "/",
         sameSite: "lax",
       })
-      console.log("Cookie set")
+      console.log("Cookie set successfully")
 
       // Update last login timestamp
       await supabase.from("user_accounts").update({ last_login: new Date().toISOString() }).eq("id", userAccount.id)
@@ -134,6 +140,7 @@ async function createSessionToken(user: any) {
     username: user.username,
     role: user.roleId,
     roleName: user.roleName,
+    isAdmin: user.isAdmin,
     // Add a timestamp to ensure the token is unique even if other data is the same
     iat: Math.floor(Date.now() / 1000),
     jti: `${user.id}-${Date.now()}`,
@@ -171,50 +178,15 @@ export async function getCurrentUser() {
         return null
       }
 
-      // Fetch fresh user data from database
-      const supabase = createClient()
-      const { data: user, error } = await supabase
-        .from("user_accounts")
-        .select(`
-          id, 
-          username, 
-          email, 
-          is_active, 
-          employee_id, 
-          role_id,
-          roles:role_id (
-            id, 
-            title
-          )
-        `)
-        .eq("id", payload.sub)
-        .single()
-
-      if (error) {
-        console.error("getCurrentUser: Error fetching user data:", error)
-        return null
-      }
-
-      if (!user || !user.is_active) {
-        console.log("getCurrentUser: User not found or inactive")
-        return null
-      }
-
-      console.log("getCurrentUser: User data retrieved successfully:", {
-        id: user.id,
-        username: user.username,
-        roleId: user.role_id,
-        roleName: user.roles?.title,
-      })
-
+      // For improved performance, we can return a user object directly from the JWT
+      // instead of querying the database again
       return {
-        id: user.id,
-        username: user.username,
-        email: user.email || "",
-        employeeId: user.employee_id,
-        roleId: user.role_id,
-        roleName: user.roles?.title || "",
-        isAdmin: user.roles?.title === "Administrator" || user.role_id === 1,
+        id: payload.sub,
+        username: payload.username as string,
+        email: (payload.email as string) || "",
+        roleId: payload.role as number | string,
+        roleName: (payload.roleName as string) || "",
+        isAdmin: (payload.isAdmin as boolean) || payload.roleName === "Administrator",
       }
     } catch (verifyError) {
       console.error("getCurrentUser: Token verification error:", verifyError)
@@ -304,6 +276,7 @@ export async function refreshUserSession() {
       firstName: userData.employees?.first_name || "",
       lastName: userData.employees?.last_name || "",
       roleName: userData.roles?.title || "",
+      isAdmin: userData.roles?.title === "Administrator" || userData.role_id === 1,
     }
 
     // Create a new token

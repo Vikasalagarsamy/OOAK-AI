@@ -25,6 +25,26 @@ export default function LoginPage() {
 
   // Use a ref to track if we've already shown the toast for this parameter
   const redirectReasonShown = useRef(false)
+  const loginAttemptedRef = useRef(false)
+
+  // Check if already logged in (to prevent loop)
+  useEffect(() => {
+    async function checkLoggedIn() {
+      try {
+        const res = await fetch("/api/auth/status")
+        const data = await res.json()
+
+        if (data.authenticated) {
+          console.log("User already authenticated, redirecting to dashboard")
+          router.push("/dashboard")
+        }
+      } catch (err) {
+        console.error("Error checking authentication status:", err)
+      }
+    }
+
+    checkLoggedIn()
+  }, [router])
 
   // Check if redirected from another page due to auth - use refs to prevent infinite loop
   useEffect(() => {
@@ -46,6 +66,7 @@ export default function LoginPage() {
     setIsLoading(true)
     setError("")
     setSuccess(false)
+    loginAttemptedRef.current = true
 
     if (!username.trim() || !password.trim()) {
       setError("Username and password are required")

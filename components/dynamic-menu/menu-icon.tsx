@@ -1,63 +1,25 @@
-"use client"
+import type { LucideIcon } from "lucide-react"
+import * as Icons from "lucide-react"
 
-import type React from "react"
-
-import {
-  LayoutDashboard,
-  Users,
-  User,
-  Building,
-  Building2,
-  GitBranch,
-  Shield,
-  Briefcase,
-  BadgeCheck,
-  Settings,
-  TrendingUp,
-  FilePlus,
-  ListChecks,
-  List,
-  Calendar,
-  FileText,
-  CheckCircle,
-  XCircle,
-  Globe,
-  Menu,
-  Bug,
-  CircleHelp,
-} from "lucide-react"
-
-export interface MenuIconProps {
+interface MenuIconProps {
   name: string
   className?: string
 }
 
-const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
-  LayoutDashboard,
-  Users,
-  User,
-  Building,
-  Building2,
-  GitBranch,
-  Shield,
-  Briefcase,
-  BadgeCheck,
-  Settings,
-  TrendingUp,
-  FilePlus,
-  ListChecks,
-  List,
-  Calendar,
-  FileText,
-  CheckCircle,
-  XCircle,
-  Globe,
-  Menu,
-  Bug,
-}
-
 export function MenuIcon({ name, className }: MenuIconProps) {
-  const Icon = iconMap[name] || CircleHelp
+  // Default to CircleDot if no icon name is provided
+  if (!name) {
+    return <Icons.CircleDot className={className} />
+  }
+
+  // Convert kebab-case to PascalCase for Lucide icons
+  const iconName = name
+    .split("-")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join("")
+
+  // Get the icon component from Lucide
+  const Icon = (Icons as Record<string, LucideIcon>)[iconName] || Icons.CircleDot
 
   return <Icon className={className} />
 }
