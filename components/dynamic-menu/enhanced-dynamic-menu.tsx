@@ -6,7 +6,7 @@ import { useMobile } from "@/hooks/use-mobile"
 import { Skeleton } from "@/components/ui/skeleton"
 
 export function EnhancedDynamicMenu() {
-  const { menuItems, isLoading, error } = useEnhancedMenu()
+  const { menuItems = [], isLoading, error } = useEnhancedMenu()
   const isMobile = useMobile()
 
   if (isLoading) {
@@ -31,20 +31,27 @@ export function EnhancedDynamicMenu() {
     )
   }
 
-  // Filter top-level menu items
-  const topLevelItems = menuItems.filter((item) => !item.parentId)
+  // Safely filter top-level menu items with null check
+  const topLevelItems = Array.isArray(menuItems) ? menuItems.filter((item) => !item.parentId) : []
 
   return (
     <nav className="flex items-center space-x-4">
-      {topLevelItems.map((item) => (
-        <Link
-          key={item.id}
-          href={item.path || "#"}
-          className="text-sm font-medium transition-colors hover:text-primary"
-        >
-          {item.name}
+      {topLevelItems.length > 0 ? (
+        topLevelItems.map((item) => (
+          <Link
+            key={item.id || `menu-${Math.random()}`}
+            href={item.path || "#"}
+            className="text-sm font-medium transition-colors hover:text-primary"
+          >
+            {item.name || "Menu Item"}
+          </Link>
+        ))
+      ) : (
+        // Fallback when no menu items are available
+        <Link href="/dashboard" className="text-sm font-medium">
+          Dashboard
         </Link>
-      ))}
+      )}
     </nav>
   )
 }
