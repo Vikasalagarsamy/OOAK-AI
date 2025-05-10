@@ -1,25 +1,49 @@
-import type { LucideIcon } from "lucide-react"
-import * as Icons from "lucide-react"
+"use client"
 
-interface MenuIconProps {
-  name: string
-  className?: string
+import {
+  Building,
+  Building2,
+  CircleDot,
+  GitBranch,
+  LayoutDashboard,
+  Package,
+  Shield,
+  Truck,
+  TrendingUp,
+  User,
+  UserCog,
+  UserPlus,
+  Users,
+  type LucideIcon,
+  type LightbulbIcon as LucideProps,
+} from "lucide-react"
+
+interface MenuIconProps extends LucideProps {
+  name?: string
 }
 
-export function MenuIcon({ name, className }: MenuIconProps) {
-  // Default to CircleDot if no icon name is provided
-  if (!name) {
-    return <Icons.CircleDot className={className} />
+export function MenuIcon({ name, ...props }: MenuIconProps) {
+  const iconMap: Record<string, LucideIcon> = {
+    building: Building,
+    "building-2": Building2,
+    "circle-dot": CircleDot,
+    "git-branch": GitBranch,
+    "layout-dashboard": LayoutDashboard,
+    package: Package,
+    shield: Shield,
+    truck: Truck,
+    "trending-up": TrendingUp,
+    user: User,
+    "user-cog": UserCog,
+    "user-plus": UserPlus,
+    users: Users,
   }
 
-  // Convert kebab-case to PascalCase for Lucide icons
-  const iconName = name
-    .split("-")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join("")
+  // Convert kebab-case to camelCase for compatibility
+  const normalizedName = name?.toLowerCase().replace(/-([a-z])/g, (_, letter) => letter.toUpperCase())
 
-  // Get the icon component from Lucide
-  const Icon = (Icons as Record<string, LucideIcon>)[iconName] || Icons.CircleDot
+  // Find the icon component
+  const Icon = name ? iconMap[name] || iconMap[normalizedName || ""] || CircleDot : CircleDot
 
-  return <Icon className={className} />
+  return <Icon {...props} />
 }

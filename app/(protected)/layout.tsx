@@ -1,7 +1,7 @@
 import type React from "react"
 import { getCurrentUser } from "@/actions/auth-actions"
 import { redirect } from "next/navigation"
-import { EnhancedDynamicMenu } from "@/components/dynamic-menu/enhanced-dynamic-menu"
+import { Breadcrumbs } from "@/components/breadcrumbs"
 
 export default async function ProtectedLayout({
   children,
@@ -15,19 +15,12 @@ export default async function ProtectedLayout({
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <header className="sticky top-0 z-50 w-full border-b bg-background">
-        <div className="container flex h-16 items-center">
-          <EnhancedDynamicMenu />
-          <div className="ml-auto flex items-center space-x-4">
-            <div className="flex items-center space-x-1">
-              <span className="text-sm font-medium">{user.username || user.email || "User"}</span>
-              <span className="text-xs text-muted-foreground">({user.roleName || "User"})</span>
-            </div>
-          </div>
-        </div>
-      </header>
-      <main className="flex-1">{children}</main>
+    <div className="min-h-screen flex flex-col">
+      {/* Main Content - Static navigation is now in the root layout */}
+      <div className="container mx-auto px-4 py-4">
+        <Breadcrumbs />
+        <main>{children}</main>
+      </div>
     </div>
   )
 }

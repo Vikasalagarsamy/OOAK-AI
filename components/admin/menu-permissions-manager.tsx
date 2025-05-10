@@ -9,6 +9,8 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
 import { MenuIcon } from "@/components/dynamic-menu/menu-icon"
 import { toast } from "@/components/ui/use-toast"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { AlertCircle, RefreshCw } from "lucide-react"
 
 interface Role {
   id: number
@@ -39,104 +41,138 @@ export function MenuPermissionsManager() {
   const [selectedRole, setSelectedRole] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
 
+  // Create Supabase client
   const supabase = createClient()
 
   // Load roles
-  useEffect(() => {
-    async function loadRoles() {
-      try {
-        const { data, error } = await supabase.from("roles").select("id, title").order("title")
+  const loadRoles = async () => {
+    setError(null)
+    try {
+      const { data, error } = await supabase.from("roles").select("id, title").order("title")
 
-        if (error) throw error
+      if (error) throw error
 
-        setRoles(data || [])
-        if (data && data.length > 0) {
-          setSelectedRole(data[0].id)
-        }
-      } catch (error) {
-        console.error("Error loading roles:", error)
-        toast({
-          title: "Error",
-          description: "Failed to load roles",
-          variant: "destructive",
-        })
+      if (data && data.length > 0) {
+        setRoles(data)
+        setSelectedRole(data[0].id)
+      } else {
+        setError("No roles found. Please check if the roles table exists and has data.")
       }
+    } catch (error: any) {
+      console.error("Error loading roles:", error)
+      setError(`Failed to load roles: ${error.message || "Unknown error"}`)
+      toast({
+        title: "Error",
+        description: "Failed to load roles. See console for details.",
+        variant: "destructive",
+      })
     }
-
-    loadRoles()
-  }, [])
+  }
 
   // Load menu items
-  useEffect(() => {
-    async function loadMenuItems() {
-      try {
-        const { data, error } = await supabase
-          .from("menu_items")
-          .select("id, parent_id, name, icon, path, sort_order")
-          .order("sort_order")
+  const loadMenuItems = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("menu_items")
+        .select("id, parent_id, name, icon, path, sort_order")
+        .order("sort_order")
 
-        if (error) throw error
+      if (error) throw error
 
-        setMenuItems(data || [])
-      } catch (error) {
-        console.error("Error loading menu items:", error)
-        toast({
-          title: "Error",
-          description: "Failed to load menu items",
-          variant: "destructive",
-        })
-      } finally {
-        setLoading(false)
+      if (data && data.length > 0) {
+        setMenuItems(data)
+      } else {
+        setError("No menu items found. Please check if the menu_items table exists and has data.")
       }
+    } catch (error: any) {
+      console.error("Error loading menu items:", error)
+      setError(`Failed to load menu items: ${error.message || "Unknown error"}`)
+      toast({
+        title: "Error",
+        description: "Failed to load menu items. See console for details.",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
     }
-
-    loadMenuItems()
-  }, [])
+  }
 
   // Load permissions for selected role
-  useEffect(() => {
-    async function loadPermissions() {
-      if (!selectedRole) return
+  const loadPermissions = async () => {
+    if (!selectedRole) return
 
-      setLoading(true)
-      try {
-        const { data, error } = await supabase
-          .from("role_menu_permissions")
-          .select("menu_item_id, can_view, can_add, can_edit, can_delete")
-          .eq("role_id", selectedRole)
+    setLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from("role_menu_permissions")
+        .select("menu_item_id, can_view, can_add, can_edit, can_delete")
+        .eq("role_id", selectedRole)
 
-        if (error) throw error
+      if (error) throw error
 
-        // Convert to a map for easier lookup
-        const permissionsMap: Record<number, Permission> = {}
-        if (data) {
-          data.forEach((item) => {
-            permissionsMap[item.menu_item_id] = {
-              menu_item_id: item.menu_item_id,
-              can_view: item.can_view,
-              can_add: item.can_add,
-              can_edit: item.can_edit,
-              can_delete: item.can_delete,
-            }
-          })
-        }
-
-        setPermissions(permissionsMap)
-      } catch (error) {
-        console.error("Error loading permissions:", error)
-        toast({
-          title: "Error",
-          description: "Failed to load permissions",
-          variant: "destructive",
+      // Convert to a map for easier lookup
+      const permissionsMap: Record<number, Permission> = {}
+      if (data) {
+        data.forEach((item) => {
+          permissionsMap[item.menu_item_id] = {
+            menu_item_id: item.menu_item_id,
+            can_view: item.can_view,
+            can_add: item.can_add,
+            can_edit: item.can_edit,
+            can_delete: item.can_delete,
+          }
         })
-      } finally {
-        setLoading(false)
       }
+
+      setPermissions(permissionsMap)
+    } catch (error: any) {
+      console.error("Error loading permissions:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load permissions. See console for details.",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Initial data loading
+  useEffect(() => {
+    const initializeData = async () => {
+      setLoading(true)
+      await loadRoles()
+      await loadMenuItems()
+      setLoading(false)
     }
 
-    loadPermissions()
+    initializeData()
+  }, [])
+
+  // Load permissions when selected role changes
+  useEffect(() => {
+    if (selectedRole) {
+      loadPermissions()
+    }
   }, [selectedRole])
+
+  // Refresh data
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    await loadRoles()
+    await loadMenuItems()
+    if (selectedRole) {
+      await loadPermissions()
+    }
+    setRefreshing(false)
+    toast({
+      title: "Refreshed",
+      description: "Data has been refreshed",
+    })
+  }
 
   // Organize menu items into a tree structure
   const menuTree = organizeMenuItems(menuItems)
@@ -214,19 +250,21 @@ export function MenuPermissionsManager() {
       if (deleteError) throw deleteError
 
       // Then insert new permissions
-      const { error: insertError } = await supabase.from("role_menu_permissions").insert(permissionsArray)
+      if (permissionsArray.length > 0) {
+        const { error: insertError } = await supabase.from("role_menu_permissions").insert(permissionsArray)
 
-      if (insertError) throw insertError
+        if (insertError) throw insertError
+      }
 
       toast({
         title: "Success",
         description: "Permissions saved successfully",
       })
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error saving permissions:", error)
       toast({
         title: "Error",
-        description: "Failed to save permissions",
+        description: `Failed to save permissions: ${error.message || "Unknown error"}`,
         variant: "destructive",
       })
     } finally {
@@ -327,56 +365,96 @@ export function MenuPermissionsManager() {
     )
   }
 
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+        <Button onClick={handleRefresh} disabled={refreshing}>
+          <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+          {refreshing ? "Refreshing..." : "Refresh Data"}
+        </Button>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <Card>
-        <CardHeader>
-          <CardTitle>Role-Based Menu Permissions</CardTitle>
-          <CardDescription>
-            Configure which menu items are visible to each role and what actions they can perform
-          </CardDescription>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>Role-Based Menu Permissions</CardTitle>
+            <CardDescription>
+              Configure which menu items are visible to each role and what actions they can perform
+            </CardDescription>
+          </div>
+          <Button size="sm" onClick={handleRefresh} disabled={refreshing}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+            {refreshing ? "Refreshing..." : "Refresh"}
+          </Button>
         </CardHeader>
         <CardContent>
           {loading ? (
             <div className="space-y-4">
-              <Skeleton className="h-10 w-32" />
+              <Skeleton className="h-10 w-full" />
               <Skeleton className="h-64 w-full" />
             </div>
           ) : (
             <div className="space-y-6">
-              <Tabs defaultValue={selectedRole?.toString()} onValueChange={(value) => setSelectedRole(Number(value))}>
-                <TabsList className="mb-4">
-                  {roles.map((role) => (
-                    <TabsTrigger key={role.id} value={role.id.toString()}>
-                      {role.title}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
+              {roles.length === 0 ? (
+                <Alert>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>No Roles Found</AlertTitle>
+                  <AlertDescription>
+                    No roles were found in the database. Please check if the roles table exists and has data.
+                  </AlertDescription>
+                </Alert>
+              ) : menuItems.length === 0 ? (
+                <Alert>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>No Menu Items Found</AlertTitle>
+                  <AlertDescription>
+                    No menu items were found in the database. Please check if the menu_items table exists and has data.
+                  </AlertDescription>
+                </Alert>
+              ) : (
+                <Tabs defaultValue={selectedRole?.toString()} onValueChange={(value) => setSelectedRole(Number(value))}>
+                  <TabsList className="mb-4">
+                    {roles.map((role) => (
+                      <TabsTrigger key={role.id} value={role.id.toString()}>
+                        {role.title}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
 
-                {roles.map((role) => (
-                  <TabsContent key={role.id} value={role.id.toString()}>
-                    <div className="space-y-4">
-                      <div className="flex justify-between items-center pb-2 border-b">
-                        <div className="flex-1 font-semibold">Menu Item</div>
-                        <div className="flex items-center gap-4">
-                          <div className="w-16 text-center text-sm">View</div>
-                          <div className="w-16 text-center text-sm">Add</div>
-                          <div className="w-16 text-center text-sm">Edit</div>
-                          <div className="w-16 text-center text-sm">Delete</div>
+                  {roles.map((role) => (
+                    <TabsContent key={role.id} value={role.id.toString()}>
+                      <div className="space-y-4">
+                        <div className="flex justify-between items-center pb-2 border-b">
+                          <div className="flex-1 font-semibold">Menu Item</div>
+                          <div className="flex items-center gap-4">
+                            <div className="w-16 text-center text-sm">View</div>
+                            <div className="w-16 text-center text-sm">Add</div>
+                            <div className="w-16 text-center text-sm">Edit</div>
+                            <div className="w-16 text-center text-sm">Delete</div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">{menuTree.map((item) => renderMenuItem(item))}</div>
+
+                        <div className="flex justify-end mt-6">
+                          <Button onClick={savePermissions} disabled={saving}>
+                            {saving ? "Saving..." : "Save Permissions"}
+                          </Button>
                         </div>
                       </div>
-
-                      <div className="space-y-2">{menuTree.map((item) => renderMenuItem(item))}</div>
-
-                      <div className="flex justify-end mt-6">
-                        <Button onClick={savePermissions} disabled={saving}>
-                          {saving ? "Saving..." : "Save Permissions"}
-                        </Button>
-                      </div>
-                    </div>
-                  </TabsContent>
-                ))}
-              </Tabs>
+                    </TabsContent>
+                  ))}
+                </Tabs>
+              )}
             </div>
           )}
         </CardContent>

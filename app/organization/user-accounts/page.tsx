@@ -1,5 +1,5 @@
 import { getUserAccounts } from "@/actions/user-accounts-actions"
-import { UserAccountsList } from "@/components/user-accounts-list"
+import { EnhancedUserAccountsList } from "@/components/enhanced-user-accounts-list"
 
 export default async function UserAccountsPage() {
   const { data: accounts, error } = await getUserAccounts()
@@ -11,7 +11,8 @@ export default async function UserAccountsPage() {
         <p className="text-muted-foreground mt-2">Manage user accounts and their access to the system.</p>
       </div>
 
-      <UserAccountsList initialAccounts={accounts} error={error} />
+      {/* Use the enhanced version for better error handling */}
+      <EnhancedUserAccountsList initialAccounts={accounts} error={error} />
     </div>
   )
 }

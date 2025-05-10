@@ -1,11 +1,4 @@
-import type { Metadata } from "next"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { AccountCreationForm } from "@/components/account-creation-form"
-
-export const metadata: Metadata = {
-  title: "Account Creation",
-  description: "Create user accounts for employees",
-}
+import { EnhancedAccountCreationForm } from "@/components/enhanced-account-creation-form"
 
 export default function AccountCreationPage() {
   return (
@@ -15,17 +8,7 @@ export default function AccountCreationPage() {
         <p className="text-muted-foreground mt-2">Create user accounts for employees and assign roles.</p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Create New Account</CardTitle>
-          <CardDescription>
-            Select an employee, assign a role, and set up a password to create a new user account.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <AccountCreationForm />
-        </CardContent>
-      </Card>
+      <EnhancedAccountCreationForm />
     </div>
   )
 }

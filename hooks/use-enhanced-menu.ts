@@ -1,54 +1,56 @@
 "use client"
 
-import { useState, useEffect } from "react"
-
-interface MenuItem {
-  id: number
-  name: string
-  path: string
-  icon?: string
-  parentId?: number | null
-  sortOrder?: number
-}
+import { useState, useEffect, useCallback } from "react"
+import type { MenuItemWithPermission } from "@/types/menu"
 
 export function useEnhancedMenu() {
-  // Initialize with empty array to prevent undefined
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([])
+  const [menuItems, setMenuItems] = useState<MenuItemWithPermission[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
 
-  useEffect(() => {
-    async function fetchMenu() {
-      try {
-        setIsLoading(true)
-        const response = await fetch("/api/enhanced-menu")
+  const fetchMenu = useCallback(async () => {
+    setIsLoading(true)
+    setError(null)
 
-        if (!response.ok) {
-          throw new Error(`Failed to fetch menu: ${response.status}`)
-        }
+    try {
+      const response = await fetch("/api/enhanced-menu")
 
-        const data = await response.json()
-
-        // Ensure we have a valid array
-        if (!data || !Array.isArray(data.items)) {
-          console.warn("Invalid menu data format:", data)
-          setMenuItems([]) // Set empty array as fallback
-        } else {
-          setMenuItems(data.items)
-        }
-
-        setError(null)
-      } catch (err) {
-        console.error("Error fetching menu:", err)
-        setError(err instanceof Error ? err.message : "Failed to load menu")
-        setMenuItems([]) // Set empty array on error
-      } finally {
-        setIsLoading(false)
+      if (!response.ok) {
+        throw new Error(`Error fetching menu: ${response.statusText}`)
       }
-    }
 
-    fetchMenu()
+      const data = await response.json()
+
+      // Check if the response has the expected structure
+      if (data && Array.isArray(data.items)) {
+        setMenuItems(data.items)
+        setIsAuthenticated(data.isAuthenticated !== false)
+      } else if (Array.isArray(data)) {
+        // Handle case where the API returns an array directly
+        setMenuItems(data)
+        setIsAuthenticated(true)
+      } else {
+        console.error("Unexpected menu data format:", data)
+        setMenuItems([])
+        setError("Invalid menu data format")
+      }
+    } catch (err) {
+      console.error("Error fetching menu:", err)
+      setError(err instanceof Error ? err.message : "Failed to load menu")
+      setMenuItems([])
+    } finally {
+      setIsLoading(false)
+    }
   }, [])
 
-  return { menuItems, isLoading, error }
+  const refreshMenu = useCallback(() => {
+    fetchMenu()
+  }, [fetchMenu])
+
+  useEffect(() => {
+    fetchMenu()
+  }, [fetchMenu])
+
+  return { menuItems, isLoading, error, isAuthenticated, refreshMenu }
 }

@@ -2,14 +2,23 @@ import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 import { jwtVerify } from "jose"
 
+// Define admin paths that should be restricted
+const ADMIN_PATHS = ["/admin", "/organization/roles", "/organization/account-creation"]
+
+// Define paths that should be accessible without authentication
+const PUBLIC_PATHS = ["/login", "/forgot-password", "/api/auth/logout", "/api/auth/status"]
+
+// Define role-specific path restrictions
+const ROLE_RESTRICTIONS: Record<string, string[]> = {
+  "sales head": ["/admin", "/organization/roles", "/organization/account-creation"],
+}
+
 export async function middleware(req: NextRequest) {
-  // Public paths that don't require authentication
-  const publicPaths = ["/login", "/forgot-password", "/api/auth/logout"]
   const path = req.nextUrl.pathname
 
   // Allow access to public paths and static files
   if (
-    publicPaths.includes(path) ||
+    PUBLIC_PATHS.includes(path) ||
     path.startsWith("/_next") ||
     path.startsWith("/api/") ||
     path.includes("favicon.ico") ||
@@ -41,19 +50,34 @@ export async function middleware(req: NextRequest) {
       algorithms: ["HS256"],
     })
 
-    // For admin-only paths, verify admin role
-    const adminPaths = ["/admin"]
-    if (adminPaths.some((adminPath) => path.startsWith(adminPath))) {
-      if (payload.roleName !== "Administrator") {
-        // Not an admin, redirect to dashboard with error message
+    const userRole = ((payload.roleName as string) || "").toLowerCase()
+
+    // Check role-specific restrictions
+    if (userRole && ROLE_RESTRICTIONS[userRole]) {
+      const restrictedPaths = ROLE_RESTRICTIONS[userRole]
+
+      // Check if the current path starts with any restricted path
+      const isRestricted = restrictedPaths.some((restrictedPath) => path.startsWith(restrictedPath))
+
+      if (isRestricted) {
+        console.log(`User with role ${userRole} attempted to access restricted path: ${path}`)
+        // Redirect to dashboard with error message
         const url = new URL("/dashboard", req.url)
         url.searchParams.set("error", "insufficient_permissions")
         return NextResponse.redirect(url)
       }
     }
 
-    // Add debugging
-    console.log("Token verified successfully, user allowed to access:", path)
+    // For admin-only paths, verify admin role
+    if (ADMIN_PATHS.some((adminPath) => path.startsWith(adminPath))) {
+      if (payload.roleName !== "Administrator") {
+        // Not an admin, redirect to dashboard with error message
+        console.log(`Non-admin user attempted to access admin path: ${path}`)
+        const url = new URL("/dashboard", req.url)
+        url.searchParams.set("error", "insufficient_permissions")
+        return NextResponse.redirect(url)
+      }
+    }
 
     // Allow the request to proceed
     return NextResponse.next()

@@ -1,133 +1,145 @@
-import { jwtVerify } from "jose" // Using jose instead of jsonwebtoken
-import { createClient } from "@supabase/supabase-js"
+import { createClient } from "@/lib/supabase-browser"
 
-// Create a Supabase client for permission operations
-export function createPermissionClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ""
+// Cache for permission checks to reduce database queries
+const permissionCache: Record<string, { result: boolean; timestamp: number }> = {}
+const CACHE_TTL = 60000 // 1 minute cache TTL
 
-  return createClient(supabaseUrl, supabaseKey)
-}
-
-// Helper to verify auth token
-export async function verifyAuth(token: string) {
+// Check if a user has permission to access a specific path
+export async function hasPermission(userId: string, path: string, action = "view"): Promise<boolean> {
   try {
-    const secret = process.env.JWT_SECRET || "fallback-secret-only-for-development"
-    const secretKey = new TextEncoder().encode(secret)
+    // Generate a cache key
+    const cacheKey = `${userId}:${path}:${action}`
 
-    const { payload } = await jwtVerify(token, secretKey, {
-      algorithms: ["HS256"],
-    })
-
-    // Verify that the user still exists and is active
-    const supabase = createPermissionClient()
-    const { data, error } = await supabase.from("user_accounts").select("is_active").eq("id", payload.sub).single()
-
-    if (error || !data || !data.is_active) {
-      return { valid: false, payload: null }
+    // Check cache first
+    const now = Date.now()
+    const cachedValue = permissionCache[cacheKey]
+    if (cachedValue && now - cachedValue.timestamp < CACHE_TTL) {
+      return cachedValue.result
     }
 
-    return { valid: true, payload }
-  } catch (error) {
-    console.error("Token verification error:", error)
-    return { valid: false, payload: null }
-  }
-}
+    // If not in cache or expired, check from database
+    const supabase = createClient()
 
-// Check user's permission for a specific resource and action
-export async function hasPermission(userId: string, menuPath: string, action = "view") {
-  try {
-    console.log(`Checking permission for user ${userId}, menu ${menuPath}, action ${action}`)
+    // First get the user's role
+    const { data: userData, error: userError } = await supabase
+      .from("user_accounts")
+      .select("role_id, roles:role_id(title)")
+      .eq("id", userId)
+      .single()
 
-    const supabase = createPermissionClient()
-
-    // Use our new database function to check permissions
-    const { data, error } = await supabase.rpc("check_user_menu_permission", {
-      p_user_id: userId,
-      p_menu_path: menuPath,
-      p_permission: action,
-    })
-
-    if (error) {
-      console.error("Permission check error:", error)
+    if (userError || !userData) {
+      console.error("Error fetching user role:", userError)
       return false
     }
 
-    console.log(`Permission check result: ${data}`)
-    return data
+    // Administrator role has all permissions
+    if (userData.roles?.title === "Administrator") {
+      // Cache the result
+      permissionCache[cacheKey] = { result: true, timestamp: now }
+      return true
+    }
+
+    // For other roles, check specific menu permissions
+    const { data: menuItems, error: menuError } = await supabase
+      .from("menu_items")
+      .select("id")
+      .ilike("path", `${path}%`)
+      .limit(1)
+
+    if (menuError || !menuItems || menuItems.length === 0) {
+      console.error("Error or no menu item found for path:", path)
+      return false
+    }
+
+    const menuItemId = menuItems[0].id
+
+    // Check permissions for this menu item
+    const { data: permissions, error: permError } = await supabase
+      .from("role_menu_permissions")
+      .select("can_view, can_add, can_edit, can_delete")
+      .eq("role_id", userData.role_id)
+      .eq("menu_item_id", menuItemId)
+      .single()
+
+    if (permError || !permissions) {
+      console.error("Error or no permissions found:", permError)
+      return false
+    }
+
+    // Check the specific action permission
+    let hasAccess = false
+    switch (action.toLowerCase()) {
+      case "view":
+        hasAccess = permissions.can_view
+        break
+      case "add":
+        hasAccess = permissions.can_add
+        break
+      case "edit":
+        hasAccess = permissions.can_edit
+        break
+      case "delete":
+        hasAccess = permissions.can_delete
+        break
+      default:
+        hasAccess = false
+    }
+
+    // Cache the result
+    permissionCache[cacheKey] = { result: hasAccess, timestamp: now }
+    return hasAccess
   } catch (error) {
     console.error("Permission check error:", error)
     return false
   }
 }
 
-// Get current user from session
+// Get current user from client-side
 export async function getCurrentUser() {
   try {
-    // In a non-server environment, we need to get the token from localStorage or cookies
-    // This is a simplified version that would need to be adapted based on your auth flow
-    const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
+    const response = await fetch("/api/auth/status", {
+      method: "GET",
+      headers: {
+        "Cache-Control": "no-cache",
+        Pragma: "no-cache",
+      },
+    })
 
-    if (!token) {
-      console.log("No auth token found")
+    if (!response.ok) {
       return null
     }
 
-    const { valid, payload } = await verifyAuth(token)
-
-    if (!valid || !payload) {
-      console.log("Invalid token or payload")
-      return null
-    }
-
-    // Get user ID from token
-    const userId = payload.sub
-
-    // Get user details from database
-    const supabase = createPermissionClient()
-    const { data: user, error } = await supabase
-      .from("user_accounts")
-      .select(`
-        id, 
-        username, 
-        email, 
-        is_active, 
-        employee_id, 
-        role_id,
-        roles:role_id (
-          id, 
-          title
-        )
-      `)
-      .eq("id", userId)
-      .single()
-
-    if (error || !user || !user.is_active) {
-      console.log("User not found or inactive")
-      return null
-    }
-
-    return {
-      id: user.id,
-      username: user.username,
-      email: user.email || "",
-      employeeId: user.employee_id,
-      roleId: user.role_id,
-      roleName: user.roles?.title || "",
-      isAdmin: user.roles?.title === "Administrator" || user.role_id === 1,
-    }
+    const data = await response.json()
+    return data.user || null
   } catch (error) {
-    console.error("Session validation error:", error)
+    console.error("Error getting current user:", error)
     return null
   }
 }
 
-// Check permissions for multiple paths
+// Clear permission cache for a user
+export function clearPermissionCache(userId?: string) {
+  if (userId) {
+    // Clear only for specific user
+    Object.keys(permissionCache).forEach((key) => {
+      if (key.startsWith(`${userId}:`)) {
+        delete permissionCache[key]
+      }
+    })
+  } else {
+    // Clear entire cache
+    Object.keys(permissionCache).forEach((key) => {
+      delete permissionCache[key]
+    })
+  }
+}
+
 export async function checkPermissions(userId: string, permissionsToCheck: { path: string; action?: string }[]) {
   const results = {}
   await Promise.all(
     permissionsToCheck.map(async (perm) => {
-      results[perm.path] = await hasPermission(userId, perm.path, perm.action || "view")
+      const hasAccess = await hasPermission(userId, perm.path, perm.action || "view")
+      results[perm.path] = hasAccess
     }),
   )
   return results

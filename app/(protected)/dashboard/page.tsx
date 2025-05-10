@@ -6,9 +6,9 @@ import { Users, ArrowUpRight, ArrowDownRight } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import Link from "next/link"
 import { getRecentActivities } from "@/services/activity-service"
-import { getDepartmentDistribution } from "@/actions/department-actions"
 import { getCurrentUser } from "@/actions/auth-actions"
 import { redirect } from "next/navigation"
+import { DashboardMenu } from "@/components/dashboard/dashboard-menu"
 
 export const revalidate = 60 // Revalidate this page every 60 seconds
 
@@ -22,7 +22,6 @@ export default async function DashboardPage() {
   // Fetch dashboard data with error handling
   let dashboardData
   let activities = []
-  let departmentData = []
 
   try {
     dashboardData = await getDashboardStats()
@@ -63,87 +62,57 @@ export default async function DashboardPage() {
     activities = []
   }
 
-  try {
-    console.log("Dashboard: Fetching department data...")
-    departmentData = await getDepartmentDistribution()
-    console.log("Dashboard: Received department data:", departmentData)
-
-    if (!departmentData || departmentData.length === 0) {
-      console.log("Dashboard: No department data returned, using fallback data")
-      departmentData = [
-        { department: "Engineering", count: 24 },
-        { department: "Marketing", count: 13 },
-        { department: "Sales", count: 18 },
-        { department: "Finance", count: 8 },
-        { department: "HR", count: 5 },
-      ]
-    }
-  } catch (error) {
-    console.error("Dashboard: Error loading department data:", error)
-    departmentData = [
-      { department: "Engineering", count: 24 },
-      { department: "Marketing", count: 13 },
-      { department: "Sales", count: 18 },
-      { department: "Finance", count: 8 },
-      { department: "HR", count: 5 },
-    ]
-  }
-
   return (
-    <div className="container py-10">
-      <h1 className="text-3xl font-bold mb-8">Dashboard</h1>
+    <div className="space-y-8">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+        <p className="text-muted-foreground">Welcome to your dashboard. Here's a quick overview of your system.</p>
+      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Welcome, {user.username || user.email || "User"}!</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground">You are logged in as {user.roleName || "User"}.</p>
-          </CardContent>
-        </Card>
+      <Suspense fallback={<DashboardMenuSkeleton />}>
+        <DashboardMenu />
+      </Suspense>
 
-        <Suspense fallback={<DashboardCardSkeleton />}>
-          <Card>
-            <CardHeader>
-              <CardTitle>Recent Activity</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground">Your recent system activity will appear here.</p>
-            </CardContent>
-          </Card>
-        </Suspense>
+      {/* Additional dashboard content can go here */}
+    </div>
+  )
+}
 
-        <Suspense fallback={<DashboardCardSkeleton />}>
-          <Card>
-            <CardHeader>
-              <CardTitle>Quick Actions</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <button className="w-full text-left px-4 py-2 text-sm rounded-md hover:bg-muted">View Profile</button>
-                <button className="w-full text-left px-4 py-2 text-sm rounded-md hover:bg-muted">
-                  Update Settings
-                </button>
-                <button className="w-full text-left px-4 py-2 text-sm rounded-md hover:bg-muted">View Reports</button>
+function DashboardMenuSkeleton() {
+  return (
+    <div className="space-y-4">
+      <h2 className="text-2xl font-bold tracking-tight">Quick Navigation</h2>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+        {Array(10)
+          .fill(0)
+          .map((_, i) => (
+            <div key={i} className="border rounded-lg overflow-hidden">
+              <div className="p-6 flex flex-col items-center justify-center space-y-2">
+                <Skeleton className="h-8 w-8 rounded-full" />
+                <Skeleton className="h-4 w-24" />
               </div>
-            </CardContent>
-          </Card>
-        </Suspense>
+            </div>
+          ))}
       </div>
     </div>
   )
 }
 
-function DashboardCardSkeleton() {
+// Menu skeleton loader
+function MenuSkeleton() {
   return (
     <Card>
       <CardHeader>
-        <Skeleton className="h-8 w-3/4" />
+        <Skeleton className="h-6 w-40" />
       </CardHeader>
-      <CardContent>
-        <Skeleton className="h-4 w-full mb-2" />
-        <Skeleton className="h-4 w-5/6" />
+      <CardContent className="p-4">
+        <Skeleton className="h-10 w-full mb-4" />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Skeleton className="h-20 w-full" />
+          <Skeleton className="h-20 w-full" />
+          <Skeleton className="h-20 w-full" />
+          <Skeleton className="h-20 w-full" />
+        </div>
       </CardContent>
     </Card>
   )
@@ -219,81 +188,5 @@ function RecentActivityList({ activities }: { activities: any[] }) {
         ))
       )}
     </div>
-  )
-}
-
-// Chart components
-function EmployeeGrowthChart({ data }: { data: { month: string; count: number }[] }) {
-  return (
-    <div className="h-[300px] w-full flex items-end justify-between px-2">
-      {data.map((item, i) => (
-        <div key={i} className="flex flex-col items-center">
-          <div
-            className="bg-primary/90 hover:bg-primary rounded-t w-14 transition-all"
-            style={{ height: `${(item.count / Math.max(...data.map((d) => d.count))) * 220}px` }}
-          ></div>
-          <div className="mt-2 text-xs text-muted-foreground">{item.month}</div>
-          <div className="text-sm font-medium">{item.count}</div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-// Skeleton loaders
-function StatCardSkeleton() {
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <Skeleton className="h-4 w-20" />
-        <Skeleton className="h-4 w-4" />
-      </CardHeader>
-      <CardContent>
-        <Skeleton className="h-8 w-24 mb-2" />
-        <Skeleton className="h-3 w-32" />
-      </CardContent>
-    </Card>
-  )
-}
-
-function ChartCardSkeleton({ className }: { className?: string }) {
-  return (
-    <Card className={className}>
-      <CardHeader>
-        <Skeleton className="h-5 w-40 mb-1" />
-        <Skeleton className="h-4 w-60" />
-      </CardHeader>
-      <CardContent>
-        <div className="h-[250px] w-full flex items-center justify-center">
-          <div className="animate-pulse rounded-md bg-muted h-[200px] w-full"></div>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-function ActivityCardSkeleton({ className }: { className?: string }) {
-  return (
-    <Card className={className}>
-      <CardHeader>
-        <Skeleton className="h-5 w-40 mb-1" />
-        <Skeleton className="h-4 w-60" />
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          {Array(4)
-            .fill(0)
-            .map((_, i) => (
-              <div key={i} className="flex items-start">
-                <Skeleton className="h-8 w-8 rounded-full mr-4" />
-                <div className="space-y-2 flex-1">
-                  <Skeleton className="h-4 w-full max-w-[250px]" />
-                  <Skeleton className="h-3 w-full max-w-[200px]" />
-                </div>
-              </div>
-            ))}
-        </div>
-      </CardContent>
-    </Card>
   )
 }

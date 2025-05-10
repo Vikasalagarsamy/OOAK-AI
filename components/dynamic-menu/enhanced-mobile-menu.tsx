@@ -5,109 +5,126 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import type { MenuItemWithPermission } from "@/types/menu"
 import { MenuIcon } from "./menu-icon"
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { Button } from "@/components/ui/button"
+import { Menu, X, ChevronDown, ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { ChevronDown } from "lucide-react"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 interface EnhancedMobileMenuProps {
   items: MenuItemWithPermission[]
 }
 
 export function EnhancedMobileMenu({ items }: EnhancedMobileMenuProps) {
+  const [open, setOpen] = useState(false)
   const pathname = usePathname()
-  const [openMenus, setOpenMenus] = useState<Record<number, boolean>>({})
-
-  // Check if a menu item or any of its children is active
-  const isActive = (item: MenuItemWithPermission): boolean => {
-    if (item.path && pathname === item.path) {
-      return true
-    }
-
-    if (item.children && item.children.length > 0) {
-      return item.children.some((child) => isActive(child))
-    }
-
-    return false
-  }
-
-  // Toggle submenu open/closed
-  const toggleMenu = (id: number) => {
-    setOpenMenus((prev) => ({
-      ...prev,
-      [id]: !prev[id],
-    }))
-  }
-
-  // Render a menu item
-  const renderMenuItem = (item: MenuItemWithPermission, depth = 0) => {
-    const active = isActive(item)
-    const hasChildren = item.children && item.children.length > 0
-    const isOpen = openMenus[item.id] || active
-
-    // Skip items without view permission
-    if (!item.permissions.canView) {
-      return null
-    }
-
-    return (
-      <li key={item.id} className="w-full">
-        <div className="flex flex-col w-full">
-          {item.path ? (
-            <div className="flex w-full">
-              <Link
-                href={item.path}
-                className={cn(
-                  "flex items-center flex-grow px-3 py-2.5 text-sm font-medium",
-                  active && "bg-accent text-accent-foreground",
-                  depth > 0 && "pl-6",
-                )}
-              >
-                {item.icon && <MenuIcon name={item.icon} className="mr-2 h-5 w-5" />}
-                <span>{item.name}</span>
-              </Link>
-
-              {hasChildren && (
-                <button
-                  onClick={() => toggleMenu(item.id)}
-                  className={cn("px-3 py-2.5", active && "bg-accent text-accent-foreground")}
-                >
-                  <ChevronDown className={cn("h-5 w-5 transition-transform", isOpen && "transform rotate-180")} />
-                </button>
-              )}
-            </div>
-          ) : (
-            <button
-              onClick={() => toggleMenu(item.id)}
-              className={cn(
-                "flex items-center justify-between w-full px-3 py-2.5 text-sm font-medium",
-                active && "bg-accent text-accent-foreground",
-                depth > 0 && "pl-6",
-              )}
-            >
-              <div className="flex items-center">
-                {item.icon && <MenuIcon name={item.icon} className="mr-2 h-5 w-5" />}
-                <span>{item.name}</span>
-              </div>
-
-              {hasChildren && (
-                <ChevronDown className={cn("h-5 w-5 transition-transform", isOpen && "transform rotate-180")} />
-              )}
-            </button>
-          )}
-
-          {/* Submenu */}
-          {hasChildren && isOpen && (
-            <ul className="border-l border-border ml-4 mt-1">
-              {item.children.map((child) => renderMenuItem(child, depth + 1))}
-            </ul>
-          )}
-        </div>
-      </li>
-    )
-  }
 
   return (
-    <nav className="w-full">
-      <ul className="space-y-1 w-full">{items.map((item) => renderMenuItem(item))}</ul>
-    </nav>
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger asChild>
+        <Button variant="ghost" size="icon" className="md:hidden">
+          <Menu className="h-5 w-5" />
+          <span className="sr-only">Toggle menu</span>
+        </Button>
+      </SheetTrigger>
+      <SheetContent side="left" className="p-0">
+        <div className="flex items-center justify-between border-b px-4 py-2">
+          <div className="font-semibold">Menu</div>
+          <Button variant="ghost" size="icon" onClick={() => setOpen(false)}>
+            <X className="h-5 w-5" />
+            <span className="sr-only">Close</span>
+          </Button>
+        </div>
+        <ScrollArea className="h-[calc(100vh-60px)]">
+          <div className="p-4 pb-8">
+            <nav className="flex flex-col space-y-1">
+              {items.map((item) => (
+                <MobileMenuItem key={item.id} item={item} pathname={pathname} onSelect={() => setOpen(false)} />
+              ))}
+            </nav>
+          </div>
+        </ScrollArea>
+      </SheetContent>
+    </Sheet>
+  )
+}
+
+interface MobileMenuItemProps {
+  item: MenuItemWithPermission
+  pathname: string
+  onSelect: () => void
+  level?: number
+}
+
+function MobileMenuItem({ item, pathname, onSelect, level = 0 }: MobileMenuItemProps) {
+  const [expanded, setExpanded] = useState(false)
+  const hasChildren = item.children && item.children.length > 0
+  const isActive = pathname === item.path
+
+  // Check if any child is active
+  const isChildActive =
+    hasChildren &&
+    item.children.some(
+      (child) =>
+        pathname === child.path || (child.children?.some((grandchild) => pathname === grandchild.path) ?? false),
+    )
+
+  // Auto-expand if a child is active
+  useState(() => {
+    if (isChildActive) {
+      setExpanded(true)
+    }
+  })
+
+  // Skip items without view permission
+  if (!item.permissions?.canView) return null
+
+  return (
+    <div>
+      <div className="flex items-center justify-between">
+        {item.path ? (
+          <Link
+            href={item.path}
+            className={cn(
+              "flex items-center py-2 px-3 rounded-md text-sm font-medium w-full",
+              isActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-primary hover:bg-primary/10",
+            )}
+            onClick={onSelect}
+          >
+            {item.icon && <MenuIcon name={item.icon} className="mr-2 h-4 w-4" />}
+            {item.name}
+          </Link>
+        ) : (
+          <button
+            className={cn(
+              "flex items-center py-2 px-3 rounded-md text-sm font-medium w-full text-left",
+              isActive || isChildActive || expanded
+                ? "bg-primary/10 text-primary"
+                : "text-muted-foreground hover:text-primary hover:bg-primary/10",
+            )}
+            onClick={() => setExpanded(!expanded)}
+          >
+            {item.icon && <MenuIcon name={item.icon} className="mr-2 h-4 w-4" />}
+            {item.name}
+          </button>
+        )}
+
+        {hasChildren && (
+          <Button variant="ghost" size="sm" className="px-2" onClick={() => setExpanded(!expanded)}>
+            {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          </Button>
+        )}
+      </div>
+
+      {expanded && hasChildren && (
+        <div className={cn("ml-4 mt-1 space-y-1 border-l pl-3", level > 0 && "ml-2")}>
+          {item.children
+            .filter((child) => child.permissions?.canView)
+            .map((child) => (
+              <MobileMenuItem key={child.id} item={child} pathname={pathname} onSelect={onSelect} level={level + 1} />
+            ))}
+        </div>
+      )}
+    </div>
   )
 }
