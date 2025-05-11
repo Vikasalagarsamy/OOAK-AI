@@ -44,6 +44,16 @@ export function UpdateLeadStatusDialog({ lead, open, onOpenChange, onStatusUpdat
       return
     }
 
+    // Require rejection reason if status is REJECTED
+    if (status === "REJECTED" && (!notes || notes.trim().length < 10)) {
+      toast({
+        title: "Rejection reason required",
+        description: "Please provide a detailed reason for rejecting this lead (minimum 10 characters)",
+        variant: "destructive",
+      })
+      return
+    }
+
     setIsSubmitting(true)
 
     try {
@@ -57,9 +67,16 @@ export function UpdateLeadStatusDialog({ lead, open, onOpenChange, onStatusUpdat
         onStatusUpdated()
         onOpenChange(false)
 
-        // If status is REJECTED, redirect to the rejected leads page
+        // If status is REJECTED, redirect to My Leads page
         if (status === "REJECTED") {
-          router.push("/sales/rejected-leads")
+          // Show a toast notification that the lead has been rejected and removed from My Leads
+          toast({
+            title: "Lead rejected",
+            description: "The lead has been removed from your list and is now available for reassignment",
+          })
+
+          // Redirect to My Leads page
+          router.push("/sales/my-leads")
         }
       } else {
         toast({
@@ -113,22 +130,31 @@ export function UpdateLeadStatusDialog({ lead, open, onOpenChange, onStatusUpdat
             {status === "REJECTED" && (
               <p className="text-xs text-yellow-600 flex items-center gap-1">
                 <AlertCircle className="h-3 w-3" />
-                Marking as rejected will redirect you to the rejected leads page for reassignment.
+                Marking as rejected will remove this lead from your list and make it available for reassignment.
               </p>
             )}
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="notes">{status === "REJECTED" ? "Rejection Reason (Required)" : "Notes (Optional)"}</Label>
+            <Label htmlFor="notes" className="flex items-center gap-1">
+              {status === "REJECTED" ? (
+                <>
+                  <AlertCircle className="h-4 w-4 text-red-500" />
+                  <span>Rejection Reason (Required)</span>
+                </>
+              ) : (
+                "Notes (Optional)"
+              )}
+            </Label>
             <Textarea
               id="notes"
               placeholder={
                 status === "REJECTED"
-                  ? "Please provide a reason for rejecting this lead"
+                  ? "Please provide a detailed reason for rejecting this lead"
                   : "Add any relevant notes about this status change"
               }
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              required={status === "REJECTED"}
+              className={status === "REJECTED" && notes.length < 10 ? "border-red-300" : ""}
             />
             {status === "REJECTED" && notes.length < 10 && (
               <p className="text-xs text-red-500">

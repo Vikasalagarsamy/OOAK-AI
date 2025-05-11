@@ -5,12 +5,11 @@ import { revalidatePath } from "next/cache"
 import { logActivity } from "@/services/activity-service"
 import { getCurrentUser } from "@/lib/auth-utils"
 
-// Add the missing reassignRejectedLead function
-export async function reassignRejectedLead(
+// Update the updateLeadStatus function to handle rejected leads
+export async function updateLeadStatus(
   leadId: number,
-  newCompanyId: number,
-  newBranchId: number | null,
-  rejectionReason?: string,
+  status: string,
+  notes?: string,
 ): Promise<{ success: boolean; message?: string }> {
   try {
     const currentUser = await getCurrentUser()
@@ -51,6 +50,169 @@ export async function reassignRejectedLead(
       return { success: false, message: "You are not authorized to update this lead" }
     }
 
+    // Special handling for rejected leads
+    if (status === "REJECTED") {
+      // Store the rejection information in the lead_rejections table
+      const { error: rejectionError } = await supabase.from("lead_rejections").insert({
+        lead_id: leadId,
+        rejected_by: currentUser.employeeId,
+        rejected_from_company_id: lead.company_id,
+        rejected_from_branch_id: lead.branch_id,
+        rejection_reason: notes || "No reason provided",
+        rejected_at: new Date().toISOString(),
+      })
+
+      if (rejectionError) {
+        console.error("Error storing rejection information:", rejectionError)
+        return { success: false, message: "Failed to store rejection information" }
+      }
+
+      // Update the lead status to REJECTED and remove assignment
+      const { error: updateError } = await supabase
+        .from("leads")
+        .update({
+          status: "REJECTED",
+          updated_at: new Date().toISOString(),
+          is_rejected: true,
+          rejected_at: new Date().toISOString(),
+          rejected_by: currentUser.employeeId,
+          rejected_from_company_id: lead.company_id,
+          rejected_from_branch_id: lead.branch_id,
+        })
+        .eq("id", leadId)
+
+      if (updateError) {
+        console.error("Error updating lead status:", updateError)
+        return { success: false, message: "Failed to update lead status" }
+      }
+
+      // Log the activity
+      await logActivity({
+        actionType: "reject",
+        entityType: "lead",
+        entityId: leadId.toString(),
+        entityName: lead.lead_number,
+        description: `Lead rejected from ${lead.companies?.name || "company"}${
+          lead.branches?.name ? ` (${lead.branches.name})` : ""
+        }. Reason: ${notes || "No reason provided"}`,
+        userName: `${currentUser.firstName} ${currentUser.lastName}`,
+      })
+
+      // Add rejection notes
+      if (notes) {
+        const { error: notesError } = await supabase.from("lead_notes").insert({
+          lead_id: leadId,
+          note: `Rejection reason: ${notes}`,
+          created_by: currentUser.id,
+          created_at: new Date().toISOString(),
+          note_type: "rejection",
+        })
+
+        if (notesError) {
+          console.error("Error adding rejection notes:", notesError)
+          // Don't fail the status update if notes fail
+        }
+      }
+    } else {
+      // Regular status update for non-rejected leads
+      const { error: updateError } = await supabase
+        .from("leads")
+        .update({
+          status,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", leadId)
+
+      if (updateError) {
+        console.error("Error updating lead status:", updateError)
+        return { success: false, message: "Failed to update lead status" }
+      }
+
+      // Log the activity
+      await logActivity({
+        actionType: "update",
+        entityType: "lead",
+        entityId: leadId.toString(),
+        entityName: lead.lead_number,
+        description: `Lead status updated from ${lead.status} to ${status}`,
+        userName: `${currentUser.firstName} ${currentUser.lastName}`,
+      })
+
+      // Add notes if provided
+      if (notes) {
+        const { error: notesError } = await supabase.from("lead_notes").insert({
+          lead_id: leadId,
+          note: notes,
+          created_by: currentUser.id,
+          created_at: new Date().toISOString(),
+          note_type: "status_change",
+        })
+
+        if (notesError) {
+          console.error("Error adding notes:", notesError)
+          // Don't fail the status update if notes fail
+        }
+      }
+    }
+
+    revalidatePath(`/sales/lead/${leadId}`)
+    revalidatePath("/sales/my-leads")
+    revalidatePath("/sales/rejected-leads")
+    revalidatePath("/sales/manage-lead")
+
+    return { success: true }
+  } catch (error) {
+    console.error("Error updating lead status:", error)
+    return { success: false, message: "An unexpected error occurred" }
+  }
+}
+
+// Add the reassignRejectedLead function
+export async function reassignRejectedLead(
+  leadId: number,
+  newCompanyId: number,
+  newBranchId: number | null,
+  rejectionReason?: string,
+): Promise<{ success: boolean; message?: string }> {
+  try {
+    const currentUser = await getCurrentUser()
+    if (!currentUser || !currentUser.id) {
+      return { success: false, message: "Authentication required" }
+    }
+
+    const supabase = createClient()
+
+    // First, get the lead to check if it's rejected
+    const { data: lead, error: fetchError } = await supabase
+      .from("leads")
+      .select(`
+        id, 
+        lead_number, 
+        client_name, 
+        status, 
+        company_id,
+        companies(name),
+        branch_id,
+        branches(name),
+        rejected_from_company_id,
+        rejected_from_branch_id
+      `)
+      .eq("id", leadId)
+      .single()
+
+    if (fetchError) {
+      console.error("Error fetching lead:", fetchError)
+      return { success: false, message: "Failed to fetch lead details" }
+    }
+
+    if (!lead) {
+      return { success: false, message: "Lead not found" }
+    }
+
+    if (lead.status !== "REJECTED") {
+      return { success: false, message: "Only rejected leads can be reassigned" }
+    }
+
     // Get the new company name for logging
     const { data: newCompany, error: companyError } = await supabase
       .from("companies")
@@ -77,21 +239,6 @@ export async function reassignRejectedLead(
       }
     }
 
-    // Store the rejection information in the lead_rejections table
-    const { error: rejectionError } = await supabase.from("lead_rejections").insert({
-      lead_id: leadId,
-      rejected_by: currentUser.employeeId,
-      rejected_from_company_id: lead.company_id,
-      rejected_from_branch_id: lead.branch_id,
-      rejection_reason: rejectionReason || null,
-      rejected_at: new Date().toISOString(),
-    })
-
-    if (rejectionError) {
-      console.error("Error storing rejection information:", rejectionError)
-      // Continue anyway, this shouldn't block the reassignment
-    }
-
     // Update the lead with new company, branch, and status
     const { error: updateError } = await supabase
       .from("leads")
@@ -103,8 +250,8 @@ export async function reassignRejectedLead(
         updated_at: new Date().toISOString(),
         is_reassigned: true, // Flag to indicate this lead was reassigned
         reassigned_at: new Date().toISOString(),
-        reassigned_from_company_id: lead.company_id,
-        reassigned_from_branch_id: lead.branch_id,
+        reassigned_by: currentUser.employeeId,
+        is_rejected: false, // No longer rejected
       })
       .eq("id", leadId)
 
@@ -113,31 +260,15 @@ export async function reassignRejectedLead(
       return { success: false, message: "Failed to reassign lead" }
     }
 
-    // Log the rejection reason if provided
-    if (rejectionReason) {
-      const { error: notesError } = await supabase.from("lead_notes").insert({
-        lead_id: leadId,
-        note: `Rejection reason: ${rejectionReason}`,
-        created_by: currentUser.id,
-        created_at: new Date().toISOString(),
-        note_type: "rejection",
-      })
-
-      if (notesError) {
-        console.error("Error adding rejection notes:", notesError)
-        // Don't fail the reassignment if notes fail
-      }
-    }
-
     // Log the activity
     await logActivity({
       actionType: "reassign",
       entityType: "lead",
       entityId: leadId.toString(),
       entityName: lead.lead_number,
-      description: `Lead rejected from ${lead.companies?.name || "previous company"}${
+      description: `Lead reassigned from ${lead.companies?.name || "previous company"}${
         lead.branches?.name ? ` (${lead.branches.name})` : ""
-      } and reassigned to ${newCompany?.name || "new company"}${
+      } to ${newCompany?.name || "new company"}${
         newBranchName ? ` (${newBranchName})` : ""
       }. Status changed to UNASSIGNED.`,
       userName: `${currentUser.firstName} ${currentUser.lastName}`,
@@ -145,6 +276,7 @@ export async function reassignRejectedLead(
 
     revalidatePath(`/sales/lead/${leadId}`)
     revalidatePath("/sales/my-leads")
+    revalidatePath("/sales/rejected-leads")
     revalidatePath("/sales/manage-lead")
     revalidatePath("/sales/unassigned-lead")
 
@@ -155,6 +287,7 @@ export async function reassignRejectedLead(
   }
 }
 
+// Keep other existing functions
 export async function assignLead(
   leadId: number,
   leadNumber: string,
@@ -321,55 +454,6 @@ export async function sendLeadMessage(
     return { success: true }
   } catch (error) {
     console.error("Error sending message:", error)
-    return { success: false, message: "An unexpected error occurred" }
-  }
-}
-
-export async function updateLeadStatus(
-  leadId: number,
-  status: string,
-  notes?: string,
-): Promise<{ success: boolean; message?: string }> {
-  const supabase = createClient()
-
-  try {
-    const currentUser = await getCurrentUser()
-    if (!currentUser || !currentUser.id) {
-      return { success: false, message: "Authentication required" }
-    }
-
-    const { error } = await supabase
-      .from("leads")
-      .update({
-        status,
-        updated_at: new Date().toISOString(),
-        notes: notes || null,
-      })
-      .eq("id", leadId)
-
-    if (error) {
-      console.error("Error updating lead status:", error)
-      return { success: false, message: `Failed to update lead status: ${error.message}` }
-    }
-
-    // Log the activity
-    await logActivity({
-      actionType: "update",
-      entityType: "lead",
-      entityId: leadId.toString(),
-      entityName: `Lead ${leadId}`,
-      description: `Lead ${leadId} status updated to ${status}`,
-      userName: `${currentUser?.firstName} ${currentUser?.lastName}`,
-    })
-
-    revalidatePath(`/sales/lead/${leadId}`)
-    revalidatePath("/sales/manage-lead")
-    revalidatePath("/sales/my-leads")
-    revalidatePath("/sales/unassigned-lead")
-
-    return { success: true }
-  } catch (error) {
-    console.error("Error updating lead status:", error)
     return { success: false, message: "An unexpected error occurred" }
   }
 }

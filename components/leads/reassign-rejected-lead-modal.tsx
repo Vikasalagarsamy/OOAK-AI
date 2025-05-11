@@ -140,7 +140,7 @@ export function ReassignRejectedLeadModal({
     setLoading(true)
     try {
       const companyId = Number.parseInt(selectedCompanyId)
-      const branchId = selectedBranchId ? Number.parseInt(selectedBranchId) : null
+      const branchId = selectedBranchId && selectedBranchId !== "no-branch" ? Number.parseInt(selectedBranchId) : null
 
       const result = await reassignRejectedLead(lead.id, companyId, branchId, rejectionNotes)
 

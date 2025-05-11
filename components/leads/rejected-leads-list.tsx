@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { useToast } from "@/components/ui/use-toast"
-import { RefreshCw, Building, MapPin, Calendar, AlertCircle, ArrowRight } from "lucide-react"
+import { RefreshCw, Building, MapPin, Calendar, ArrowRight, XCircle } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { getRejectedLeads } from "@/actions/rejected-leads-actions"
 import { ReassignRejectedLeadModal } from "./reassign-rejected-lead-modal"
@@ -20,13 +20,13 @@ interface RejectedLead {
   companies: { name: string }
   branch_id: number | null
   branches: { name: string } | null
-  reassigned_from_company_id: number | null
-  reassigned_from_company: { name: string } | null
-  reassigned_from_branch_id: number | null
-  reassigned_from_branch: { name: string } | null
+  rejected_from_company_id: number | null
+  rejected_from_company: { name: string } | null
+  rejected_from_branch_id: number | null
+  rejected_from_branch: { name: string } | null
   created_at: string
   updated_at: string
-  reassigned_at: string | null
+  rejected_at: string | null
   lead_rejections: {
     id: number
     rejection_reason: string
@@ -93,9 +93,9 @@ export function RejectedLeadsList() {
 
   if (leads.length === 0) {
     return (
-      <Card className="p-8 text-center">
+      <Card className="p-8 text-center bg-gray-50">
         <div className="flex flex-col items-center justify-center gap-2">
-          <AlertCircle className="h-12 w-12 text-muted-foreground" />
+          <XCircle className="h-12 w-12 text-muted-foreground" />
           <h3 className="text-xl font-semibold">No Rejected Leads</h3>
           <p className="text-muted-foreground">You don't have any rejected leads that need reassignment.</p>
           <Button className="mt-4" onClick={() => router.push("/sales/my-leads")}>
@@ -151,8 +151,8 @@ export function RejectedLeadsList() {
                     <div className="flex items-center gap-1 text-xs text-muted-foreground">
                       <Calendar className="h-3 w-3" />
                       <span>
-                        {rejectionInfo?.rejected_at
-                          ? formatDistanceToNow(new Date(rejectionInfo.rejected_at), { addSuffix: true })
+                        {lead.rejected_at
+                          ? formatDistanceToNow(new Date(lead.rejected_at), { addSuffix: true })
                           : formatDistanceToNow(new Date(lead.updated_at), { addSuffix: true })}
                       </span>
                     </div>

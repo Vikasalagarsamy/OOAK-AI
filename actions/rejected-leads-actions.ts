@@ -24,15 +24,15 @@ export async function getRejectedLeads() {
         status,
         created_at,
         updated_at,
-        reassigned_at,
+        rejected_at,
         company_id,
         companies:company_id(name),
         branch_id,
         branches:branch_id(name),
-        reassigned_from_company_id,
-        reassigned_from_company:reassigned_from_company_id(name),
-        reassigned_from_branch_id,
-        reassigned_from_branch:reassigned_from_branch_id(name),
+        rejected_from_company_id,
+        rejected_from_company:rejected_from_company_id(name),
+        rejected_from_branch_id,
+        rejected_from_branch:rejected_from_branch_id(name),
         lead_rejections(
           id,
           rejection_reason,
@@ -41,8 +41,8 @@ export async function getRejectedLeads() {
         )
       `)
       .eq("status", "REJECTED")
-      .eq("lead_rejections.rejected_by", currentUser.employeeId)
-      .order("updated_at", { ascending: false })
+      .eq("rejected_by", currentUser.employeeId)
+      .order("rejected_at", { ascending: false })
 
     if (error) {
       console.error("Error fetching rejected leads:", error)

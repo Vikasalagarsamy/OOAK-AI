@@ -5,13 +5,18 @@ import { RejectedLeadsList } from "@/components/leads/rejected-leads-list"
 
 export default function RejectedLeadsPage() {
   return (
-    <div className="container mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-6 flex items-center gap-2">
-        <XSquare className="h-6 w-6 text-red-500" />
-        Rejected Leads
-      </h1>
+    <div className="container mx-auto py-6 space-y-6">
+      <div className="flex flex-col gap-2">
+        <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+          <XSquare className="h-6 w-6 text-red-500" />
+          Rejected Leads
+        </h1>
+        <p className="text-muted-foreground">
+          View and reassign leads that you have rejected from your assigned companies
+        </p>
+      </div>
 
-      <Card className="mb-8">
+      <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
             <RefreshCw className="h-5 w-5 text-amber-500" />
