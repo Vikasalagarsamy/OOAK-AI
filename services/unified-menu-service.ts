@@ -282,10 +282,10 @@ export async function detectMenuChanges(): Promise<{
   try {
     const supabase = createClient()
 
-    // Get current menu items from the database
+    // Get current menu items from the database - removed last_updated column
     const { data: currentItems, error: currentError } = await supabase
       .from("menu_items")
-      .select("id, parent_id, name, path, icon, is_visible, sort_order, last_updated")
+      .select("id, parent_id, name, path, icon, is_visible, sort_order")
       .order("id")
 
     if (currentError) {

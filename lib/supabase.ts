@@ -1,7 +1,25 @@
-import { createClient as supabaseCreateClient } from "@supabase/supabase-js"
+import { createClient as createSupabaseClient } from "@supabase/supabase-js"
+
+// Create a singleton Supabase client
+let supabaseInstance: ReturnType<typeof createSupabaseClient> | null = null
+
+export function createClient() {
+  if (!supabaseInstance) {
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ""
+    const supabaseKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
+
+    supabaseInstance = createSupabaseClient(supabaseUrl, supabaseKey, {
+      auth: {
+        persistSession: false,
+      },
+    })
+  }
+
+  return supabaseInstance
+}
 
 // Define types for better type safety
-type SupabaseClient = ReturnType<typeof supabaseCreateClient>
+type SupabaseClient = ReturnType<typeof createSupabaseClient>
 
 // Global variable to store the client instance
 let clientSingleton: SupabaseClient | null = null
@@ -19,7 +37,7 @@ function getSupabaseCredentials() {
 }
 
 // Create the Supabase client singleton
-function createSupabaseClient(): SupabaseClient {
+function createSupabaseClientOld(): SupabaseClient {
   if (clientSingleton) {
     return clientSingleton
   }
@@ -27,7 +45,7 @@ function createSupabaseClient(): SupabaseClient {
   const { supabaseUrl, supabaseAnonKey } = getSupabaseCredentials()
 
   // Create a new client with explicit configuration
-  clientSingleton = supabaseCreateClient(supabaseUrl, supabaseAnonKey, {
+  clientSingleton = createSupabaseClient(supabaseUrl, supabaseAnonKey, {
     auth: {
       persistSession: true,
       storageKey: "app-supabase-auth",
@@ -38,7 +56,7 @@ function createSupabaseClient(): SupabaseClient {
 }
 
 // Export a singleton instance
-export const supabase = createSupabaseClient()
+export const supabase = createClient()
 
 // Server-side Supabase client (uses service role key)
 export function createServiceClient() {
@@ -65,7 +83,7 @@ export function createServiceClient() {
     // Continue with anon key as fallback
   }
 
-  return supabaseCreateClient(supabaseUrl, supabaseServiceKey || "", {
+  return createSupabaseClient(supabaseUrl, supabaseServiceKey || "", {
     auth: {
       persistSession: false,
     },
@@ -103,7 +121,7 @@ function createMockClient() {
 
 // IMPORTANT: Export createClient for backward compatibility
 // This is the function used by employee-actions.ts and other services
-export function createClient() {
+export function createClientOld() {
   try {
     return createServiceClient()
   } catch (error) {
@@ -113,4 +131,4 @@ export function createClient() {
 }
 
 // Also export the original createClient from supabase for maximum compatibility
-export const originalCreateClient = supabaseCreateClient
+export const originalCreateClient = createSupabaseClient

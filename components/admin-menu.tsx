@@ -27,15 +27,8 @@ export function AdminMenu() {
 
         <DropdownMenuItem asChild>
           <Link href="/admin/menu-permissions" className="flex items-center w-full">
-            <Settings className="mr-2 h-4 w-4" />
-            <span>Menu Permissions</span>
-          </Link>
-        </DropdownMenuItem>
-
-        <DropdownMenuItem asChild>
-          <Link href="/admin/role-permissions" className="flex items-center w-full">
             <Shield className="mr-2 h-4 w-4" />
-            <span>Role Permissions</span>
+            <span>Menu & Role Permissions</span>
           </Link>
         </DropdownMenuItem>
 
