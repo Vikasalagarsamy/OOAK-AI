@@ -29,19 +29,43 @@ export async function verifyAuth(token: string) {
     const secret = process.env.JWT_SECRET || "fallback-secret-only-for-development"
     const secretKey = new TextEncoder().encode(secret)
 
-    const { payload } = await jwtVerify(token, secretKey, {
-      algorithms: ["HS256"],
-    })
+    try {
+      const { payload } = await jwtVerify(token, secretKey, {
+        algorithms: ["HS256"],
+      })
 
-    // Verify that the user still exists and is active
-    const supabase = createClient()
-    const { data, error } = await supabase.from("user_accounts").select("is_active").eq("id", payload.sub).single()
+      // Verify that the user still exists and is active
+      const supabase = createClient()
+      const { data, error } = await supabase.from("user_accounts").select("is_active").eq("id", payload.sub).single()
 
-    if (error || !data || !data.is_active) {
+      if (error) {
+        console.error("User verification error:", error.message)
+        // Don't immediately invalidate on DB errors - allow grace period
+        return { valid: true, payload, warningFlag: true }
+      }
+
+      if (!data || !data.is_active) {
+        return { valid: false, payload: null }
+      }
+
+      return { valid: true, payload }
+    } catch (jwtError) {
+      console.error("JWT verification error:", jwtError)
+
+      // If token is expired but not by more than 10 minutes, still consider it valid
+      // This gives frontend time to refresh the token
+      if (jwtError.code === "ERR_JWT_EXPIRED") {
+        const tokenData = JSON.parse(Buffer.from(token.split(".")[1], "base64").toString())
+        const expTime = tokenData.exp * 1000
+        const gracePeriod = 10 * 60 * 1000 // 10 minutes
+
+        if (Date.now() - expTime < gracePeriod) {
+          return { valid: true, payload: tokenData, expired: true }
+        }
+      }
+
       return { valid: false, payload: null }
     }
-
-    return { valid: true, payload }
   } catch (error) {
     console.error("Token verification error:", error)
     return { valid: false, payload: null }

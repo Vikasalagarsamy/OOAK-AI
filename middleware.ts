@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 import { jwtVerify } from "jose"
+import { verifyAuth } from "@/lib/auth-utils"
 
 // Define admin paths that should be restricted
 const ADMIN_PATHS = ["/admin", "/organization/roles", "/organization/account-creation"]
@@ -13,8 +14,50 @@ const ROLE_RESTRICTIONS: Record<string, string[]> = {
   "sales head": ["/admin", "/organization/roles", "/organization/account-creation"],
 }
 
+// Add routes that require authentication
+const protectedRoutes = [
+  "/sales/my-leads",
+  "/sales/lead",
+  "/sales/create-lead",
+  "/sales/manage-lead",
+  "/sales/unassigned-lead",
+]
+
 export async function middleware(req: NextRequest) {
   const path = req.nextUrl.pathname
+  const token = req.cookies.get("auth_token")?.value
+
+  // Check if the route requires authentication
+  const requiresAuth = protectedRoutes.some((route) => req.nextUrl.pathname.startsWith(route))
+
+  if (requiresAuth) {
+    if (!token) {
+      // Redirect to login if no token
+      const url = new URL("/login", req.url)
+      url.searchParams.set("callbackUrl", req.nextUrl.pathname)
+      return NextResponse.redirect(url)
+    }
+
+    try {
+      // Verify the token
+      const { valid } = await verifyAuth(token)
+
+      if (!valid) {
+        // Redirect to login if token is invalid
+        const url = new URL("/login", req.url)
+        url.searchParams.set("callbackUrl", req.nextUrl.pathname)
+        return NextResponse.redirect(url)
+      }
+    } catch (error) {
+      console.error("Auth verification error:", error)
+      // Redirect to login on error
+      const url = new URL("/login", req.url)
+      url.searchParams.set("callbackUrl", req.nextUrl.pathname)
+      return NextResponse.redirect(url)
+    }
+
+    return NextResponse.next()
+  }
 
   // Allow access to public paths and static files
   if (
@@ -93,5 +136,5 @@ export async function middleware(req: NextRequest) {
 
 // Apply middleware to all routes except public assets
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|public/).*)"],
+  matcher: ["/sales/:path*", "/admin/:path*", "/organization/:path*", "/people/:path*"],
 }
