@@ -1,10 +1,24 @@
 import { createClient } from "@/lib/supabase"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, Phone, Mail, MessageSquare, Building, MapPin, User } from "lucide-react"
+import {
+  ArrowLeft,
+  Phone,
+  Mail,
+  MessageSquare,
+  Building,
+  MapPin,
+  User,
+  Calendar,
+  Clock,
+  Tag,
+  FileText,
+  Activity,
+} from "lucide-react"
 import Link from "next/link"
 import { getLeadWithDetails } from "@/utils/lead-utils"
+import { Separator } from "@/components/ui/separator"
 
 async function getLeadActivities(leadId: string) {
   const supabase = createClient()
@@ -36,7 +50,7 @@ export default async function LeadDetailPage({ params }: { params: { id: string 
 
     if (!lead) {
       return (
-        <div className="container mx-auto p-4">
+        <div className="container mx-auto p-4 max-w-6xl">
           <div className="mb-6">
             <Link href="/sales/manage-lead">
               <Button variant="ghost" size="sm" className="gap-1">
@@ -74,161 +88,204 @@ export default async function LeadDetailPage({ params }: { params: { id: string 
         case "REJECTED":
           return <Badge className="bg-red-100 text-red-800 border-red-300">Rejected</Badge>
         default:
-          return <Badge>Unknown</Badge>
+          return <Badge variant="outline">Unknown</Badge>
       }
     }
 
     return (
-      <div className="container mx-auto p-4">
-        <div className="mb-6">
+      <div className="container mx-auto p-4 max-w-6xl">
+        <div className="mb-6 flex items-center justify-between">
           <Link href="/sales/manage-lead">
             <Button variant="ghost" size="sm" className="gap-1">
               <ArrowLeft className="h-4 w-4" /> Back to Leads
             </Button>
           </Link>
+          <div className="flex gap-2">{getStatusBadge(lead.status)}</div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="md:col-span-2 space-y-6">
-            <Card>
-              <CardHeader className="pb-2">
-                <div className="flex justify-between items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Main Lead Information Card */}
+          <Card className="lg:col-span-2">
+            <CardHeader className="pb-3 border-b">
+              <div className="flex flex-col">
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-2xl">{lead.client_name}</CardTitle>
+                </div>
+                <p className="text-muted-foreground text-sm mt-1 flex items-center gap-1">
+                  <Tag className="h-3.5 w-3.5" />
+                  {lead.lead_number}
+                </p>
+              </div>
+            </CardHeader>
+
+            <CardContent className="pt-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {/* Contact Information */}
+                <div className="space-y-5">
                   <div>
-                    <CardTitle className="text-2xl">{lead.client_name}</CardTitle>
-                    <p className="text-muted-foreground">{lead.lead_number}</p>
-                  </div>
-                  {getStatusBadge(lead.status)}
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-4">
-                    <div>
-                      <h3 className="text-sm font-medium text-muted-foreground mb-1">Contact Information</h3>
-                      <div className="space-y-2">
-                        {lead.phone && (
-                          <div className="flex items-center gap-2">
-                            <Phone className="h-4 w-4 text-muted-foreground" />
-                            <span>
-                              {lead.country_code} {lead.phone}
-                            </span>
-                          </div>
-                        )}
-                        {lead.email && (
-                          <div className="flex items-center gap-2">
-                            <Mail className="h-4 w-4 text-muted-foreground" />
-                            <span>{lead.email}</span>
-                          </div>
-                        )}
-                        {lead.is_whatsapp && (
-                          <div className="flex items-center gap-2">
-                            <MessageSquare className="h-4 w-4 text-muted-foreground" />
-                            <span>
-                              {lead.has_separate_whatsapp
-                                ? `${lead.whatsapp_country_code} ${lead.whatsapp_number}`
-                                : "Same as phone"}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div>
-                      <h3 className="text-sm font-medium text-muted-foreground mb-1">Company Information</h3>
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <Building className="h-4 w-4 text-muted-foreground" />
-                          <span>{lead.company_name || "Not specified"}</span>
+                    <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-1.5 mb-3">
+                      <User className="h-4 w-4" />
+                      Contact Information
+                    </h3>
+                    <div className="space-y-3 pl-1">
+                      {lead.phone && (
+                        <div className="flex items-center gap-3">
+                          <Phone className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm">
+                            {lead.country_code} {lead.phone}
+                          </span>
                         </div>
-                        {lead.branch_name && (
-                          <div className="flex items-center gap-2">
-                            <MapPin className="h-4 w-4 text-muted-foreground" />
-                            <span>{lead.branch_name}</span>
-                          </div>
-                        )}
-                      </div>
+                      )}
+                      {lead.email && (
+                        <div className="flex items-center gap-3">
+                          <Mail className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm">{lead.email}</span>
+                        </div>
+                      )}
+                      {lead.is_whatsapp && (
+                        <div className="flex items-center gap-3">
+                          <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm">
+                            {lead.has_separate_whatsapp
+                              ? `${lead.whatsapp_country_code} ${lead.whatsapp_number}`
+                              : "Same as phone"}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  <div className="space-y-4">
-                    <div>
-                      <h3 className="text-sm font-medium text-muted-foreground mb-1">Assigned To</h3>
-                      <div className="p-3 bg-slate-50 rounded-md border border-slate-100">
-                        <div className="flex items-center gap-2">
-                          <User className="h-5 w-5 text-slate-700" />
-                          <div>
-                            <div className="font-medium">{lead.assigned_to_name || "Not assigned"}</div>
-                            {lead.assigned_to_role && (
-                              <div className="text-sm text-slate-500">{lead.assigned_to_role}</div>
-                            )}
-                          </div>
-                        </div>
+                  <div>
+                    <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-1.5 mb-3">
+                      <Building className="h-4 w-4" />
+                      Company Information
+                    </h3>
+                    <div className="space-y-3 pl-1">
+                      <div className="flex items-center gap-3">
+                        <Building className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm">{lead.company_name || "Not specified"}</span>
                       </div>
-                    </div>
-
-                    <div>
-                      <h3 className="text-sm font-medium text-muted-foreground mb-1">Lead Details</h3>
-                      <div className="space-y-2">
-                        <div className="grid grid-cols-2 gap-1">
-                          <span className="text-sm text-muted-foreground">Source:</span>
-                          <span>{lead.lead_source_name || "Not specified"}</span>
+                      {lead.branch_name && (
+                        <div className="flex items-center gap-3">
+                          <MapPin className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm">{lead.branch_name}</span>
                         </div>
-                        <div className="grid grid-cols-2 gap-1">
-                          <span className="text-sm text-muted-foreground">Created:</span>
-                          <span>{new Date(lead.created_at).toLocaleDateString()}</span>
-                        </div>
-                        <div className="grid grid-cols-2 gap-1">
-                          <span className="text-sm text-muted-foreground">Last Updated:</span>
-                          <span>{new Date(lead.updated_at).toLocaleDateString()}</span>
-                        </div>
-                      </div>
+                      )}
                     </div>
                   </div>
                 </div>
 
-                {lead.notes && (
-                  <div className="mt-6">
-                    <h3 className="text-sm font-medium text-muted-foreground mb-2">Notes</h3>
-                    <div className="p-3 bg-slate-50 rounded-md border border-slate-100">
-                      <p className="whitespace-pre-line">{lead.notes}</p>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          <div>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Activity History</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {activities.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-6">No activities recorded yet</p>
-                ) : (
-                  <div className="space-y-4">
-                    {activities.map((activity) => (
-                      <div key={activity.id} className="border-b pb-3 last:border-0">
-                        <p className="font-medium">{activity.description}</p>
-                        <div className="flex justify-between text-sm text-muted-foreground mt-1">
-                          <span>{activity.userName}</span>
-                          <span>{activity.createdAt}</span>
+                {/* Lead Details */}
+                <div className="space-y-5">
+                  <div>
+                    <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-1.5 mb-3">
+                      <User className="h-4 w-4" />
+                      Assigned To
+                    </h3>
+                    <div className="bg-slate-50 rounded-md border border-slate-100 p-3">
+                      <div className="flex items-center gap-3">
+                        <div className="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center">
+                          <User className="h-4 w-4 text-slate-600" />
+                        </div>
+                        <div>
+                          <div className="font-medium text-sm">{lead.assigned_to_name || "Not assigned"}</div>
+                          {lead.assigned_to_role && (
+                            <div className="text-xs text-slate-500">{lead.assigned_to_role}</div>
+                          )}
                         </div>
                       </div>
-                    ))}
+                    </div>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+
+                  <div>
+                    <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-1.5 mb-3">
+                      <FileText className="h-4 w-4" />
+                      Lead Details
+                    </h3>
+                    <div className="space-y-2 pl-1">
+                      <div className="grid grid-cols-2 gap-1">
+                        <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                          <Tag className="h-3 w-3" />
+                          Source:
+                        </span>
+                        <span className="text-sm">{lead.lead_source_name || "Not specified"}</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1">
+                        <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                          <Calendar className="h-3 w-3" />
+                          Created:
+                        </span>
+                        <span className="text-sm">{new Date(lead.created_at).toLocaleDateString()}</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1">
+                        <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                          <Clock className="h-3 w-3" />
+                          Last Updated:
+                        </span>
+                        <span className="text-sm">{new Date(lead.updated_at).toLocaleDateString()}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Notes Section */}
+              {lead.notes && (
+                <div className="mt-8">
+                  <Separator className="mb-6" />
+                  <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-1.5 mb-3">
+                    <FileText className="h-4 w-4" />
+                    Notes
+                  </h3>
+                  <div className="p-4 bg-slate-50 rounded-md border border-slate-100">
+                    <p className="whitespace-pre-line text-sm">{lead.notes}</p>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Activity History Card */}
+          <Card className="h-fit">
+            <CardHeader className="pb-3 border-b">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Activity className="h-4 w-4" />
+                Activity History
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-6">
+              {activities.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <p className="text-muted-foreground text-sm mb-2">No activities recorded yet</p>
+                  <p className="text-xs text-slate-400">Activities will appear here as they occur</p>
+                </div>
+              ) : (
+                <div className="space-y-5">
+                  {activities.map((activity, index) => (
+                    <div key={activity.id} className={index !== activities.length - 1 ? "border-b pb-5" : ""}>
+                      <p className="font-medium text-sm">{activity.description}</p>
+                      <div className="flex justify-between text-xs text-muted-foreground mt-2">
+                        <span>{activity.userName}</span>
+                        <span>{activity.createdAt}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+            <CardFooter className="flex justify-center border-t pt-4 pb-4">
+              <p className="text-xs text-muted-foreground">
+                Showing {activities.length} recent {activities.length === 1 ? "activity" : "activities"}
+              </p>
+            </CardFooter>
+          </Card>
         </div>
       </div>
     )
   } catch (error) {
     console.error("Unexpected error in LeadDetailPage:", error)
     return (
-      <div className="container mx-auto p-4">
+      <div className="container mx-auto p-4 max-w-6xl">
         <div className="mb-6">
           <Link href="/sales/manage-lead">
             <Button variant="ghost" size="sm" className="gap-1">
