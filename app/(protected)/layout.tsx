@@ -1,25 +1,22 @@
 import type React from "react"
-import { getCurrentUser } from "@/actions/auth-actions"
-import { redirect } from "next/navigation"
-import { Breadcrumbs } from "@/components/breadcrumbs"
+import { HeaderWithMobileNav } from "@/components/header-with-mobile-nav"
+import { MainNav } from "@/components/navigation/main-nav"
 
-export default async function ProtectedLayout({
+export default function ProtectedLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const user = await getCurrentUser()
-
-  if (!user) {
-    redirect("/login?reason=unauthenticated")
-  }
-
   return (
-    <div className="min-h-screen flex flex-col">
-      {/* Main Content - Static navigation is now in the root layout */}
-      <div className="container mx-auto px-4 py-4">
-        <Breadcrumbs />
-        <main>{children}</main>
+    <div className="flex min-h-screen flex-col">
+      <HeaderWithMobileNav />
+      <div className="flex flex-1">
+        <aside className="hidden w-64 border-r bg-background md:block">
+          <div className="flex h-full flex-col">
+            <MainNav className="flex-1 overflow-auto py-4" />
+          </div>
+        </aside>
+        <main className="flex-1 overflow-auto p-6">{children}</main>
       </div>
     </div>
   )

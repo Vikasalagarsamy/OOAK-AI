@@ -9,11 +9,11 @@ export async function tableExists(tableName: string): Promise<boolean> {
   const supabase = createClient()
 
   try {
-    const { data, error } = await supabase
-      .from("information_schema.tables")
-      .select("table_name")
-      .eq("table_name", tableName)
-      .maybeSingle()
+    // Use a raw query to check if the table exists
+    // This is more reliable than trying to query information_schema directly
+    const { data, error } = await supabase.rpc("check_table_exists", {
+      table_name: tableName,
+    })
 
     if (error) {
       console.error(`Error checking if table ${tableName} exists:`, error)

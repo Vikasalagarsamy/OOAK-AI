@@ -6,27 +6,12 @@ export async function POST(req: NextRequest) {
     const result = await refreshUserSession()
 
     if (result.success) {
-      return NextResponse.json({
-        success: true,
-        message: "Session refreshed successfully",
-      })
+      return NextResponse.json({ success: true })
     } else {
-      return NextResponse.json(
-        {
-          success: false,
-          error: result.error || "Failed to refresh session",
-        },
-        { status: 400 },
-      )
+      return NextResponse.json({ success: false, error: result.error }, { status: 401 })
     }
   } catch (error) {
-    console.error("Error in refresh session API:", error)
-    return NextResponse.json(
-      {
-        success: false,
-        error: "An error occurred while refreshing the session",
-      },
-      { status: 500 },
-    )
+    console.error("Error refreshing session:", error)
+    return NextResponse.json({ success: false, error: "Failed to refresh session" }, { status: 500 })
   }
 }

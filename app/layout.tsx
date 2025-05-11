@@ -1,15 +1,15 @@
 import type React from "react"
-import "./globals.css"
+import type { Metadata } from "next"
 import { Inter } from "next/font/google"
-import { Toaster } from "@/components/ui/toaster"
-import { StaticNavigation } from "@/components/static-navigation"
-import { RoleProvider } from "@/contexts/role-context"
+import "./globals.css"
+import { SessionRefresh } from "@/components/session-refresh"
+import { ToasterWrapper } from "@/components/toaster-wrapper"
 
 const inter = Inter({ subsets: ["latin"] })
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "Photography Portal",
-  description: "Secure login for photography management",
+  description: "Management portal for photography business",
     generator: 'v0.dev'
 }
 
@@ -21,11 +21,8 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <RoleProvider>
-          <StaticNavigation />
-          <main>{children}</main>
-          <Toaster />
-        </RoleProvider>
+        <SessionRefresh />
+        <ToasterWrapper>{children}</ToasterWrapper>
       </body>
     </html>
   )

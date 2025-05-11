@@ -151,31 +151,8 @@ export async function getCurrentUser() {
     const token = cookieStore.get("auth_token")?.value
 
     if (!token) {
-      // Try to get user ID from user_id cookie as fallback
-      const userId = cookieStore.get("user_id")?.value
-      if (userId) {
-        // Create a minimal user object with admin privileges
-        return {
-          id: userId,
-          username: "admin",
-          email: "admin@example.com",
-          employeeId: null,
-          roleId: 1,
-          roleName: "Administrator",
-          isAdmin: true,
-        }
-      }
-
-      // If no user ID cookie, use default admin user
-      return {
-        id: "1",
-        username: "admin",
-        email: "admin@example.com",
-        employeeId: null,
-        roleId: 1,
-        roleName: "Administrator",
-        isAdmin: true,
-      }
+      // Instead of defaulting to admin, return null to indicate no authenticated user
+      return null
     }
 
     const secret = process.env.JWT_SECRET || "fallback-secret-only-for-development"
@@ -204,29 +181,13 @@ export async function getCurrentUser() {
       .single()
 
     if (error || !user) {
-      console.log("Error fetching user or user not found, using admin fallback")
-      return {
-        id: "1",
-        username: "admin",
-        email: "admin@example.com",
-        employeeId: null,
-        roleId: 1,
-        roleName: "Administrator",
-        isAdmin: true,
-      }
+      console.log("Error fetching user or user not found")
+      return null
     }
 
     if (!user.is_active) {
-      console.log("User account is not active, using admin fallback")
-      return {
-        id: "1",
-        username: "admin",
-        email: "admin@example.com",
-        employeeId: null,
-        roleId: 1,
-        roleName: "Administrator",
-        isAdmin: true,
-      }
+      console.log("User account is not active")
+      return null
     }
 
     return {
@@ -240,15 +201,7 @@ export async function getCurrentUser() {
     }
   } catch (error) {
     console.error("Error getting current user:", error)
-    // Return a default admin user as fallback
-    return {
-      id: "1",
-      username: "admin",
-      email: "admin@example.com",
-      employeeId: null,
-      roleId: 1,
-      roleName: "Administrator",
-      isAdmin: true,
-    }
+    // Instead of returning admin user, return null to indicate authentication failure
+    return null
   }
 }

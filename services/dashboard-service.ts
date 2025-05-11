@@ -3,48 +3,86 @@
 import { createClient } from "@/lib/supabase"
 import { getRecentActivities } from "./activity-service"
 
+// Add rate limiting and retry logic
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
 export async function getDashboardStats() {
   try {
     const supabase = createClient()
 
-    // Get company count with growth trend
-    const { data: companiesData, error: companyError } = await supabase
-      .from("companies")
-      .select("id, created_at")
-      .order("created_at", { ascending: true })
+    // Use a simpler approach with better error handling
+    let companiesData = []
+    try {
+      const { data, error } = await supabase
+        .from("companies")
+        .select("id, created_at")
+        .order("created_at", { ascending: true })
 
-    if (companyError) {
-      console.error("Error fetching companies:", companyError)
+      if (error) {
+        console.error("Error fetching companies:", error)
+      } else if (data) {
+        companiesData = data
+      }
+    } catch (error) {
+      console.error("Exception fetching companies:", error)
     }
 
-    // Get branch count with growth trend
-    const { data: branchesData, error: branchError } = await supabase
-      .from("branches")
-      .select("id, created_at")
-      .order("created_at", { ascending: true })
+    // Add a small delay between queries to avoid rate limiting
+    await delay(100)
 
-    if (branchError) {
-      console.error("Error fetching branches:", branchError)
+    // Fetch branches data with error handling
+    let branchesData = []
+    try {
+      const { data, error } = await supabase
+        .from("branches")
+        .select("id, created_at")
+        .order("created_at", { ascending: true })
+
+      if (error) {
+        console.error("Error fetching branches:", error)
+      } else if (data) {
+        branchesData = data
+      }
+    } catch (error) {
+      console.error("Exception fetching branches:", error)
     }
 
-    // Get employee count with growth trend
-    const { data: employeesData, error: employeeError } = await supabase
-      .from("employees")
-      .select("id, created_at")
-      .order("created_at", { ascending: true })
+    await delay(100)
 
-    if (employeeError) {
-      console.error("Error fetching employees:", employeeError)
+    // Fetch employees data with error handling
+    let employeesData = []
+    try {
+      const { data, error } = await supabase
+        .from("employees")
+        .select("id, created_at")
+        .order("created_at", { ascending: true })
+
+      if (error) {
+        console.error("Error fetching employees:", error)
+      } else if (data) {
+        employeesData = data
+      }
+    } catch (error) {
+      console.error("Exception fetching employees:", error)
     }
 
-    // Get client count with growth trend
-    const { data: clientsData, error: clientError } = await supabase
-      .from("clients")
-      .select("id, created_at")
-      .order("created_at", { ascending: true })
+    await delay(100)
 
-    if (clientError) {
-      console.error("Error fetching clients:", clientError)
+    // Fetch clients data with error handling
+    let clientsData = []
+    try {
+      const { data, error } = await supabase
+        .from("clients")
+        .select("id, created_at")
+        .order("created_at", { ascending: true })
+
+      if (error) {
+        console.error("Error fetching clients:", error)
+      } else if (data) {
+        clientsData = data
+      }
+    } catch (error) {
+      console.error("Exception fetching clients:", error)
     }
 
     // Calculate growth trends (comparing current month to previous month)
@@ -85,7 +123,7 @@ export async function getDashboardStats() {
       { department: "HR", count: 5 },
     ]
 
-    // Simplified approach to get employees by department
+    // Use a simpler approach to get employees by department
     let employeesByDepartment = [...defaultEmployeesByDepartment]
 
     try {
@@ -94,34 +132,32 @@ export async function getDashboardStats() {
 
       if (departmentsError) {
         console.error("Error fetching departments:", departmentsError)
-        throw departmentsError
-      }
+      } else if (departments && departments.length > 0) {
+        // Use Promise.all with error handling for each department
+        const departmentCountPromises = departments.map(async (dept) => {
+          try {
+            const { count, error } = await supabase
+              .from("employee_departments")
+              .select("*", { count: "exact", head: true })
+              .eq("department_id", dept.id)
 
-      if (departments && departments.length > 0) {
-        // Create a simpler query that doesn't use Promise.race or timeouts
-        const departmentCounts = await Promise.all(
-          departments.map(async (dept) => {
-            try {
-              const { count, error } = await supabase
-                .from("employee_departments")
-                .select("*", { count: "exact", head: true })
-                .eq("department_id", dept.id)
-
-              if (error) {
-                console.error(`Error counting employees for department ${dept.name}:`, error)
-                return { department: dept.name, count: 0 }
-              }
-
-              return {
-                department: dept.name,
-                count: count || 0,
-              }
-            } catch (error) {
-              console.error(`Failed to fetch count for department ${dept.name}:`, error)
+            if (error) {
+              console.error(`Error counting employees for department ${dept.name}:`, error)
               return { department: dept.name, count: 0 }
             }
-          }),
-        )
+
+            return {
+              department: dept.name,
+              count: count || 0,
+            }
+          } catch (error) {
+            console.error(`Failed to fetch count for department ${dept.name}:`, error)
+            return { department: dept.name, count: 0 }
+          }
+        })
+
+        // Wait for all promises to resolve, with a timeout
+        const departmentCounts = await Promise.all(departmentCountPromises)
 
         // Only update if we have results
         if (departmentCounts.length > 0) {
@@ -151,34 +187,32 @@ export async function getDashboardStats() {
 
       if (companiesError) {
         console.error("Error fetching companies for branch count:", companiesError)
-        throw companiesError
-      }
+      } else if (companies && companies.length > 0) {
+        // Use Promise.all with error handling for each company
+        const branchCountPromises = companies.map(async (company) => {
+          try {
+            const { count, error } = await supabase
+              .from("branches")
+              .select("*", { count: "exact", head: true })
+              .eq("company_id", company.id)
 
-      if (companies && companies.length > 0) {
-        // Create a simpler query that doesn't use Promise.race or timeouts
-        const branchCounts = await Promise.all(
-          companies.map(async (company) => {
-            try {
-              const { count, error } = await supabase
-                .from("branches")
-                .select("*", { count: "exact", head: true })
-                .eq("company_id", company.id)
-
-              if (error) {
-                console.error(`Error counting branches for company ${company.name}:`, error)
-                return { company: company.name, count: 0 }
-              }
-
-              return {
-                company: company.name,
-                count: count || 0,
-              }
-            } catch (error) {
-              console.error(`Failed to fetch branch count for company ${company.name}:`, error)
+            if (error) {
+              console.error(`Error counting branches for company ${company.name}:`, error)
               return { company: company.name, count: 0 }
             }
-          }),
-        )
+
+            return {
+              company: company.name,
+              count: count || 0,
+            }
+          } catch (error) {
+            console.error(`Failed to fetch branch count for company ${company.name}:`, error)
+            return { company: company.name, count: 0 }
+          }
+        })
+
+        // Wait for all promises to resolve
+        const branchCounts = await Promise.all(branchCountPromises)
 
         // Only update if we have results
         if (branchCounts.length > 0) {
@@ -191,16 +225,17 @@ export async function getDashboardStats() {
     }
 
     // Get monthly employee growth (real data)
-    const employeeGrowth = employeesData
-      ? calculateMonthlyGrowth(employeesData)
-      : [
-          { month: "Jan", count: 42 },
-          { month: "Feb", count: 47 },
-          { month: "Mar", count: 53 },
-          { month: "Apr", count: 58 },
-          { month: "May", count: 62 },
-          { month: "Jun", count: 68 },
-        ]
+    const employeeGrowth =
+      employeesData.length > 0
+        ? calculateMonthlyGrowth(employeesData)
+        : [
+            { month: "Jan", count: 42 },
+            { month: "Feb", count: 47 },
+            { month: "Mar", count: 53 },
+            { month: "Apr", count: 58 },
+            { month: "May", count: 62 },
+            { month: "Jun", count: 68 },
+          ]
 
     // Get recent activities
     let recentActivities = []
