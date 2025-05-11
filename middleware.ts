@@ -6,7 +6,7 @@ import { jwtVerify } from "jose"
 const ADMIN_PATHS = ["/admin", "/organization/roles", "/organization/account-creation"]
 
 // Define paths that should be accessible without authentication
-const PUBLIC_PATHS = ["/login", "/forgot-password", "/api/auth/logout", "/api/auth/status", "/api/auth/refresh-session"]
+const PUBLIC_PATHS = ["/login", "/forgot-password", "/api/auth/logout", "/api/auth/status"]
 
 // Define role-specific path restrictions
 const ROLE_RESTRICTIONS: Record<string, string[]> = {
@@ -20,7 +20,7 @@ export async function middleware(req: NextRequest) {
   if (
     PUBLIC_PATHS.includes(path) ||
     path.startsWith("/_next") ||
-    path.startsWith("/api/auth") ||
+    path.startsWith("/api/") ||
     path.includes("favicon.ico") ||
     path.includes(".png") ||
     path.includes(".jpg") ||
@@ -32,11 +32,12 @@ export async function middleware(req: NextRequest) {
   // Check if user is authenticated
   const authToken = req.cookies.get("auth_token")?.value
 
-  // If no token, redirect to login
   if (!authToken) {
     console.log("No auth token, redirecting to login")
+    // Redirect to login if no token exists
     const url = new URL("/login", req.url)
-    url.searchParams.set("redirect", req.nextUrl.pathname)
+    url.searchParams.set("reason", "unauthenticated")
+    url.searchParams.set("from", path)
     return NextResponse.redirect(url)
   }
 
@@ -49,9 +50,7 @@ export async function middleware(req: NextRequest) {
       algorithms: ["HS256"],
     })
 
-    // Extract user role from payload
     const userRole = ((payload.roleName as string) || "").toLowerCase()
-    const isAdmin = payload.isAdmin === true || payload.roleName === "Administrator"
 
     // Check role-specific restrictions
     if (userRole && ROLE_RESTRICTIONS[userRole]) {
@@ -70,11 +69,14 @@ export async function middleware(req: NextRequest) {
     }
 
     // For admin-only paths, verify admin role
-    if (ADMIN_PATHS.some((adminPath) => path.startsWith(adminPath)) && !isAdmin) {
-      console.log(`Non-admin user attempted to access admin path: ${path}`)
-      const url = new URL("/dashboard", req.url)
-      url.searchParams.set("error", "insufficient_permissions")
-      return NextResponse.redirect(url)
+    if (ADMIN_PATHS.some((adminPath) => path.startsWith(adminPath))) {
+      if (payload.roleName !== "Administrator") {
+        // Not an admin, redirect to dashboard with error message
+        console.log(`Non-admin user attempted to access admin path: ${path}`)
+        const url = new URL("/dashboard", req.url)
+        url.searchParams.set("error", "insufficient_permissions")
+        return NextResponse.redirect(url)
+      }
     }
 
     // Allow the request to proceed

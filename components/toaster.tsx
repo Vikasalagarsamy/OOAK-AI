@@ -1,22 +1,13 @@
 "use client"
 
-import type React from "react"
-
-import { useToast, ToastProvider } from "@/components/ui/use-toast"
-import {
-  Toast,
-  ToastClose,
-  ToastDescription,
-  ToastProvider as ToastUIProvider,
-  ToastTitle,
-  ToastViewport,
-} from "@/components/ui/toast"
+import { Toast, ToastClose, ToastDescription, ToastProvider, ToastTitle, ToastViewport } from "@/components/ui/toast"
+import { useToast } from "@/components/ui/use-toast"
 
 export function Toaster() {
   const { toasts } = useToast()
 
   return (
-    <ToastUIProvider>
+    <ToastProvider>
       {toasts.map(({ id, title, description, action, ...props }) => (
         <Toast key={id} {...props}>
           <div className="grid gap-1">
@@ -28,15 +19,6 @@ export function Toaster() {
         </Toast>
       ))}
       <ToastViewport />
-    </ToastUIProvider>
-  )
-}
-
-export function ToasterWrapper({ children }: { children: React.ReactNode }) {
-  return (
-    <ToastProvider>
-      {children}
-      <Toaster />
     </ToastProvider>
   )
 }

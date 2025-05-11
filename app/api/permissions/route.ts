@@ -1,83 +1,81 @@
+import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase"
 import { getCurrentUser } from "@/actions/auth-actions"
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url)
-  const resource = searchParams.get("resource")
-  const action = searchParams.get("action")
-
-  if (!resource || !action) {
-    return new Response(
-      JSON.stringify({
-        hasPermission: false,
-        error: "Missing resource or action parameter",
-      }),
-      {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      },
-    )
-  }
-
   try {
+    const url = new URL(request.url)
+    const path = url.searchParams.get("path")
+
+    if (!path) {
+      return NextResponse.json({ error: "Path parameter is required" }, { status: 400 })
+    }
+
     const user = await getCurrentUser()
 
-    // If no authenticated user, deny permission
     if (!user) {
-      return new Response(
-        JSON.stringify({
-          hasPermission: false,
-          error: "Authentication required",
-        }),
+      return NextResponse.json(
+        { canView: false, canAdd: false, canEdit: false, canDelete: false },
         {
-          status: 401,
-          headers: { "Content-Type": "application/json" },
+          status: 200,
+          headers: {
+            "Cache-Control": "no-store, max-age=0, must-revalidate",
+            Pragma: "no-cache",
+            Expires: "0",
+          },
         },
       )
     }
-
-    // Check permission for authenticated user
-    // const hasPermission = await checkPermission(resource, action)
-    const supabase = createClient()
 
     // Use our new database function to check permissions
-    const viewResult = await supabase.rpc("check_user_permission", {
-      p_user_id: user.id,
-      p_resource: resource,
-      p_action: action,
-    })
+    const supabase = createClient()
 
-    if (viewResult.error) {
-      console.error("Error checking permissions:", viewResult.error)
-      return new Response(
-        JSON.stringify({
-          hasPermission: false,
-          error: "Error checking permission",
-        }),
+    // Check each permission type
+    const [viewResult, addResult, editResult, deleteResult] = await Promise.all([
+      supabase.rpc("check_user_menu_permission", { p_user_id: user.id, p_menu_path: path, p_permission: "view" }),
+      supabase.rpc("check_user_menu_permission", { p_user_id: user.id, p_menu_path: path, p_permission: "add" }),
+      supabase.rpc("check_user_menu_permission", { p_user_id: user.id, p_menu_path: path, p_permission: "edit" }),
+      supabase.rpc("check_user_menu_permission", { p_user_id: user.id, p_menu_path: path, p_permission: "delete" }),
+    ])
+
+    // Handle any errors
+    if (viewResult.error || addResult.error || editResult.error || deleteResult.error) {
+      console.error(
+        "Error checking permissions:",
+        viewResult.error || addResult.error || editResult.error || deleteResult.error,
+      )
+      return NextResponse.json(
+        { canView: false, canAdd: false, canEdit: false, canDelete: false },
         {
-          status: 500,
-          headers: { "Content-Type": "application/json" },
+          status: 200,
+          headers: {
+            "Cache-Control": "no-store, max-age=0, must-revalidate",
+            Pragma: "no-cache",
+            Expires: "0",
+          },
         },
       )
     }
 
-    const hasPermission = viewResult.data || false
-
-    return new Response(JSON.stringify({ hasPermission }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    })
-  } catch (error) {
-    console.error("Permission check error:", error)
-    return new Response(
-      JSON.stringify({
-        hasPermission: false,
-        error: "Error checking permission",
-      }),
+    // Return permissions
+    return NextResponse.json(
       {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
+        canView: viewResult.data || false,
+        canAdd: addResult.data || false,
+        canEdit: editResult.data || false,
+        canDelete: deleteResult.data || false,
+      },
+      {
+        status: 200,
+        headers: {
+          "Cache-Control": "no-store, max-age=0, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
       },
     )
+  } catch (error) {
+    console.error("Error in permissions API:", error)
+    return NextResponse.json({ error: "Failed to check permissions" }, { status: 500 })
   }
 }

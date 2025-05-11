@@ -1,12 +1,11 @@
-import { ToastProvider } from "@/components/ui/toast"
-;('"use client')
+"use client"
 
 import * as React from "react"
 
 import type { ToastActionElement, ToastProps } from "@/components/ui/toast"
 
 const TOAST_LIMIT = 5
-const TOAST_REMOVE_DELAY = 3000
+const TOAST_REMOVE_DELAY = 1000000
 
 type ToasterToast = ToastProps & {
   id: string
@@ -161,7 +160,7 @@ function useToast() {
         listeners.splice(index, 1)
       }
     }
-  }, [])
+  }, [state])
 
   return {
     ...state,
@@ -172,7 +171,7 @@ function useToast() {
 
 function addToRemoveQueue(toastId: string) {
   if (toastTimeouts.has(toastId)) {
-    clearTimeout(toastTimeouts.get(toastId))
+    return
   }
 
   const timeout = setTimeout(() => {
@@ -186,4 +185,4 @@ function addToRemoveQueue(toastId: string) {
   toastTimeouts.set(toastId, timeout)
 }
 
-export { useToast, toast, ToastProvider }
+export { useToast, toast }

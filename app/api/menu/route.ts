@@ -1,51 +1,24 @@
 import { NextResponse } from "next/server"
-import { getMenuForCurrentUser } from "@/services/menu-service"
-import { getCurrentUser } from "@/actions/auth-actions"
+import { getMenuForCurrentUser } from "@/services/unified-menu-service"
 
 export async function GET() {
   try {
-    // First check if user is authenticated
-    const user = await getCurrentUser()
+    console.log("API route: /api/menu - Fetching menu for current user")
 
-    if (!user) {
-      console.log("API: No authenticated user found")
-      return NextResponse.json([], {
-        status: 401,
-        headers: {
-          "Cache-Control": "no-store, max-age=0, must-revalidate",
-          Pragma: "no-cache",
-          Expires: "0",
-        },
-      })
+    // Add stronger cache control headers to prevent caching
+    const headers = {
+      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
+      Pragma: "no-cache",
+      Expires: "0",
+      "Surrogate-Control": "no-store",
     }
 
-    console.log(`API: Fetching menu for user ${user.username} (${user.id})`)
+    const menu = await getMenuForCurrentUser()
+    console.log(`API route: /api/menu - Returning ${menu.length} menu items`)
 
-    // Get menu items for the current user
-    const menuItems = await getMenuForCurrentUser()
-
-    console.log(`API: Returning ${menuItems.length} menu items`)
-
-    // Return the menu items with cache control headers
-    return NextResponse.json(menuItems, {
-      headers: {
-        "Cache-Control": "no-store, max-age=0, must-revalidate",
-        Pragma: "no-cache",
-        Expires: "0",
-      },
-    })
+    return NextResponse.json(menu, { headers })
   } catch (error) {
-    console.error("Error in menu API:", error)
-    return NextResponse.json(
-      { error: "Failed to fetch menu items" },
-      {
-        status: 500,
-        headers: {
-          "Cache-Control": "no-store, max-age=0, must-revalidate",
-          Pragma: "no-cache",
-          Expires: "0",
-        },
-      },
-    )
+    console.error("API route: /api/menu - Error:", error)
+    return NextResponse.json({ error: "Failed to fetch menu" }, { status: 500 })
   }
 }

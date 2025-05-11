@@ -272,3 +272,172 @@ export async function synchronizeMenuItems(): Promise<boolean> {
     return false
   }
 }
+
+// Add this new function to detect menu changes
+export async function detectMenuChanges(): Promise<{
+  added: MenuItem[]
+  removed: MenuItem[]
+  modified: MenuItem[]
+}> {
+  try {
+    const supabase = createClient()
+
+    // Get current menu items from the database
+    const { data: currentItems, error: currentError } = await supabase
+      .from("menu_items")
+      .select("id, parent_id, name, path, icon, is_visible, sort_order, last_updated")
+      .order("id")
+
+    if (currentError) {
+      console.error("Error fetching current menu items:", currentError)
+      return { added: [], removed: [], modified: [] }
+    }
+
+    // Get the last known state of menu items (from a tracking table)
+    const { data: previousItems, error: previousError } = await supabase
+      .from("menu_items_tracking")
+      .select("menu_item_id, last_known_state")
+      .order("menu_item_id")
+
+    if (previousError) {
+      // If the tracking table doesn't exist yet, we'll create it later
+      console.log("Menu tracking table may not exist yet:", previousError)
+      return { added: [], removed: [], modified: [] }
+    }
+
+    // Convert previous items to a map for easier comparison
+    const previousMap = new Map()
+    ;(previousItems || []).forEach((item) => {
+      try {
+        previousMap.set(item.menu_item_id, JSON.parse(item.last_known_state))
+      } catch (e) {
+        console.error(`Error parsing previous state for menu item ${item.menu_item_id}:`, e)
+      }
+    })
+
+    // Find added, removed, and modified items
+    const added: MenuItem[] = []
+    const modified: MenuItem[] = []
+
+    currentItems.forEach((item) => {
+      const menuItem = {
+        id: item.id,
+        parentId: item.parent_id,
+        name: item.name,
+        path: item.path,
+        icon: item.icon,
+        isVisible: item.is_visible,
+        sortOrder: item.sort_order,
+      }
+
+      if (!previousMap.has(item.id)) {
+        added.push(menuItem)
+      } else {
+        // Check if the item has been modified
+        const previous = previousMap.get(item.id)
+        if (
+          previous.name !== item.name ||
+          previous.path !== item.path ||
+          previous.parentId !== item.parent_id ||
+          previous.icon !== item.icon ||
+          previous.isVisible !== item.is_visible ||
+          previous.sortOrder !== item.sort_order
+        ) {
+          modified.push(menuItem)
+        }
+      }
+
+      // Remove from map to track what's left (removed items)
+      previousMap.delete(item.id)
+    })
+
+    // Any items left in the map have been removed
+    const removed: MenuItem[] = []
+    previousMap.forEach((value, key) => {
+      removed.push({
+        id: key,
+        ...value,
+      })
+    })
+
+    return { added, removed, modified }
+  } catch (error) {
+    console.error("Error detecting menu changes:", error)
+    return { added: [], removed: [], modified: [] }
+  }
+}
+
+// Add this function to update the tracking table
+export async function updateMenuTracking(): Promise<boolean> {
+  try {
+    const supabase = createClient()
+
+    // Get current menu items
+    const { data: currentItems, error: currentError } = await supabase
+      .from("menu_items")
+      .select("id, parent_id, name, path, icon, is_visible, sort_order")
+      .order("id")
+
+    if (currentError) {
+      console.error("Error fetching current menu items for tracking:", currentError)
+      return false
+    }
+
+    // Check if tracking table exists
+    const { data: tableExists, error: tableError } = await supabase.rpc("check_if_table_exists", {
+      table_name: "menu_items_tracking",
+    })
+
+    if (tableError || !tableExists) {
+      // Create tracking table if it doesn't exist
+      const { error: createError } = await supabase.rpc("execute_sql", {
+        sql_statement: `
+            CREATE TABLE IF NOT EXISTS menu_items_tracking (
+              id SERIAL PRIMARY KEY,
+              menu_item_id INTEGER NOT NULL UNIQUE,
+              last_known_state JSONB NOT NULL,
+              last_updated TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            )
+          `,
+      })
+
+      if (createError) {
+        console.error("Error creating menu tracking table:", createError)
+        return false
+      }
+    }
+
+    // Clear existing tracking data
+    const { error: clearError } = await supabase.from("menu_items_tracking").delete().neq("id", 0) // This will delete all rows
+
+    if (clearError) {
+      console.error("Error clearing menu tracking data:", clearError)
+      return false
+    }
+
+    // Insert current items into tracking table
+    const trackingData = currentItems.map((item) => ({
+      menu_item_id: item.id,
+      last_known_state: JSON.stringify({
+        parentId: item.parent_id,
+        name: item.name,
+        path: item.path,
+        icon: item.icon,
+        isVisible: item.is_visible,
+        sortOrder: item.sort_order,
+      }),
+    }))
+
+    const { error: insertError } = await supabase.from("menu_items_tracking").insert(trackingData)
+
+    if (insertError) {
+      console.error("Error updating menu tracking data:", insertError)
+      return false
+    }
+
+    return true
+  } catch (error) {
+    console.error("Error in updateMenuTracking:", error)
+    return false
+  }
+}

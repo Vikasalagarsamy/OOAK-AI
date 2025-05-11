@@ -6,18 +6,16 @@ import type { MenuItemWithPermission } from "@/types/menu"
 export function useMenu() {
   const [menu, setMenu] = useState<MenuItemWithPermission[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<Error | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const [lastRefresh, setLastRefresh] = useState<number | null>(null)
 
   const fetchMenu = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+
     try {
-      setLoading(true)
-      setError(null)
-
-      console.log("Fetching menu items...")
-
-      // Add cache-busting parameter to prevent caching
-      const response = await fetch(`/api/menu?t=${Date.now()}`, {
+      // Use the same API endpoint that the main navigation uses
+      const response = await fetch("/api/menu", {
         headers: {
           "Cache-Control": "no-cache, no-store, must-revalidate",
           Pragma: "no-cache",
@@ -26,29 +24,22 @@ export function useMenu() {
       })
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch menu: ${response.status}`)
+        throw new Error(`Error fetching menu: ${response.statusText}`)
       }
 
       const data = await response.json()
-      console.log(`Fetched ${data.length} menu items`)
-
       setMenu(data)
       setLastRefresh(Date.now())
     } catch (err) {
       console.error("Error fetching menu:", err)
-      setError(err instanceof Error ? err : new Error(String(err)))
+      setError(err instanceof Error ? err.message : "Failed to load menu")
       setMenu([])
     } finally {
       setLoading(false)
     }
   }, [])
 
-  const refreshMenu = useCallback(async () => {
-    // Clear session storage cache if it exists
-    if (typeof window !== "undefined") {
-      sessionStorage.removeItem("userMenu")
-    }
-
+  const refreshMenu = useCallback(() => {
     return fetchMenu()
   }, [fetchMenu])
 
