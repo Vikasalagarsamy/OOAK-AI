@@ -8,7 +8,7 @@ export async function getAssignedLeads(): Promise<Lead[]> {
   const supabase = createClient()
 
   try {
-    // First, get all the leads that are not unassigned
+    // First, get all the leads that are not unassigned and not rejected
     const { data: leadsData, error: leadsError } = await supabase
       .from("leads")
       .select(`
@@ -17,6 +17,7 @@ export async function getAssignedLeads(): Promise<Lead[]> {
         branches:branch_id(name)
       `)
       .not("status", "eq", "UNASSIGNED")
+      .not("status", "eq", "REJECTED") // Exclude rejected leads
       .not("assigned_to", "is", null)
       .order("updated_at", { ascending: false })
 

@@ -12,7 +12,7 @@ export default function RejectedLeadsPage() {
           Rejected Leads
         </h1>
         <p className="text-muted-foreground">
-          View and reassign leads that you have rejected from your assigned companies
+          View and reassign leads that have been rejected from your assigned companies
         </p>
       </div>
 

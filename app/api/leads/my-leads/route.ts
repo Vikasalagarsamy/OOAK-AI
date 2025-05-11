@@ -37,6 +37,9 @@ export async function GET() {
     // Always filter by the current user's employee ID - no admin bypass
     query = query.eq("assigned_to", employeeId)
 
+    // Add filter to exclude rejected leads
+    query = query.neq("status", "REJECTED")
+
     const { data, error } = await query.order("created_at", { ascending: false })
 
     if (error) {

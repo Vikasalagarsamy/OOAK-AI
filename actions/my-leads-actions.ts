@@ -45,7 +45,7 @@ export async function getMyLeads() {
     const employee = employeeData[0]
     console.log(`Found employee: ${employee.first_name} ${employee.last_name} (ID: ${employee.id})`)
 
-    // Get leads assigned to this employee
+    // Get leads assigned to this employee, excluding rejected leads
     const { data: leadsData, error: leadsError } = await supabase
       .from("leads")
       .select(`
@@ -63,6 +63,7 @@ export async function getMyLeads() {
         notes
       `)
       .eq("assigned_to", employee.id)
+      .neq("status", "REJECTED") // Exclude rejected leads
       .order("created_at", { ascending: false })
 
     if (leadsError) {

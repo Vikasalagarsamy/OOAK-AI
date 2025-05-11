@@ -29,16 +29,10 @@ export function UnassignedLeadsList() {
     try {
       const supabase = createClient()
 
-      // First, fetch the leads with companies and branches
+      // First, fetch the unassigned leads without using relationships
       const { data: leadsData, error: leadsError } = await supabase
         .from("leads")
-        .select(`
-          *,
-          companies(name),
-          branches(name, location),
-          reassigned_from_companies:companies!reassigned_from_company_id(name),
-          reassigned_from_branches:branches!reassigned_from_branch_id(name)
-        `)
+        .select("*")
         .eq("status", "UNASSIGNED")
         .order("created_at", { ascending: false })
 
@@ -46,19 +40,81 @@ export function UnassignedLeadsList() {
         throw leadsError
       }
 
-      // Transform the initial data
-      let transformedLeads = leadsData.map((lead) => ({
-        ...lead,
-        company_name: lead.companies?.name,
-        branch_name: lead.branches?.name,
-        branch_location: lead.branches?.location,
-        reassigned_from_company_name: lead.reassigned_from_companies?.name,
-        reassigned_from_branch_name: lead.reassigned_from_branches?.name,
-      }))
+      // Extract company and branch IDs for separate queries
+      const companyIds = [...new Set(leadsData.map((lead) => lead.company_id).filter(Boolean))]
+      const branchIds = [...new Set(leadsData.map((lead) => lead.branch_id).filter(Boolean))]
+      const reassignedFromCompanyIds = [
+        ...new Set(leadsData.map((lead) => lead.reassigned_from_company_id).filter(Boolean)),
+      ]
+      const reassignedFromBranchIds = [
+        ...new Set(leadsData.map((lead) => lead.reassigned_from_branch_id).filter(Boolean)),
+      ]
 
-      // If there are leads with lead_source_id, try to fetch the lead source names
-      const leadsWithSourceIds = transformedLeads.filter((lead) => lead.lead_source_id)
+      // Prepare data maps
+      const companyMap = new Map()
+      const branchMap = new Map()
+      const reassignedFromCompanyMap = new Map()
+      const reassignedFromBranchMap = new Map()
+      const sourceMap = new Map()
 
+      // Fetch companies data
+      if (companyIds.length > 0) {
+        const { data: companiesData, error: companiesError } = await supabase
+          .from("companies")
+          .select("id, name")
+          .in("id", companyIds)
+
+        if (!companiesError && companiesData) {
+          companiesData.forEach((company) => {
+            companyMap.set(company.id, company)
+          })
+        }
+      }
+
+      // Fetch branches data
+      if (branchIds.length > 0) {
+        const { data: branchesData, error: branchesError } = await supabase
+          .from("branches")
+          .select("id, name, location")
+          .in("id", branchIds)
+
+        if (!branchesError && branchesData) {
+          branchesData.forEach((branch) => {
+            branchMap.set(branch.id, branch)
+          })
+        }
+      }
+
+      // Fetch reassigned from companies data
+      if (reassignedFromCompanyIds.length > 0) {
+        const { data: reassignedCompaniesData, error: reassignedCompaniesError } = await supabase
+          .from("companies")
+          .select("id, name")
+          .in("id", reassignedFromCompanyIds)
+
+        if (!reassignedCompaniesError && reassignedCompaniesData) {
+          reassignedCompaniesData.forEach((company) => {
+            reassignedFromCompanyMap.set(company.id, company)
+          })
+        }
+      }
+
+      // Fetch reassigned from branches data
+      if (reassignedFromBranchIds.length > 0) {
+        const { data: reassignedBranchesData, error: reassignedBranchesError } = await supabase
+          .from("branches")
+          .select("id, name")
+          .in("id", reassignedFromBranchIds)
+
+        if (!reassignedBranchesError && reassignedBranchesData) {
+          reassignedBranchesData.forEach((branch) => {
+            reassignedFromBranchMap.set(branch.id, branch)
+          })
+        }
+      }
+
+      // Fetch lead sources if needed
+      const leadsWithSourceIds = leadsData.filter((lead) => lead.lead_source_id)
       if (leadsWithSourceIds.length > 0) {
         try {
           // Check if lead_sources table exists
@@ -68,29 +124,43 @@ export function UnassignedLeadsList() {
 
           if (!countError && count !== null) {
             // Table exists, fetch lead source names
-            const sourceIds = [...new Set(leadsWithSourceIds.map((lead) => lead.lead_source_id))]
+            const sourceIds = [...new Set(leadsWithSourceIds.map((lead) => lead.lead_source_id).filter(Boolean))]
 
-            const { data: sourcesData, error: sourcesError } = await supabase
-              .from("lead_sources")
-              .select("id, name")
-              .in("id", sourceIds)
+            if (sourceIds.length > 0) {
+              const { data: sourcesData, error: sourcesError } = await supabase
+                .from("lead_sources")
+                .select("id, name")
+                .in("id", sourceIds)
 
-            if (!sourcesError && sourcesData) {
-              // Create a map of id to name
-              const sourceMap = new Map(sourcesData.map((source) => [source.id, source.name]))
-
-              // Update the leads with source names
-              transformedLeads = transformedLeads.map((lead) => ({
-                ...lead,
-                lead_source_name: lead.lead_source_id ? sourceMap.get(lead.lead_source_id) : undefined,
-              }))
+              if (!sourcesError && sourcesData) {
+                sourcesData.forEach((source) => {
+                  sourceMap.set(source.id, source.name)
+                })
+              }
             }
           }
         } catch (sourceError) {
           console.error("Error fetching lead sources:", sourceError)
-          // Continue without lead source names
         }
       }
+
+      // Transform the leads data with the fetched related data
+      const transformedLeads = leadsData.map((lead) => {
+        const company = companyMap.get(lead.company_id)
+        const branch = branchMap.get(lead.branch_id)
+        const reassignedFromCompany = reassignedFromCompanyMap.get(lead.reassigned_from_company_id)
+        const reassignedFromBranch = reassignedFromBranchMap.get(lead.reassigned_from_branch_id)
+
+        return {
+          ...lead,
+          company_name: company?.name,
+          branch_name: branch?.name,
+          branch_location: branch?.location,
+          reassigned_from_company_name: reassignedFromCompany?.name,
+          reassigned_from_branch_name: reassignedFromBranch?.name,
+          lead_source_name: lead.lead_source_id ? sourceMap.get(lead.lead_source_id) : lead.lead_source,
+        }
+      })
 
       setLeads(transformedLeads)
     } catch (error) {

@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, Eye, RefreshCw, Tag, MoreHorizontal, Trash2 } from "lucide-react"
+import { Loader2, Eye, RefreshCw, Tag, MoreHorizontal, Trash2, ClipboardList } from "lucide-react"
 import { ReassignLeadDialog } from "./reassign-lead-dialog"
 import { DeleteLeadDialog } from "./delete-lead-dialog"
 import { getAssignedLeads, getLeadSources } from "@/actions/manage-lead-actions"
@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/components/ui/use-toast"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 export function AssignedLeadsList() {
   const router = useRouter()
@@ -82,7 +83,9 @@ export function AssignedLeadsList() {
           lead.lead_number?.toLowerCase().includes(term) ||
           lead.assigned_to_name?.toLowerCase().includes(term) ||
           lead.lead_source?.toLowerCase().includes(term) ||
-          lead.lead_source_name?.toLowerCase().includes(term),
+          lead.lead_source_name?.toLowerCase().includes(term) ||
+          lead.company_name?.toLowerCase().includes(term) ||
+          lead.branch_name?.toLowerCase().includes(term),
       )
     }
 
@@ -238,7 +241,7 @@ export function AssignedLeadsList() {
                     Status
                   </div>
                 </TableHead>
-                <TableHead>Actions</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -264,28 +267,105 @@ export function AssignedLeadsList() {
                     <Badge variant="default">{lead.status}</Badge>
                   </TableCell>
                   <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                          <span className="sr-only">Open menu</span>
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => router.push(`/sales/lead/${lead.id}`)}>
-                          <Eye className="mr-2 h-4 w-4" />
-                          View Details
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleReassignClick(lead)}>
-                          <RefreshCw className="mr-2 h-4 w-4" />
-                          Re-assign
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleDeleteClick(lead)}>
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    <TooltipProvider>
+                      <div className="flex items-center justify-end gap-2">
+                        {/* View Details Button */}
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => router.push(`/sales/lead/${lead.id}`)}
+                            >
+                              <Eye className="h-4 w-4" />
+                              <span className="sr-only">View Details</span>
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>View Details</p>
+                          </TooltipContent>
+                        </Tooltip>
+
+                        {/* Update Status Button */}
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => router.push(`/sales/lead/${lead.id}/status`)}
+                            >
+                              <ClipboardList className="h-4 w-4" />
+                              <span className="sr-only">Update Status</span>
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Update Status</p>
+                          </TooltipContent>
+                        </Tooltip>
+
+                        {/* Reassign Button */}
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => handleReassignClick(lead)}
+                            >
+                              <RefreshCw className="h-4 w-4" />
+                              <span className="sr-only">Reassign</span>
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Reassign Lead</p>
+                          </TooltipContent>
+                        </Tooltip>
+
+                        {/* Delete Button */}
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                              onClick={() => handleDeleteClick(lead)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              <span className="sr-only">Delete</span>
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Delete Lead</p>
+                          </TooltipContent>
+                        </Tooltip>
+
+                        {/* More Options Dropdown */}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreHorizontal className="h-4 w-4" />
+                              <span className="sr-only">More Options</span>
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => router.push(`/sales/lead/${lead.id}/edit`)}>
+                              Edit Lead
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => router.push(`/sales/lead/${lead.id}/notes`)}>
+                              View Notes
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => router.push(`/sales/lead/${lead.id}/activities`)}>
+                              View Activities
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => router.push(`/sales/lead/${lead.id}/documents`)}>
+                              View Documents
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </TooltipProvider>
                   </TableCell>
                 </TableRow>
               ))}

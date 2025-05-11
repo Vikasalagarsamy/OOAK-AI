@@ -11,7 +11,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import {
   ArrowUpDown,
-  ChevronDown,
   Eye,
   Mail,
   Phone,
@@ -22,12 +21,15 @@ import {
   Calendar,
   MessageSquare,
   ClipboardList,
+  MoreHorizontal,
+  Trash2,
 } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { UpdateLeadStatusDialog } from "@/components/leads/update-lead-status-dialog"
 import { SendMessageDialog } from "@/components/leads/send-message-dialog"
 import { ScheduleFollowupDialog } from "@/components/leads/schedule-followup-dialog"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 // Mock data for preview environment - with assigned_to set to simulate current user
 const MOCK_LEADS = [
@@ -109,7 +111,9 @@ export function MyLeadsList() {
       if (typeof window !== "undefined" && window.location.hostname.includes("vusercontent.com")) {
         // Use mock data in preview mode
         setIsPreviewMode(true)
-        setLeads(MOCK_LEADS)
+        // Filter out rejected leads from mock data
+        const filteredMockLeads = MOCK_LEADS.filter((lead) => lead.status !== "REJECTED")
+        setLeads(filteredMockLeads)
         setLoading(false)
         return
       }
@@ -134,7 +138,10 @@ export function MyLeadsList() {
       }
 
       const data = await response.json()
-      setLeads(data || [])
+
+      // Additional client-side filtering to ensure rejected leads are excluded
+      const filteredData = data.filter((lead) => lead.status !== "REJECTED")
+      setLeads(filteredData || [])
     } catch (err) {
       console.error("Error fetching leads:", err)
       setError(err.message || "Failed to load leads. Please try again.")
@@ -177,6 +184,9 @@ export function MyLeadsList() {
 
   const filteredLeads = leads
     .filter((lead) => {
+      // Additional safety check to filter out rejected leads
+      if (lead.status === "REJECTED") return false
+
       // Status filter
       if (statusFilter !== "all" && lead.status !== statusFilter) {
         return false
@@ -377,7 +387,6 @@ export function MyLeadsList() {
                   <SelectItem value="NEGOTIATION">Negotiation</SelectItem>
                   <SelectItem value="WON">Won</SelectItem>
                   <SelectItem value="LOST">Lost</SelectItem>
-                  <SelectItem value="REJECTED">Rejected</SelectItem>
                   <SelectItem value="ASSIGNED">Assigned</SelectItem>
                 </SelectContent>
               </Select>
@@ -487,32 +496,111 @@ export function MyLeadsList() {
                       <TableCell>{lead.lead_source || "N/A"}</TableCell>
                       <TableCell>{getStatusBadge(lead.status)}</TableCell>
                       <TableCell>{lead.created_at ? new Date(lead.created_at).toLocaleDateString() : "N/A"}</TableCell>
-                      <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm">
-                              Actions <ChevronDown className="ml-1 h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => router.push(`/sales/lead/${lead.id}`)}>
-                              <Eye className="mr-2 h-4 w-4" />
-                              View Details
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleUpdateStatus(lead)}>
-                              <ClipboardList className="mr-2 h-4 w-4" />
-                              Update Status
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleSendMessage(lead)}>
-                              <MessageSquare className="mr-2 h-4 w-4" />
-                              Send Message
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleScheduleFollowup(lead)}>
-                              <Calendar className="mr-2 h-4 w-4" />
-                              Schedule Follow-up
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                      <TableCell>
+                        <TooltipProvider>
+                          <div className="flex items-center justify-end gap-2">
+                            {/* View Details Button */}
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() => router.push(`/sales/lead/${lead.id}`)}
+                                >
+                                  <Eye className="h-4 w-4" />
+                                  <span className="sr-only">View Details</span>
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>View Details</p>
+                              </TooltipContent>
+                            </Tooltip>
+
+                            {/* Update Status Button */}
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() => handleUpdateStatus(lead)}
+                                >
+                                  <ClipboardList className="h-4 w-4" />
+                                  <span className="sr-only">Update Status</span>
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Update Status</p>
+                              </TooltipContent>
+                            </Tooltip>
+
+                            {/* Send Message Button */}
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() => handleSendMessage(lead)}
+                                  disabled={!lead.email && !lead.phone}
+                                >
+                                  <MessageSquare className="h-4 w-4" />
+                                  <span className="sr-only">Send Message</span>
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Send Message</p>
+                              </TooltipContent>
+                            </Tooltip>
+
+                            {/* Schedule Follow-up Button */}
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() => handleScheduleFollowup(lead)}
+                                >
+                                  <Calendar className="h-4 w-4" />
+                                  <span className="sr-only">Schedule Follow-up</span>
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Schedule Follow-up</p>
+                              </TooltipContent>
+                            </Tooltip>
+
+                            {/* More Options Dropdown */}
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                  <MoreHorizontal className="h-4 w-4" />
+                                  <span className="sr-only">More Options</span>
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => router.push(`/sales/lead/${lead.id}/edit`)}>
+                                  Edit Lead
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => router.push(`/sales/lead/${lead.id}/notes`)}>
+                                  View Notes
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => router.push(`/sales/lead/${lead.id}/activities`)}>
+                                  View Activities
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  className="text-red-600"
+                                  onClick={() => alert("Delete functionality")}
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Delete Lead
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        </TooltipProvider>
                       </TableCell>
                     </TableRow>
                   ))}

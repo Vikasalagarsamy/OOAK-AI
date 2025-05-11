@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { useToast } from "@/components/ui/use-toast"
-import { RefreshCw, Building, MapPin, Calendar, ArrowRight, XCircle } from "lucide-react"
+import { RefreshCw, Building, MapPin, Calendar, ArrowRight, XCircle, AlertCircle, User } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { getRejectedLeads } from "@/actions/rejected-leads-actions"
 import { ReassignRejectedLeadModal } from "./reassign-rejected-lead-modal"
@@ -17,21 +17,14 @@ interface RejectedLead {
   client_name: string
   status: string
   company_id: number
-  companies: { name: string }
-  branch_id: number | null
-  branches: { name: string } | null
-  rejected_from_company_id: number | null
-  rejected_from_company: { name: string } | null
-  rejected_from_branch_id: number | null
-  rejected_from_branch: { name: string } | null
+  companies?: { name: string } | null
+  branch_id?: number | null
+  branches?: { name: string } | null
   created_at: string
   updated_at: string
-  rejected_at: string | null
-  lead_rejections: {
-    id: number
-    rejection_reason: string
-    rejected_at: string
-  }[]
+  rejection_reason?: string
+  rejected_at?: string
+  rejected_by?: string
 }
 
 export function RejectedLeadsList() {
@@ -115,58 +108,63 @@ export function RejectedLeadsList() {
               <TableHead>Lead</TableHead>
               <TableHead>Client</TableHead>
               <TableHead>Current Company/Branch</TableHead>
-              <TableHead>Rejection Reason</TableHead>
+              <TableHead className="w-1/3">Rejection Reason</TableHead>
               <TableHead>Rejected</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {leads.map((lead) => {
-              const rejectionInfo = lead.lead_rejections?.[0]
-
-              return (
-                <TableRow key={lead.id}>
-                  <TableCell className="font-medium">{lead.lead_number}</TableCell>
-                  <TableCell>{lead.client_name}</TableCell>
-                  <TableCell>
-                    <div className="flex flex-col">
-                      <div className="flex items-center gap-1">
-                        <Building className="h-3 w-3 text-muted-foreground" />
-                        <span>{lead.companies?.name || "Unknown Company"}</span>
+            {leads.map((lead) => (
+              <TableRow key={lead.id}>
+                <TableCell className="font-medium">{lead.lead_number || "N/A"}</TableCell>
+                <TableCell>{lead.client_name || "Unknown Client"}</TableCell>
+                <TableCell>
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-1">
+                      <Building className="h-3 w-3 text-muted-foreground" />
+                      <span>{lead.companies?.name || "Unknown Company"}</span>
+                    </div>
+                    {lead.branches && (
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <MapPin className="h-3 w-3" />
+                        <span>{lead.branches.name}</span>
                       </div>
-                      {lead.branches && (
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <MapPin className="h-3 w-3" />
-                          <span>{lead.branches.name}</span>
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-start gap-1">
+                    <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <div className="font-medium text-sm">{lead.rejection_reason || "No reason provided"}</div>
+                      {lead.rejected_by && (
+                        <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                          <User className="h-3 w-3" />
+                          <span>Rejected by: {lead.rejected_by}</span>
                         </div>
                       )}
                     </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="max-w-xs truncate" title={rejectionInfo?.rejection_reason}>
-                      {rejectionInfo?.rejection_reason || "No reason provided"}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <Calendar className="h-3 w-3" />
-                      <span>
-                        {lead.rejected_at
-                          ? formatDistanceToNow(new Date(lead.rejected_at), { addSuffix: true })
-                          : formatDistanceToNow(new Date(lead.updated_at), { addSuffix: true })}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button size="sm" variant="outline" className="h-8 gap-1" onClick={() => handleReassign(lead)}>
-                      <RefreshCw className="h-3 w-3" />
-                      <span>Reassign</span>
-                      <ArrowRight className="h-3 w-3" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              )
-            })}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Calendar className="h-3 w-3" />
+                    <span>
+                      {lead.rejected_at
+                        ? formatDistanceToNow(new Date(lead.rejected_at), { addSuffix: true })
+                        : formatDistanceToNow(new Date(lead.updated_at), { addSuffix: true })}
+                    </span>
+                  </div>
+                </TableCell>
+                <TableCell className="text-right">
+                  <Button size="sm" variant="outline" className="h-8 gap-1" onClick={() => handleReassign(lead)}>
+                    <RefreshCw className="h-3 w-3" />
+                    <span>Reassign</span>
+                    <ArrowRight className="h-3 w-3" />
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
           </TableBody>
         </Table>
       </div>
@@ -175,17 +173,17 @@ export function RejectedLeadsList() {
         <ReassignRejectedLeadModal
           lead={{
             id: selectedLead.id,
-            lead_number: selectedLead.lead_number,
-            client_name: selectedLead.client_name,
+            lead_number: selectedLead.lead_number || "",
+            client_name: selectedLead.client_name || "Unknown Client",
             company_id: selectedLead.company_id,
-            company_name: selectedLead.companies?.name,
-            branch_id: selectedLead.branch_id,
-            branch_name: selectedLead.branches?.name,
+            company_name: selectedLead.companies?.name || "Unknown Company",
+            branch_id: selectedLead.branch_id || null,
+            branch_name: selectedLead.branches?.name || null,
           }}
           open={showReassignModal}
           onOpenChange={setShowReassignModal}
           onReassignComplete={handleReassignComplete}
-          rejectionNotes={selectedLead.lead_rejections?.[0]?.rejection_reason}
+          rejectionNotes={selectedLead.rejection_reason}
         />
       )}
     </div>

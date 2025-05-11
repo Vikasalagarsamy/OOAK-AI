@@ -64,19 +64,28 @@ export function UpdateLeadStatusDialog({ lead, open, onOpenChange, onStatusUpdat
           title: "Status updated",
           description: `Lead status has been updated to ${status}`,
         })
-        onStatusUpdated()
+
+        // Close the dialog
         onOpenChange(false)
 
-        // If status is REJECTED, redirect to My Leads page
+        // If status is REJECTED, redirect to Rejected Leads page
         if (status === "REJECTED") {
-          // Show a toast notification that the lead has been rejected and removed from My Leads
+          // Show a toast notification that the lead has been rejected
           toast({
             title: "Lead rejected",
-            description: "The lead has been removed from your list and is now available for reassignment",
+            description: "The lead has been moved to the Rejected Leads page and is now available for reassignment",
           })
 
-          // Redirect to My Leads page
-          router.push("/sales/my-leads")
+          // Force a refresh of the parent component to remove the lead from the list
+          onStatusUpdated()
+
+          // Redirect to Rejected Leads page after a short delay
+          setTimeout(() => {
+            router.push("/sales/rejected-leads")
+          }, 500)
+        } else {
+          // For other status changes, just refresh the parent component
+          onStatusUpdated()
         }
       } else {
         toast({
@@ -130,7 +139,7 @@ export function UpdateLeadStatusDialog({ lead, open, onOpenChange, onStatusUpdat
             {status === "REJECTED" && (
               <p className="text-xs text-yellow-600 flex items-center gap-1">
                 <AlertCircle className="h-3 w-3" />
-                Marking as rejected will remove this lead from your list and make it available for reassignment.
+                Marking as rejected will remove this lead from your list and move it to the Rejected Leads page.
               </p>
             )}
           </div>
