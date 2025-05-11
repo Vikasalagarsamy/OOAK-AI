@@ -35,6 +35,7 @@ interface ReassignRejectedLeadModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onReassignComplete: () => void
+  rejectionNotes?: string // Add this prop to receive rejection notes
 }
 
 export function ReassignRejectedLeadModal({
@@ -42,6 +43,7 @@ export function ReassignRejectedLeadModal({
   open,
   onOpenChange,
   onReassignComplete,
+  rejectionNotes = "", // Default to empty string
 }: ReassignRejectedLeadModalProps) {
   const { toast } = useToast()
   const [companies, setCompanies] = useState<Company[]>([])
@@ -49,9 +51,14 @@ export function ReassignRejectedLeadModal({
   const [filteredBranches, setFilteredBranches] = useState<Branch[]>([])
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>("")
   const [selectedBranchId, setSelectedBranchId] = useState<string>("")
-  const [rejectionReason, setRejectionReason] = useState("")
+  const [rejectionReason, setRejectionReason] = useState(rejectionNotes) // Initialize with passed notes
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+
+  // Update rejection reason when rejectionNotes prop changes
+  useEffect(() => {
+    setRejectionReason(rejectionNotes)
+  }, [rejectionNotes])
 
   // Fetch companies and branches when the modal opens
   useEffect(() => {
@@ -98,12 +105,10 @@ export function ReassignRejectedLeadModal({
         throw branchesError
       }
 
-      setCompanies(companiesData || [])
-      setBranches(branchesData || [])
-
       // Filter out the current company
       const filteredCompanies = companiesData.filter((company) => company.id !== lead.company_id)
       setCompanies(filteredCompanies)
+      setBranches(branchesData || [])
     } catch (error) {
       console.error("Error fetching companies and branches:", error)
       toast({
@@ -176,7 +181,7 @@ export function ReassignRejectedLeadModal({
             <p>
               Lead <span className="font-medium">{lead.lead_number}</span> for{" "}
               <span className="font-medium">{lead.client_name}</span> has been rejected from{" "}
-              <span className="font-medium">{lead.company_name}</span>
+              <span className="font-medium">{lead.company_name || "Current Company"}</span>
               {lead.branch_name && (
                 <>
                   {" "}

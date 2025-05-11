@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
-import { Loader2 } from "lucide-react"
+import { Loader2, AlertCircle } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import { updateLeadStatus } from "@/actions/lead-actions"
 import { ReassignRejectedLeadModal } from "./reassign-rejected-lead-modal"
@@ -35,15 +35,6 @@ export function UpdateLeadStatusDialog({ lead, open, onOpenChange, onStatusUpdat
   const [showReassignModal, setShowReassignModal] = useState(false)
 
   const handleSubmit = async () => {
-    if (!status) {
-      toast({
-        title: "Status required",
-        description: "Please select a status for the lead",
-        variant: "destructive",
-      })
-      return
-    }
-
     // If status is REJECTED, show the reassignment modal
     if (status === "REJECTED") {
       setShowReassignModal(true)
@@ -58,7 +49,7 @@ export function UpdateLeadStatusDialog({ lead, open, onOpenChange, onStatusUpdat
       if (result.success) {
         toast({
           title: "Status updated",
-          description: `Lead ${lead.lead_number} status updated to ${status}`,
+          description: `Lead status has been updated to ${status}`,
         })
         onStatusUpdated()
         onOpenChange(false)
@@ -83,7 +74,7 @@ export function UpdateLeadStatusDialog({ lead, open, onOpenChange, onStatusUpdat
 
   const handleReassignComplete = () => {
     onStatusUpdated()
-    onOpenChange(false)
+    // No need to close the dialog as the reassignment modal will handle that
   }
 
   return (
@@ -94,12 +85,6 @@ export function UpdateLeadStatusDialog({ lead, open, onOpenChange, onStatusUpdat
             <DialogTitle>Update Lead Status</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="lead-number">Lead</Label>
-              <div id="lead-number" className="text-sm font-medium">
-                {lead.lead_number} - {lead.client_name}
-              </div>
-            </div>
             <div className="grid gap-2">
               <Label htmlFor="status">Status</Label>
               <Select value={status} onValueChange={setStatus}>
@@ -118,7 +103,8 @@ export function UpdateLeadStatusDialog({ lead, open, onOpenChange, onStatusUpdat
                 </SelectContent>
               </Select>
               {status === "REJECTED" && (
-                <p className="text-xs text-yellow-600">
+                <p className="text-xs text-yellow-600 flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
                   Marking as rejected will prompt you to reassign this lead to a different company.
                 </p>
               )}
@@ -127,10 +113,9 @@ export function UpdateLeadStatusDialog({ lead, open, onOpenChange, onStatusUpdat
               <Label htmlFor="notes">Notes (Optional)</Label>
               <Textarea
                 id="notes"
-                placeholder="Add notes about this status change"
+                placeholder="Add any relevant notes about this status change"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                rows={3}
               />
             </div>
           </div>
@@ -146,15 +131,21 @@ export function UpdateLeadStatusDialog({ lead, open, onOpenChange, onStatusUpdat
         </DialogContent>
       </Dialog>
 
-      {/* Reassignment Modal */}
-      {showReassignModal && (
-        <ReassignRejectedLeadModal
-          lead={lead}
-          open={showReassignModal}
-          onOpenChange={setShowReassignModal}
-          onReassignComplete={handleReassignComplete}
-        />
-      )}
+      <ReassignRejectedLeadModal
+        lead={{
+          id: lead.id,
+          lead_number: lead.lead_number,
+          client_name: lead.client_name,
+          company_id: lead.company_id,
+          company_name: lead.company_name || "Current Company", // Ensure company name is passed
+          branch_id: lead.branch_id || null,
+          branch_name: lead.branch_name,
+        }}
+        open={showReassignModal}
+        onOpenChange={setShowReassignModal}
+        onReassignComplete={handleReassignComplete}
+        rejectionNotes={notes} // Pass the notes as rejection reason
+      />
     </>
   )
 }
