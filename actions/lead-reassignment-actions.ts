@@ -1,62 +1,62 @@
 "use server"
-
-import { createClient } from "@/lib/supabase"
+import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 
-interface Employee {
-  id: number
-  employee_id: string
-  first_name: string
-  last_name: string
-  full_name: string
-  job_title?: string
-  location?: string
-  is_sales_role?: boolean
-  company_id?: number | null
-  branch_id?: number | null
-}
-
+// Get employees for a specific company and branch
 export async function getEmployeesByCompanyAndBranch(
   companyId: number,
   branchId: number | null,
   location: string | null,
-): Promise<Employee[]> {
+) {
   const supabase = createClient()
 
   try {
-    // Start with a query that filters by company
+    // Start building our query
     let query = supabase
       .from("employees")
-      .select(
-        `
-        id, 
-        employee_id, 
-        first_name, 
-        last_name, 
+      .select(`
+        id,
+        employee_id,
+        first_name,
+        last_name,
         job_title,
-        employee_companies!inner(company_id, branch_id, is_primary, location)
-      `,
-      )
+        status,
+        employee_companies!inner(
+          company_id,
+          branch_id,
+          is_primary,
+          allocation_percentage,
+          location
+        )
+      `)
       .eq("employee_companies.company_id", companyId)
       .eq("status", "ACTIVE")
 
-    // If branch ID is provided, filter by branch as well
+    // Add branch filter if provided
     if (branchId) {
       query = query.eq("employee_companies.branch_id", branchId)
     }
 
-    // Execute the query
     const { data, error } = await query
 
     if (error) {
-      console.error("Error fetching employees by company and branch:", error)
+      console.error("Error fetching employees:", error)
       return []
     }
 
-    // Process the results to get a flat list of employees with their company info
+    // Transform the data to flatten the structure
     const employees = data.map((emp) => {
-      // Extract the employee_companies data
+      // Get the company data
       const companyData = Array.isArray(emp.employee_companies) ? emp.employee_companies[0] : emp.employee_companies
+
+      // Calculate role from job_title
+      const role = emp.job_title || "Sales Representative"
+
+      // Determine if this is a sales role
+      const isSalesRole =
+        role.toLowerCase().includes("sales") ||
+        role.toLowerCase().includes("account") ||
+        role.toLowerCase().includes("business")
 
       return {
         id: emp.id,
@@ -64,22 +64,25 @@ export async function getEmployeesByCompanyAndBranch(
         first_name: emp.first_name,
         last_name: emp.last_name,
         full_name: `${emp.first_name} ${emp.last_name}`,
-        job_title: emp.job_title,
+        role: role,
         company_id: companyData?.company_id,
         branch_id: companyData?.branch_id,
         location: companyData?.location,
-        // Determine if this is a sales role based on job title
-        is_sales_role: emp.job_title
-          ? emp.job_title.toLowerCase().includes("sales") ||
-            emp.job_title.toLowerCase().includes("account") ||
-            emp.job_title.toLowerCase().includes("business development")
-          : false,
+        allocation_percentage: companyData?.allocation_percentage,
+        is_sales_role: isSalesRole,
       }
     })
 
-    // If location is provided, prioritize employees in that location but don't exclude others
+    // Filter to prefer employees in sales roles
+    const salesEmployees = employees.filter((emp) => emp.is_sales_role)
+
+    // If we have sales employees, return those, otherwise return all employees
+    // This ensures we still show options even if no one has an explicitly sales-related title
+    const filteredEmployees = salesEmployees.length > 0 ? salesEmployees : employees
+
+    // If location is provided, sort employees to prioritize those in that location
     if (location) {
-      return employees.sort((a, b) => {
+      return filteredEmployees.sort((a, b) => {
         const aMatchesLocation = (a.location || "").toLowerCase() === location.toLowerCase()
         const bMatchesLocation = (b.location || "").toLowerCase() === location.toLowerCase()
 
@@ -89,20 +92,21 @@ export async function getEmployeesByCompanyAndBranch(
       })
     }
 
-    return employees
+    return filteredEmployees
   } catch (error) {
-    console.error("Exception fetching employees by company and branch:", error)
+    console.error("Exception in getEmployeesByCompanyAndBranch:", error)
     return []
   }
 }
 
+// Reassign a lead to a different employee
 export async function reassignLead(leadId: string, employeeId: string) {
   const supabase = createClient()
 
   try {
-    // Validate inputs
-    const leadIdNum = Number.parseInt(leadId, 10)
-    const employeeIdNum = Number.parseInt(employeeId, 10)
+    // Validate the IDs
+    const leadIdNum = Number.parseInt(leadId)
+    const employeeIdNum = Number.parseInt(employeeId)
 
     if (isNaN(leadIdNum) || isNaN(employeeIdNum)) {
       return {
@@ -111,22 +115,22 @@ export async function reassignLead(leadId: string, employeeId: string) {
       }
     }
 
-    // Get the current lead data for logging
-    const { data: currentLead, error: fetchError } = await supabase
+    // Get current lead data for logging
+    const { data: leadData, error: leadError } = await supabase
       .from("leads")
-      .select("assigned_to, lead_number, client_name")
+      .select("lead_number, client_name, assigned_to")
       .eq("id", leadIdNum)
       .single()
 
-    if (fetchError) {
-      console.error("Error fetching lead for reassignment:", fetchError)
+    if (leadError) {
+      console.error("Error fetching lead data:", leadError)
       return {
         success: false,
-        error: "Failed to fetch lead information",
+        error: "Could not find lead information",
       }
     }
 
-    // Get the employee data for logging
+    // Get employee data for assignment
     const { data: employeeData, error: empError } = await supabase
       .from("employees")
       .select("first_name, last_name")
@@ -134,55 +138,54 @@ export async function reassignLead(leadId: string, employeeId: string) {
       .single()
 
     if (empError) {
-      console.error("Error fetching employee for reassignment:", empError)
+      console.error("Error fetching employee data:", empError)
       return {
         success: false,
-        error: "Failed to fetch employee information",
+        error: "Could not find employee information",
       }
     }
 
-    // Update the lead's assigned_to field
+    // Update the lead assignment
     const { error: updateError } = await supabase
       .from("leads")
       .update({
         assigned_to: employeeIdNum,
-        status: currentLead.assigned_to ? "ASSIGNED" : "ASSIGNED", // Keep status if already assigned, change to ASSIGNED if it was UNASSIGNED
+        status: "ASSIGNED", // Always set to ASSIGNED on reassignment
         updated_at: new Date().toISOString(),
       })
       .eq("id", leadIdNum)
 
     if (updateError) {
-      console.error("Error reassigning lead:", updateError)
+      console.error("Error updating lead assignment:", updateError)
       return {
         success: false,
-        error: "Failed to reassign lead",
+        error: "Failed to update lead assignment",
       }
     }
 
-    // Log the reassignment in the activities table
+    // Log the activity
+    const employeeName = `${employeeData.first_name} ${employeeData.last_name}`
     const { error: logError } = await supabase.from("activities").insert({
       activity_type: "LEAD_REASSIGNED",
       entity_type: "LEAD",
       entity_id: leadIdNum,
-      description: `Lead ${currentLead.lead_number} (${
-        currentLead.client_name
-      }) reassigned to ${employeeData.first_name} ${employeeData.last_name} at ${new Date().toISOString()}`,
+      description: `Lead ${leadData.lead_number} (${leadData.client_name}) reassigned to ${employeeName}`,
       created_at: new Date().toISOString(),
-      user_id: "system", // Replace with actual user ID if available
+      user_id: "system", // Ideally, this would be the current user's ID
     })
 
     if (logError) {
-      console.error("Error logging lead reassignment:", logError)
+      console.error("Error logging activity:", logError)
       // Continue despite logging error
     }
 
-    // Revalidate the leads pages
+    // Revalidate relevant paths
     revalidatePath("/sales/manage-lead")
     revalidatePath(`/sales/lead/${leadId}`)
 
     return {
       success: true,
-      message: `Lead successfully reassigned to ${employeeData.first_name} ${employeeData.last_name}`,
+      message: `Lead successfully reassigned to ${employeeName}`,
     }
   } catch (error) {
     console.error("Exception in reassignLead:", error)

@@ -25,7 +25,7 @@ interface Employee {
   full_name: string
   company_id?: number | null
   branch_id?: number | null
-  job_title?: string
+  role?: string
   location?: string
   is_sales_role?: boolean
 }
@@ -44,18 +44,21 @@ export function ReassignLeadDialog({ lead, open, onOpenChange, onReassignComplet
   const [loading, setLoading] = useState(false)
   const [fetchingEmployees, setFetchingEmployees] = useState(false)
 
-  // Fetch employees on component mount and when dialog opens
+  // Reset selected employee when dialog opens/closes
+  useEffect(() => {
+    if (!open) {
+      setSelectedEmployeeId("")
+    }
+  }, [open])
+
+  // Fetch employees when dialog opens with a lead
   useEffect(() => {
     if (open && lead) {
       fetchEmployees()
-    } else {
-      // Reset state when dialog closes
-      setSelectedEmployeeId("")
     }
   }, [open, lead])
 
   const fetchEmployees = async () => {
-    // Guard clause: if lead is null, don't proceed
     if (!lead) {
       console.warn("Cannot fetch employees: lead is null")
       return
@@ -87,14 +90,9 @@ export function ReassignLeadDialog({ lead, open, onOpenChange, onReassignComplet
           ? Number.parseInt(lead.branch_id.toString(), 10)
           : null
 
-    if (lead.branch_id && (branchId === null || isNaN(branchId))) {
-      console.error("Invalid branch ID:", lead.branch_id)
-      // Continue with null branch ID rather than failing completely
-    }
-
     setFetchingEmployees(true)
     try {
-      // Get employees from the same company, branch, and location
+      // Get employees from the same company and branch
       const employeesData = await getEmployeesByCompanyAndBranch(
         companyId,
         branchId,
@@ -114,49 +112,7 @@ export function ReassignLeadDialog({ lead, open, onOpenChange, onReassignComplet
         return emp.id !== assignedTo
       })
 
-      // Additional validation to ensure only sales roles are included
-      // This is a safeguard in case the server-side filtering missed something
-      const salesOnlyEmployees = filteredEmployees.filter((emp) => {
-        const role = (emp.job_title || "").toLowerCase()
-
-        // Explicitly exclude executive roles
-        if (
-          role.includes("ceo") ||
-          role.includes("cto") ||
-          role.includes("cfo") ||
-          role.includes("chief") ||
-          role.includes("director") ||
-          role.includes("head")
-        ) {
-          return false
-        }
-
-        // Include only if role contains sales-related terms
-        return (
-          role.includes("sales") ||
-          role.includes("account manager") ||
-          role.includes("business development") ||
-          role.includes("account executive") ||
-          emp.is_sales_role === true
-        )
-      })
-
-      // Sort employees to prioritize those in the same location as the lead
-      const sortedEmployees = [...salesOnlyEmployees].sort((a, b) => {
-        // If lead has a location, prioritize employees with matching location
-        if (lead.location) {
-          const aMatchesLocation = (a.location || "").toLowerCase() === lead.location.toLowerCase()
-          const bMatchesLocation = (b.location || "").toLowerCase() === lead.location.toLowerCase()
-
-          if (aMatchesLocation && !bMatchesLocation) return -1
-          if (!aMatchesLocation && bMatchesLocation) return 1
-        }
-
-        // Otherwise sort alphabetically by name
-        return a.full_name.localeCompare(b.full_name)
-      })
-
-      setEmployees(sortedEmployees)
+      setEmployees(filteredEmployees)
     } catch (error) {
       console.error("Error fetching employees:", error)
       toast({
@@ -170,7 +126,6 @@ export function ReassignLeadDialog({ lead, open, onOpenChange, onReassignComplet
   }
 
   const handleReassign = async () => {
-    // Guard clause: if lead is null, don't proceed
     if (!lead) {
       toast({
         title: "Error",
@@ -209,16 +164,13 @@ export function ReassignLeadDialog({ lead, open, onOpenChange, onReassignComplet
         throw new Error("Selected employee not found")
       }
 
-      // Make sure we're passing the correct types to reassignLead
-      const result = await reassignLead(
-        leadId.toString(), // Convert to string as expected by the action
-        employeeId.toString(), // Convert to string as expected by the action
-      )
+      // Call the server action to reassign the lead
+      const result = await reassignLead(leadId.toString(), employeeId.toString())
 
       if (result.success) {
         toast({
           title: "Success",
-          description: result.message || "Lead reassigned successfully",
+          description: result.message || `Lead reassigned to ${employee.full_name} successfully`,
         })
         if (onReassignComplete) {
           onReassignComplete(true)
@@ -295,7 +247,7 @@ export function ReassignLeadDialog({ lead, open, onOpenChange, onReassignComplet
                   <SelectContent>
                     {employees.length === 0 ? (
                       <SelectItem value="no-employees" disabled>
-                        No sales resources available for this branch
+                        No sales resources available for this lead
                       </SelectItem>
                     ) : (
                       employees.map((employee) => (
@@ -303,7 +255,7 @@ export function ReassignLeadDialog({ lead, open, onOpenChange, onReassignComplet
                           <div className="flex flex-col">
                             <span>{employee.full_name}</span>
                             <span className="text-xs text-muted-foreground">
-                              {employee.job_title || "Sales"}
+                              {employee.role || "Sales Representative"}
                               {employee.location ? ` • ${employee.location}` : ""}
                             </span>
                           </div>
@@ -314,37 +266,29 @@ export function ReassignLeadDialog({ lead, open, onOpenChange, onReassignComplet
                 </Select>
               )}
               <div className="text-xs text-muted-foreground">
-                {lead.location
-                  ? `Prioritizing sales personnel in ${lead.location}.`
-                  : "Only showing sales personnel and account managers for this lead."}
+                Only showing resources that can be assigned to this lead.
               </div>
             </div>
           </div>
         ) : (
-          <div className="py-6 text-center text-muted-foreground">
-            No lead selected or lead data is missing. Please try again.
-          </div>
+          <div className="py-6 text-center text-muted-foreground">No lead selected or lead data is missing.</div>
         )}
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading} className="gap-1">
-            <X className="h-4 w-4" />
-            <span>Cancel</span>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
+            <X className="h-4 w-4 mr-2" />
+            Cancel
           </Button>
-          <Button
-            onClick={handleReassign}
-            disabled={loading || !selectedEmployeeId || employees.length === 0 || !lead}
-            className="gap-1"
-          >
+          <Button onClick={handleReassign} disabled={loading || !selectedEmployeeId || employees.length === 0 || !lead}>
             {loading ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Reassigning...</span>
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                Reassigning...
               </>
             ) : (
               <>
-                <Check className="h-4 w-4" />
-                <span>Reassign Lead</span>
+                <Check className="h-4 w-4 mr-2" />
+                Reassign Lead
               </>
             )}
           </Button>

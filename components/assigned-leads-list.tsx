@@ -1,18 +1,18 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, Trash2, Tag, ArrowUpDown, Search, Eye, RefreshCw } from "lucide-react"
+import { Loader2, Eye, RefreshCw, Tag, MoreHorizontal, Trash2 } from "lucide-react"
 import { ReassignLeadDialog } from "./reassign-lead-dialog"
 import { DeleteLeadDialog } from "./delete-lead-dialog"
 import { getAssignedLeads, getLeadSources } from "@/actions/manage-lead-actions"
 import type { Lead } from "@/types/lead"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { useRouter } from "next/navigation"
 import { useToast } from "@/components/ui/use-toast"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
@@ -60,7 +60,17 @@ export function AssignedLeadsList() {
 
     // Apply source filter
     if (sourceFilter !== "all") {
-      result = result.filter((lead) => lead.lead_source_id?.toString() === sourceFilter)
+      result = result.filter((lead) => {
+        if (lead.lead_source_id) {
+          return lead.lead_source_id.toString() === sourceFilter
+        }
+        // Fall back to string matching if needed
+        if (lead.lead_source && leadSources.length > 0) {
+          const source = leadSources.find((s) => s.id.toString() === sourceFilter)
+          return source && lead.lead_source.toLowerCase() === source.name.toLowerCase()
+        }
+        return false
+      })
     }
 
     // Apply search filter
@@ -71,6 +81,7 @@ export function AssignedLeadsList() {
           lead.client_name?.toLowerCase().includes(term) ||
           lead.lead_number?.toLowerCase().includes(term) ||
           lead.assigned_to_name?.toLowerCase().includes(term) ||
+          lead.lead_source?.toLowerCase().includes(term) ||
           lead.lead_source_name?.toLowerCase().includes(term),
       )
     }
@@ -91,7 +102,7 @@ export function AssignedLeadsList() {
     })
 
     setFilteredLeads(result)
-  }, [leads, sourceFilter, searchTerm, sortField, sortDirection])
+  }, [leads, sourceFilter, searchTerm, sortField, sortDirection, leadSources])
 
   const handleReassignClick = (lead: Lead) => {
     setSelectedLead(lead)
@@ -103,27 +114,15 @@ export function AssignedLeadsList() {
     setDeleteDialogOpen(true)
   }
 
-  const handleViewDetailsClick = (lead: Lead) => {
-    router.push(`/sales/lead/${lead.id}`)
-  }
-
   const handleLeadReassigned = (success: boolean) => {
     if (success) {
-      toast({
-        title: "Success",
-        description: "Lead reassigned successfully",
-      })
-      fetchLeads()
+      fetchLeads() // Refresh the lead list
     }
     setReassignDialogOpen(false)
   }
 
   const handleLeadDeleted = () => {
-    toast({
-      title: "Success",
-      description: "Lead deleted successfully",
-    })
-    fetchLeads()
+    fetchLeads() // Refresh the lead list
     setDeleteDialogOpen(false)
   }
 
@@ -136,6 +135,16 @@ export function AssignedLeadsList() {
     }
   }
 
+  const getSourceDisplayName = (lead: Lead) => {
+    if (lead.lead_source_name) {
+      return lead.lead_source_name
+    }
+    if (lead.lead_source) {
+      return lead.lead_source
+    }
+    return "Not specified"
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -145,7 +154,21 @@ export function AssignedLeadsList() {
       <CardContent>
         <div className="flex flex-col md:flex-row gap-4 mb-4">
           <div className="relative flex-1">
-            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+            <div className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-4 w-4"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.3-4.3" />
+              </svg>
+            </div>
             <Input
               placeholder="Search leads..."
               className="pl-8"
@@ -183,49 +206,31 @@ export function AssignedLeadsList() {
                 <TableHead>
                   <div className="flex items-center cursor-pointer" onClick={() => handleSort("lead_number")}>
                     Lead #
-                    {sortField === "lead_number" && (
-                      <ArrowUpDown className={`ml-1 h-4 w-4 ${sortDirection === "asc" ? "rotate-180" : ""}`} />
-                    )}
                   </div>
                 </TableHead>
                 <TableHead>
                   <div className="flex items-center cursor-pointer" onClick={() => handleSort("client_name")}>
                     Client
-                    {sortField === "client_name" && (
-                      <ArrowUpDown className={`ml-1 h-4 w-4 ${sortDirection === "asc" ? "rotate-180" : ""}`} />
-                    )}
                   </div>
                 </TableHead>
                 <TableHead>
                   <div className="flex items-center cursor-pointer" onClick={() => handleSort("assigned_to_name")}>
                     Assigned To
-                    {sortField === "assigned_to_name" && (
-                      <ArrowUpDown className={`ml-1 h-4 w-4 ${sortDirection === "asc" ? "rotate-180" : ""}`} />
-                    )}
                   </div>
                 </TableHead>
                 <TableHead>
-                  <div className="flex items-center cursor-pointer" onClick={() => handleSort("lead_source_name")}>
+                  <div className="flex items-center cursor-pointer" onClick={() => handleSort("lead_source")}>
                     Source
-                    {sortField === "lead_source_name" && (
-                      <ArrowUpDown className={`ml-1 h-4 w-4 ${sortDirection === "asc" ? "rotate-180" : ""}`} />
-                    )}
                   </div>
                 </TableHead>
                 <TableHead>
                   <div className="flex items-center cursor-pointer" onClick={() => handleSort("created_at")}>
                     Date
-                    {sortField === "created_at" && (
-                      <ArrowUpDown className={`ml-1 h-4 w-4 ${sortDirection === "asc" ? "rotate-180" : ""}`} />
-                    )}
                   </div>
                 </TableHead>
                 <TableHead>
                   <div className="flex items-center cursor-pointer" onClick={() => handleSort("status")}>
                     Status
-                    {sortField === "status" && (
-                      <ArrowUpDown className={`ml-1 h-4 w-4 ${sortDirection === "asc" ? "rotate-180" : ""}`} />
-                    )}
                   </div>
                 </TableHead>
                 <TableHead>Actions</TableHead>
@@ -236,58 +241,37 @@ export function AssignedLeadsList() {
                 <TableRow key={lead.id}>
                   <TableCell>{lead.lead_number}</TableCell>
                   <TableCell>{lead.client_name}</TableCell>
-                  <TableCell>{lead.assigned_to_name || "Unknown"}</TableCell>
+                  <TableCell>{lead.assigned_to_name || "Not assigned"}</TableCell>
                   <TableCell>
-                    {lead.lead_source_name ? (
-                      <Badge variant="outline" className="flex items-center gap-1">
-                        <Tag className="h-3 w-3" />
-                        {lead.lead_source_name}
-                      </Badge>
-                    ) : (
-                      <span className="text-muted-foreground text-xs">Not specified</span>
-                    )}
+                    <Badge variant="outline" className="flex items-center gap-1">
+                      <Tag className="h-3 w-3" />
+                      {getSourceDisplayName(lead)}
+                    </Badge>
                   </TableCell>
                   <TableCell>{new Date(lead.created_at || "").toLocaleDateString()}</TableCell>
                   <TableCell>
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                      {lead.status}
-                    </span>
+                    <Badge variant="default">{lead.status}</Badge>
                   </TableCell>
                   <TableCell>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
                           <span className="sr-only">Open menu</span>
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            width="24"
-                            height="24"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            className="h-4 w-4"
-                          >
-                            <circle cx="12" cy="12" r="1" />
-                            <circle cx="12" cy="5" r="1" />
-                            <circle cx="12" cy="19" r="1" />
-                          </svg>
+                          <MoreHorizontal className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleViewDetailsClick(lead)}>
+                        <DropdownMenuItem onClick={() => router.push(`/sales/lead/${lead.id}`)}>
                           <Eye className="mr-2 h-4 w-4" />
-                          <span>View Details</span>
+                          View Details
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => handleReassignClick(lead)}>
                           <RefreshCw className="mr-2 h-4 w-4" />
-                          <span>Re-assign</span>
+                          Re-assign
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => handleDeleteClick(lead)}>
                           <Trash2 className="mr-2 h-4 w-4" />
-                          <span>Delete</span>
+                          Delete
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -298,19 +282,23 @@ export function AssignedLeadsList() {
           </Table>
         )}
 
-        <ReassignLeadDialog
-          open={reassignDialogOpen}
-          onOpenChange={setReassignDialogOpen}
-          lead={selectedLead}
-          onReassignComplete={handleLeadReassigned}
-        />
-
-        <DeleteLeadDialog
-          open={deleteDialogOpen}
-          onOpenChange={setDeleteDialogOpen}
-          lead={selectedLead}
-          onDeleted={handleLeadDeleted}
-        />
+        {/* Dialogs */}
+        {selectedLead && (
+          <>
+            <ReassignLeadDialog
+              open={reassignDialogOpen}
+              onOpenChange={setReassignDialogOpen}
+              lead={selectedLead}
+              onReassignComplete={handleLeadReassigned}
+            />
+            <DeleteLeadDialog
+              open={deleteDialogOpen}
+              onOpenChange={setDeleteDialogOpen}
+              lead={selectedLead}
+              onDeleted={handleLeadDeleted}
+            />
+          </>
+        )}
       </CardContent>
     </Card>
   )
