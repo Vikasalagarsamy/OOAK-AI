@@ -165,70 +165,11 @@ export const menuStructure: Record<string, MenuItem> = {
     icon: "settings",
     subMenus: [
       {
-        name: "Menu Permissions",
+        name: "Menu & Role Permissions",
         path: "/admin/menu-permissions",
         icon: "lock",
       },
-      {
-        name: "Menu Diagnostics",
-        path: "/admin/menu-diagnostics",
-        icon: "tool",
-      },
-      {
-        name: "Menu Repair",
-        path: "/admin/menu-repair",
-        icon: "tool",
-      },
-      {
-        name: "Fix Admin Permissions",
-        path: "/admin/fix-admin-permissions",
-        icon: "shield",
-      },
-      {
-        name: "Test Permissions",
-        path: "/admin/test-permissions",
-        icon: "check-square",
-      },
-      {
-        name: "Add Event Menu",
-        path: "/admin/add-event-menu",
-        icon: "plus-circle",
-      },
-      {
-        name: "Setup Menu Permissions",
-        path: "/admin/setup-menu-permissions",
-        icon: "settings",
-      },
-      {
-        name: "Role Permissions",
-        path: "/admin/role-permissions",
-        icon: "shield",
-      },
-      {
-        name: "Fix Users By Role",
-        path: "/admin/fix-users-by-role",
-        icon: "users",
-      },
-      {
-        name: "Check Schema",
-        path: "/admin/check-schema",
-        icon: "database",
-      },
-      {
-        name: "Ensure Tables",
-        path: "/admin/ensure-tables",
-        icon: "database",
-      },
-      {
-        name: "Update Constraints",
-        path: "/admin/update-constraints",
-        icon: "link",
-      },
-      {
-        name: "Update Employee Companies Table",
-        path: "/admin/update-employee-companies-table",
-        icon: "edit",
-      },
+      // Removed all other Admin sub-menu items as requested
     ],
   },
   "Event Coordination": {

@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation"
 
-export default function RolePermissionsRedirectPage() {
+export default function RolePermissionsPage() {
   redirect("/admin/menu-permissions")
 }
