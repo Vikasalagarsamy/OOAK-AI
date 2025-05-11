@@ -4,73 +4,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft, Phone, Mail, MessageSquare, Building, MapPin, User } from "lucide-react"
 import Link from "next/link"
-
-async function getLead(id: string) {
-  const supabase = createClient()
-
-  try {
-    // First check if the lead exists and get basic lead data
-    const { data: lead, error } = await supabase
-      .from("leads")
-      .select(`
-        *,
-        companies:company_id(name),
-        branches:branch_id(name)
-      `)
-      .eq("id", id)
-      .single()
-
-    if (error) {
-      console.error("Error fetching lead:", error)
-      return null
-    }
-
-    // Fetch employee data separately if there's an assigned_to value
-    let assignedToName, assignedToRole
-    if (lead.assigned_to) {
-      const { data: employee, error: employeeError } = await supabase
-        .from("employees")
-        .select("id, first_name, last_name, role, job_title")
-        .eq("id", lead.assigned_to)
-        .single()
-
-      if (!employeeError && employee) {
-        assignedToName = `${employee.first_name} ${employee.last_name}`
-        assignedToRole = employee.role || employee.job_title
-      } else {
-        console.error("Error fetching employee:", employeeError)
-      }
-    }
-
-    // Fetch lead source separately
-    let leadSourceName = null
-    if (lead.lead_source_id) {
-      const { data: sourceData, error: sourceError } = await supabase
-        .from("lead_sources")
-        .select("name")
-        .eq("id", lead.lead_source_id)
-        .single()
-
-      if (!sourceError && sourceData) {
-        leadSourceName = sourceData.name
-      } else {
-        console.error("Error fetching lead source:", sourceError)
-      }
-    }
-
-    return {
-      ...lead,
-      company_name: lead.companies?.name,
-      branch_name: lead.branches?.name,
-      assigned_to_name: assignedToName,
-      assigned_to_role: assignedToRole,
-      lead_source_name: leadSourceName,
-    }
-  } catch (err) {
-    console.error("Unexpected error fetching lead:", err)
-    return null
-  }
-}
+import { getLeadWithDetails } from "@/utils/lead-utils"
 
 async function getLeadActivities(leadId: string) {
   const supabase = createClient()
@@ -98,7 +32,7 @@ async function getLeadActivities(leadId: string) {
 
 export default async function LeadDetailPage({ params }: { params: { id: string } }) {
   try {
-    const lead = await getLead(params.id)
+    const lead = await getLeadWithDetails(params.id)
 
     if (!lead) {
       return (
