@@ -1,12 +1,13 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
-import { Loader2 } from "lucide-react"
+import { Loader2, AlertCircle } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import { updateLeadStatus } from "@/actions/lead-actions"
 
@@ -16,6 +17,10 @@ interface UpdateLeadStatusDialogProps {
     lead_number: string
     client_name: string
     status: string
+    company_id: number
+    company_name?: string
+    branch_id?: number | null
+    branch_name?: string
   }
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -24,6 +29,7 @@ interface UpdateLeadStatusDialogProps {
 
 export function UpdateLeadStatusDialog({ lead, open, onOpenChange, onStatusUpdated }: UpdateLeadStatusDialogProps) {
   const { toast } = useToast()
+  const router = useRouter()
   const [status, setStatus] = useState(lead.status)
   const [notes, setNotes] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -46,10 +52,15 @@ export function UpdateLeadStatusDialog({ lead, open, onOpenChange, onStatusUpdat
       if (result.success) {
         toast({
           title: "Status updated",
-          description: `Lead ${lead.lead_number} status updated to ${status}`,
+          description: `Lead status has been updated to ${status}`,
         })
         onStatusUpdated()
         onOpenChange(false)
+
+        // If status is REJECTED, redirect to the rejected leads page
+        if (status === "REJECTED") {
+          router.push("/sales/rejected-leads")
+        }
       } else {
         toast({
           title: "Update failed",
@@ -77,8 +88,8 @@ export function UpdateLeadStatusDialog({ lead, open, onOpenChange, onStatusUpdat
         </DialogHeader>
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
-            <Label htmlFor="lead-number">Lead</Label>
-            <div id="lead-number" className="text-sm font-medium">
+            <Label htmlFor="lead-info">Lead</Label>
+            <div id="lead-info" className="text-sm font-medium">
               {lead.lead_number} - {lead.client_name}
             </div>
           </div>
@@ -99,23 +110,38 @@ export function UpdateLeadStatusDialog({ lead, open, onOpenChange, onStatusUpdat
                 <SelectItem value="REJECTED">Rejected</SelectItem>
               </SelectContent>
             </Select>
+            {status === "REJECTED" && (
+              <p className="text-xs text-yellow-600 flex items-center gap-1">
+                <AlertCircle className="h-3 w-3" />
+                Marking as rejected will redirect you to the rejected leads page for reassignment.
+              </p>
+            )}
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="notes">Notes (Optional)</Label>
+            <Label htmlFor="notes">{status === "REJECTED" ? "Rejection Reason (Required)" : "Notes (Optional)"}</Label>
             <Textarea
               id="notes"
-              placeholder="Add notes about this status change"
+              placeholder={
+                status === "REJECTED"
+                  ? "Please provide a reason for rejecting this lead"
+                  : "Add any relevant notes about this status change"
+              }
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              rows={3}
+              required={status === "REJECTED"}
             />
+            {status === "REJECTED" && notes.length < 10 && (
+              <p className="text-xs text-red-500">
+                Please provide a detailed reason for rejection (minimum 10 characters)
+              </p>
+            )}
           </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={isSubmitting}>
+          <Button onClick={handleSubmit} disabled={isSubmitting || (status === "REJECTED" && notes.length < 10)}>
             {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Update Status
           </Button>

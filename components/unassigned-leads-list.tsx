@@ -11,7 +11,7 @@ import { createClient } from "@/lib/supabase"
 import { AssignLeadDialog } from "@/components/assign-lead-dialog"
 import { formatDistanceToNow } from "date-fns"
 import type { Lead } from "@/types/lead"
-import { Phone, Mail, Tag, MapPin } from "lucide-react"
+import { Phone, Mail, Tag, MapPin, RefreshCw } from "lucide-react"
 
 export function UnassignedLeadsList() {
   const router = useRouter()
@@ -35,7 +35,9 @@ export function UnassignedLeadsList() {
         .select(`
           *,
           companies(name),
-          branches(name, location)
+          branches(name, location),
+          reassigned_from_companies:companies!reassigned_from_company_id(name),
+          reassigned_from_branches:branches!reassigned_from_branch_id(name)
         `)
         .eq("status", "UNASSIGNED")
         .order("created_at", { ascending: false })
@@ -50,6 +52,8 @@ export function UnassignedLeadsList() {
         company_name: lead.companies?.name,
         branch_name: lead.branches?.name,
         branch_location: lead.branches?.location,
+        reassigned_from_company_name: lead.reassigned_from_companies?.name,
+        reassigned_from_branch_name: lead.reassigned_from_branches?.name,
       }))
 
       // If there are leads with lead_source_id, try to fetch the lead source names
@@ -144,7 +148,7 @@ export function UnassignedLeadsList() {
                 <TableRow>
                   <TableHead>Lead Number</TableHead>
                   <TableHead>Client</TableHead>
-                  <TableHead>Company</TableHead>
+                  <TableHead>Company/Branch</TableHead>
                   <TableHead>Source</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead>Actions</TableHead>
@@ -152,8 +156,18 @@ export function UnassignedLeadsList() {
               </TableHeader>
               <TableBody>
                 {leads.map((lead) => (
-                  <TableRow key={lead.id}>
-                    <TableCell className="font-medium">{lead.lead_number}</TableCell>
+                  <TableRow key={lead.id} className={lead.is_reassigned ? "bg-yellow-50" : ""}>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-1">
+                        {lead.lead_number}
+                        {lead.is_reassigned && (
+                          <Badge variant="outline" className="ml-1 bg-yellow-100 text-yellow-800 border-yellow-300">
+                            <RefreshCw className="h-3 w-3 mr-1" />
+                            Reassigned
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell>
                       <div className="flex flex-col">
                         <span className="font-medium">{lead.client_name}</span>
@@ -181,8 +195,15 @@ export function UnassignedLeadsList() {
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col">
-                        <span>{lead.company_name}</span>
+                        <span className="font-medium">{lead.company_name || "Unknown Company"}</span>
                         {lead.branch_name && <span className="text-xs text-muted-foreground">{lead.branch_name}</span>}
+
+                        {lead.is_reassigned && lead.reassigned_from_company_name && (
+                          <div className="mt-1 text-xs text-yellow-700 bg-yellow-50 p-1 rounded border border-yellow-200">
+                            <span>Reassigned from: {lead.reassigned_from_company_name}</span>
+                            {lead.reassigned_from_branch_name && <span> ({lead.reassigned_from_branch_name})</span>}
+                          </div>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell>
