@@ -214,6 +214,11 @@ export function AssignedLeadsList() {
                   </div>
                 </TableHead>
                 <TableHead>
+                  <div className="flex items-center cursor-pointer" onClick={() => handleSort("company_name")}>
+                    Company/Branch
+                  </div>
+                </TableHead>
+                <TableHead>
                   <div className="flex items-center cursor-pointer" onClick={() => handleSort("assigned_to_name")}>
                     Assigned To
                   </div>
@@ -241,6 +246,12 @@ export function AssignedLeadsList() {
                 <TableRow key={lead.id}>
                   <TableCell>{lead.lead_number}</TableCell>
                   <TableCell>{lead.client_name}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span className="font-medium">{lead.company_name || "Unknown Company"}</span>
+                      {lead.branch_name && <span className="text-xs text-muted-foreground">{lead.branch_name}</span>}
+                    </div>
+                  </TableCell>
                   <TableCell>{lead.assigned_to_name || "Not assigned"}</TableCell>
                   <TableCell>
                     <Badge variant="outline" className="flex items-center gap-1">
