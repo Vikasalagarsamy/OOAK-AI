@@ -36,11 +36,4 @@ export interface Lead {
   whatsapp_number?: string
   is_whatsapp?: boolean
   has_separate_whatsapp?: boolean
-  // New fields for rejected lead reassignment
-  is_reassigned?: boolean
-  reassigned_at?: string
-  reassigned_from_company_id?: number
-  reassigned_from_branch_id?: number | null
-  reassigned_from_company_name?: string
-  reassigned_from_branch_name?: string
 }
