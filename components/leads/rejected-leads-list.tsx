@@ -34,6 +34,7 @@ export function RejectedLeadsList() {
   const [loading, setLoading] = useState(true)
   const [selectedLead, setSelectedLead] = useState<RejectedLead | null>(null)
   const [showReassignModal, setShowReassignModal] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchRejectedLeads()
@@ -41,11 +42,15 @@ export function RejectedLeadsList() {
 
   const fetchRejectedLeads = async () => {
     setLoading(true)
+    setError(null)
     try {
       const result = await getRejectedLeads()
       if (result.success) {
+        // Add logging to help debug data issues
+        console.log("Rejected leads data:", result.data)
         setLeads(result.data)
       } else {
+        setError(result.message || "Failed to fetch rejected leads")
         toast({
           title: "Error",
           description: result.message || "Failed to fetch rejected leads",
@@ -54,6 +59,7 @@ export function RejectedLeadsList() {
       }
     } catch (error) {
       console.error("Error fetching rejected leads:", error)
+      setError("An unexpected error occurred")
       toast({
         title: "Error",
         description: "An unexpected error occurred",
@@ -65,6 +71,8 @@ export function RejectedLeadsList() {
   }
 
   const handleReassign = (lead: RejectedLead) => {
+    // Log the selected lead to help with debugging
+    console.log("Selected lead for reassignment:", lead)
     setSelectedLead(lead)
     setShowReassignModal(true)
   }
@@ -81,6 +89,21 @@ export function RejectedLeadsList() {
         <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
         <span className="ml-2 text-muted-foreground">Loading rejected leads...</span>
       </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <Card className="p-8 text-center bg-red-50">
+        <div className="flex flex-col items-center justify-center gap-2">
+          <AlertCircle className="h-12 w-12 text-red-500" />
+          <h3 className="text-xl font-semibold">Error Loading Rejected Leads</h3>
+          <p className="text-muted-foreground">{error}</p>
+          <Button className="mt-4" onClick={fetchRejectedLeads}>
+            Try Again
+          </Button>
+        </div>
+      </Card>
     )
   }
 
@@ -101,6 +124,13 @@ export function RejectedLeadsList() {
 
   return (
     <div>
+      <div className="flex justify-end mb-4">
+        <Button size="sm" variant="outline" onClick={fetchRejectedLeads} className="gap-2">
+          <RefreshCw className="h-4 w-4" />
+          Refresh
+        </Button>
+      </div>
+
       <div className="rounded-md border">
         <Table>
           <TableHeader>
@@ -136,7 +166,10 @@ export function RejectedLeadsList() {
                   <div className="flex items-start gap-1">
                     <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
                     <div>
-                      <div className="font-medium text-sm">{lead.rejection_reason || "No reason provided"}</div>
+                      <div className="font-medium text-sm">
+                        {/* Display lead-specific rejection reason */}
+                        {lead.rejection_reason || "No reason provided"}
+                      </div>
                       {lead.rejected_by && (
                         <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
                           <User className="h-3 w-3" />

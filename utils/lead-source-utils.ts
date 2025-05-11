@@ -75,3 +75,25 @@ export async function resolveLeadSource(leadSourceId?: number, leadSourceName?: 
   // Case 3: We have neither
   return { id: undefined, name: "Not specified" }
 }
+
+/**
+ * Safely get lead source ID either directly or by looking up the name
+ * @param sourceId - The lead source ID (if available)
+ * @param sourceName - The lead source name (used as fallback)
+ * @returns The resolved lead source ID or null
+ */
+export async function safeGetLeadSourceId(
+  sourceId?: number | null,
+  sourceName?: string | null,
+): Promise<number | null> {
+  // If we already have an ID, return it
+  if (sourceId) return sourceId
+
+  // If we have a name but no ID, look up the ID
+  if (sourceName) {
+    return await getLeadSourceIdByName(sourceName)
+  }
+
+  // If we have neither, return null
+  return null
+}

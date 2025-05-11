@@ -389,12 +389,22 @@ export function CreateLeadForm() {
         status: "UNASSIGNED",
       }
 
-      // Handle lead source - always use the lead_source column with the source name
+      // Handle lead source - properly set both lead_source and lead_source_id
       if (hasLeadSourceColumn && data.lead_source && data.lead_source !== "none") {
-        // Find the source name from the ID
-        const selectedSource = leadSources.find((source) => source.id.toString() === data.lead_source)
+        // Convert the string ID to a number
+        const sourceId = Number.parseInt(data.lead_source, 10)
+
+        // Find the source from the ID
+        const selectedSource = leadSources.find((source) => source.id === sourceId)
+
         if (selectedSource) {
+          // Set both the ID and name
+          leadData.lead_source_id = sourceId
           leadData.lead_source = selectedSource.name
+        } else {
+          console.warn(`Lead source with ID ${data.lead_source} not found`)
+          // Set a default or handle the error condition
+          leadData.lead_source = "Unknown"
         }
       }
 

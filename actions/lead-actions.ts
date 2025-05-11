@@ -76,7 +76,8 @@ export async function updateLeadStatus(
     if (status === "REJECTED" && hasRejectionColumns) {
       updateData.rejection_reason = notes || "No reason provided"
       updateData.rejected_at = new Date().toISOString()
-      updateData.rejected_by = `${currentUser.firstName} ${currentUser.lastName}`
+      // Set rejected_by to the user's ID (UUID) instead of their name
+      updateData.rejected_by = currentUser.id
     }
 
     // Update lead status

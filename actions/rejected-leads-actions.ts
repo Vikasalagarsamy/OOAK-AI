@@ -74,6 +74,9 @@ export async function getRejectedLeads() {
     const companyIds = [...new Set(leads.map((lead) => lead.company_id).filter(Boolean))]
     const branchIds = [...new Set(leads.map((lead) => lead.branch_id).filter(Boolean))]
 
+    // Extract lead IDs for fetching rejection activities
+    const leadIds = leads.map((lead) => lead.id.toString())
+
     // Fetch companies
     const { data: companies, error: companiesError } = await supabase
       .from("companies")
@@ -111,22 +114,37 @@ export async function getRejectedLeads() {
 
     if (!hasRejectionColumns) {
       try {
-        // Try to get rejection info from activities
+        // Get rejection info from activities - FIXED to properly match by entity_id
         const { data: activities, error: activitiesError } = await supabase
           .from("activities")
           .select("*")
           .eq("action_type", "reject")
-          .in(
-            "entity_id",
-            leads.map((lead) => lead.id.toString()),
-          )
+          .in("entity_id", leadIds)
+          .order("created_at", { ascending: false })
 
-        if (!activitiesError && activities) {
+        if (activitiesError) {
+          console.error("Error fetching rejection activities:", activitiesError)
+        }
+
+        if (activities && activities.length > 0) {
+          // Create a map of the most recent rejection activity for each lead
+          const processedLeadIds = new Set()
+
           activities.forEach((activity) => {
             const leadId = Number.parseInt(activity.entity_id)
-            if (!isNaN(leadId)) {
+
+            // Only use the first (most recent) activity for each lead
+            if (!isNaN(leadId) && !processedLeadIds.has(leadId)) {
+              processedLeadIds.add(leadId)
+
+              // Extract rejection reason from description
+              let rejectionReason = "No reason provided"
+              if (activity.description.includes("Reason:")) {
+                rejectionReason = activity.description.split("Reason:")[1].trim()
+              }
+
               rejectionInfo.set(leadId, {
-                rejection_reason: activity.description.split("Reason: ")[1] || "No reason provided",
+                rejection_reason: rejectionReason,
                 rejected_at: activity.created_at,
                 rejected_by: activity.user_name,
               })
@@ -134,7 +152,7 @@ export async function getRejectedLeads() {
           })
         }
       } catch (error) {
-        console.error("Error fetching activities:", error)
+        console.error("Error processing activities:", error)
       }
     }
 
@@ -153,6 +171,7 @@ export async function getRejectedLeads() {
           rejected_by: lead.rejected_by || null,
         }
       } else {
+        // Use the rejection info from the activities map, ensuring we match by lead ID
         const activityInfo = rejectionInfo.get(lead.id)
         if (activityInfo) {
           rejectionData = activityInfo
