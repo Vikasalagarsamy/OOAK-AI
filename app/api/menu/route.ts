@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { getMenuForCurrentUser } from "@/services/menu-service"
+import { getMenuForCurrentUser } from "@/services/unified-menu-service"
 
 export async function GET() {
   try {

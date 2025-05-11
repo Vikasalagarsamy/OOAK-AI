@@ -10,28 +10,20 @@ import { Button } from "@/components/ui/button"
 import { MenuIcon } from "@/components/dynamic-menu/menu-icon"
 import { toast } from "@/components/ui/use-toast"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { AlertCircle, RefreshCw } from "lucide-react"
+import { AlertCircle, RefreshCw, Info } from "lucide-react"
+import { getMenuItemsForRole } from "@/services/unified-menu-service"
+import type { MenuItem } from "@/types/menu"
 
 interface Role {
   id: number
   title: string
 }
 
-interface MenuItem {
-  id: number
-  parent_id: number | null
-  name: string
-  icon: string | null
-  path: string | null
-  sort_order: number
-}
-
 interface Permission {
-  menu_item_id: number
-  can_view: boolean
-  can_add: boolean
-  can_edit: boolean
-  can_delete: boolean
+  canView: boolean
+  canAdd: boolean
+  canEdit: boolean
+  canDelete: boolean
 }
 
 export function MenuPermissionsManager() {
@@ -43,6 +35,7 @@ export function MenuPermissionsManager() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "success" | "error">("idle")
 
   // Create Supabase client
   const supabase = createClient()
@@ -72,67 +65,28 @@ export function MenuPermissionsManager() {
     }
   }
 
-  // Load menu items
-  const loadMenuItems = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("menu_items")
-        .select("id, parent_id, name, icon, path, sort_order")
-        .order("sort_order")
-
-      if (error) throw error
-
-      if (data && data.length > 0) {
-        setMenuItems(data)
-      } else {
-        setError("No menu items found. Please check if the menu_items table exists and has data.")
-      }
-    } catch (error: any) {
-      console.error("Error loading menu items:", error)
-      setError(`Failed to load menu items: ${error.message || "Unknown error"}`)
-      toast({
-        title: "Error",
-        description: "Failed to load menu items. See console for details.",
-        variant: "destructive",
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // Load permissions for selected role
-  const loadPermissions = async () => {
+  // Load menu items and permissions for the selected role
+  const loadMenuItemsAndPermissions = async () => {
     if (!selectedRole) return
 
     setLoading(true)
     try {
-      const { data, error } = await supabase
-        .from("role_menu_permissions")
-        .select("menu_item_id, can_view, can_add, can_edit, can_delete")
-        .eq("role_id", selectedRole)
+      // Use the unified menu service to get menu items and permissions
+      const { menuItems, permissions } = await getMenuItemsForRole(selectedRole)
 
-      if (error) throw error
-
-      // Convert to a map for easier lookup
-      const permissionsMap: Record<number, Permission> = {}
-      if (data) {
-        data.forEach((item) => {
-          permissionsMap[item.menu_item_id] = {
-            menu_item_id: item.menu_item_id,
-            can_view: item.can_view,
-            can_add: item.can_add,
-            can_edit: item.can_edit,
-            can_delete: item.can_delete,
-          }
-        })
+      if (menuItems.length === 0) {
+        setError("No menu items found. Please check if the menu_items table exists and has data.")
+        return
       }
 
-      setPermissions(permissionsMap)
+      setMenuItems(menuItems)
+      setPermissions(permissions)
     } catch (error: any) {
-      console.error("Error loading permissions:", error)
+      console.error("Error loading menu items and permissions:", error)
+      setError(`Failed to load menu data: ${error.message || "Unknown error"}`)
       toast({
         title: "Error",
-        description: "Failed to load permissions. See console for details.",
+        description: "Failed to load menu data. See console for details.",
         variant: "destructive",
       })
     } finally {
@@ -145,17 +99,16 @@ export function MenuPermissionsManager() {
     const initializeData = async () => {
       setLoading(true)
       await loadRoles()
-      await loadMenuItems()
       setLoading(false)
     }
 
     initializeData()
   }, [])
 
-  // Load permissions when selected role changes
+  // Load menu items and permissions when selected role changes
   useEffect(() => {
     if (selectedRole) {
-      loadPermissions()
+      loadMenuItemsAndPermissions()
     }
   }, [selectedRole])
 
@@ -163,9 +116,8 @@ export function MenuPermissionsManager() {
   const handleRefresh = async () => {
     setRefreshing(true)
     await loadRoles()
-    await loadMenuItems()
     if (selectedRole) {
-      await loadPermissions()
+      await loadMenuItemsAndPermissions()
     }
     setRefreshing(false)
     toast({
@@ -174,13 +126,66 @@ export function MenuPermissionsManager() {
     })
   }
 
+  // Synchronize menu structure
+  const handleSyncMenus = async () => {
+    setSyncStatus("syncing")
+    try {
+      // Call API to synchronize menus
+      const response = await fetch("/api/admin/sync-menus", {
+        method: "POST",
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to synchronize menus: ${response.statusText}`)
+      }
+
+      // Refresh data after sync
+      await handleRefresh()
+
+      setSyncStatus("success")
+      toast({
+        title: "Success",
+        description: "Menu structure has been synchronized",
+      })
+    } catch (error: any) {
+      console.error("Error synchronizing menus:", error)
+      setSyncStatus("error")
+      toast({
+        title: "Error",
+        description: `Failed to synchronize menus: ${error.message || "Unknown error"}`,
+        variant: "destructive",
+      })
+    }
+  }
+
   // Organize menu items into a tree structure
+  const organizeMenuItems = (items: MenuItem[]) => {
+    const map: Record<number, MenuItem & { children: any[] }> = {}
+    const roots: any[] = []
+
+    // First, create a map of all items
+    items.forEach((item) => {
+      map[item.id] = { ...item, children: [] }
+    })
+
+    // Then, build the tree
+    items.forEach((item) => {
+      if (item.parentId === null) {
+        roots.push(map[item.id])
+      } else if (map[item.parentId]) {
+        map[item.parentId].children.push(map[item.id])
+      }
+    })
+
+    return roots.sort((a, b) => a.sortOrder - b.sortOrder)
+  }
+
   const menuTree = organizeMenuItems(menuItems)
 
   // Handle permission change
   const handlePermissionChange = (
     menuItemId: number,
-    permission: "can_view" | "can_add" | "can_edit" | "can_delete",
+    permission: "canView" | "canAdd" | "canEdit" | "canDelete",
     checked: boolean,
   ) => {
     // Update local state
@@ -190,30 +195,28 @@ export function MenuPermissionsManager() {
       // Create permission object if it doesn't exist
       if (!newPermissions[menuItemId]) {
         newPermissions[menuItemId] = {
-          menu_item_id: menuItemId,
-          can_view: false,
-          can_add: false,
-          can_edit: false,
-          can_delete: false,
+          canView: false,
+          canAdd: false,
+          canEdit: false,
+          canDelete: false,
         }
       }
 
-      // If we're turning off "can_view", turn off all other permissions too
-      if (permission === "can_view" && !checked) {
+      // If we're turning off "canView", turn off all other permissions too
+      if (permission === "canView" && !checked) {
         newPermissions[menuItemId] = {
-          ...newPermissions[menuItemId],
-          can_view: false,
-          can_add: false,
-          can_edit: false,
-          can_delete: false,
+          canView: false,
+          canAdd: false,
+          canEdit: false,
+          canDelete: false,
         }
       }
-      // If we're turning on any other permission, make sure "can_view" is also on
-      else if (permission !== "can_view" && checked) {
+      // If we're turning on any other permission, make sure "canView" is also on
+      else if (permission !== "canView" && checked) {
         newPermissions[menuItemId] = {
           ...newPermissions[menuItemId],
           [permission]: checked,
-          can_view: true,
+          canView: true,
         }
       }
       // Otherwise just toggle the specific permission
@@ -235,13 +238,13 @@ export function MenuPermissionsManager() {
     setSaving(true)
     try {
       // Convert permissions object to array
-      const permissionsArray = Object.values(permissions).map((perm) => ({
+      const permissionsArray = Object.entries(permissions).map(([menuItemId, perm]) => ({
         role_id: selectedRole,
-        menu_item_id: perm.menu_item_id,
-        can_view: perm.can_view,
-        can_add: perm.can_add,
-        can_edit: perm.can_edit,
-        can_delete: perm.can_delete,
+        menu_item_id: Number.parseInt(menuItemId),
+        can_view: perm.canView,
+        can_add: perm.canAdd,
+        can_edit: perm.canEdit,
+        can_delete: perm.canDelete,
       }))
 
       // First delete existing permissions
@@ -272,36 +275,13 @@ export function MenuPermissionsManager() {
     }
   }
 
-  // Helper function to organize menu items into a tree
-  function organizeMenuItems(items: MenuItem[]) {
-    const map: Record<number, MenuItem & { children: any[] }> = {}
-    const roots: any[] = []
-
-    // First, create a map of all items
-    items.forEach((item) => {
-      map[item.id] = { ...item, children: [] }
-    })
-
-    // Then, build the tree
-    items.forEach((item) => {
-      if (item.parent_id === null) {
-        roots.push(map[item.id])
-      } else if (map[item.parent_id]) {
-        map[item.parent_id].children.push(map[item.id])
-      }
-    })
-
-    return roots
-  }
-
   // Render a menu item row recursively
   const renderMenuItem = (item: any, depth = 0) => {
     const permission = permissions[item.id] || {
-      menu_item_id: item.id,
-      can_view: false,
-      can_add: false,
-      can_edit: false,
-      can_delete: false,
+      canView: false,
+      canAdd: false,
+      canEdit: false,
+      canDelete: false,
     }
 
     return (
@@ -311,13 +291,14 @@ export function MenuPermissionsManager() {
             {item.icon && <MenuIcon name={item.icon} className="h-4 w-4 text-muted-foreground" />}
             <span className="font-medium">{item.name}</span>
             {item.path && <span className="text-xs text-muted-foreground">{item.path}</span>}
+            {!item.isVisible && <span className="text-xs bg-yellow-100 text-yellow-800 px-1 rounded">Hidden</span>}
           </div>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <Checkbox
                 id={`view-${item.id}`}
-                checked={permission.can_view}
-                onCheckedChange={(checked) => handlePermissionChange(item.id, "can_view", checked === true)}
+                checked={permission.canView}
+                onCheckedChange={(checked) => handlePermissionChange(item.id, "canView", checked === true)}
               />
               <label htmlFor={`view-${item.id}`} className="text-sm">
                 View
@@ -326,9 +307,9 @@ export function MenuPermissionsManager() {
             <div className="flex items-center gap-2">
               <Checkbox
                 id={`add-${item.id}`}
-                checked={permission.can_add}
-                disabled={!permission.can_view}
-                onCheckedChange={(checked) => handlePermissionChange(item.id, "can_add", checked === true)}
+                checked={permission.canAdd}
+                disabled={!permission.canView}
+                onCheckedChange={(checked) => handlePermissionChange(item.id, "canAdd", checked === true)}
               />
               <label htmlFor={`add-${item.id}`} className="text-sm">
                 Add
@@ -337,9 +318,9 @@ export function MenuPermissionsManager() {
             <div className="flex items-center gap-2">
               <Checkbox
                 id={`edit-${item.id}`}
-                checked={permission.can_edit}
-                disabled={!permission.can_view}
-                onCheckedChange={(checked) => handlePermissionChange(item.id, "can_edit", checked === true)}
+                checked={permission.canEdit}
+                disabled={!permission.canView}
+                onCheckedChange={(checked) => handlePermissionChange(item.id, "canEdit", checked === true)}
               />
               <label htmlFor={`edit-${item.id}`} className="text-sm">
                 Edit
@@ -348,9 +329,9 @@ export function MenuPermissionsManager() {
             <div className="flex items-center gap-2">
               <Checkbox
                 id={`delete-${item.id}`}
-                checked={permission.can_delete}
-                disabled={!permission.can_view}
-                onCheckedChange={(checked) => handlePermissionChange(item.id, "can_delete", checked === true)}
+                checked={permission.canDelete}
+                disabled={!permission.canView}
+                onCheckedChange={(checked) => handlePermissionChange(item.id, "canDelete", checked === true)}
               />
               <label htmlFor={`delete-${item.id}`} className="text-sm">
                 Delete
@@ -391,12 +372,28 @@ export function MenuPermissionsManager() {
               Configure which menu items are visible to each role and what actions they can perform
             </CardDescription>
           </div>
-          <Button size="sm" onClick={handleRefresh} disabled={refreshing}>
-            <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-            {refreshing ? "Refreshing..." : "Refresh"}
-          </Button>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={handleSyncMenus} disabled={syncStatus === "syncing"}>
+              <RefreshCw className={`mr-2 h-4 w-4 ${syncStatus === "syncing" ? "animate-spin" : ""}`} />
+              {syncStatus === "syncing" ? "Synchronizing..." : "Sync Menu Structure"}
+            </Button>
+            <Button size="sm" onClick={handleRefresh} disabled={refreshing}>
+              <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+              {refreshing ? "Refreshing..." : "Refresh"}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
+          {syncStatus === "success" && (
+            <Alert className="mb-4">
+              <Info className="h-4 w-4" />
+              <AlertTitle>Menu Synchronized</AlertTitle>
+              <AlertDescription>
+                The menu structure has been successfully synchronized with the main navigation.
+              </AlertDescription>
+            </Alert>
+          )}
+
           {loading ? (
             <div className="space-y-4">
               <Skeleton className="h-10 w-full" />
