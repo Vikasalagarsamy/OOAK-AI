@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label"
 import { useToast } from "@/components/ui/use-toast"
 import type { Lead } from "@/types/lead"
 import { reassignLead, getEmployeesByCompanyAndBranch } from "@/actions/lead-reassignment-actions"
-import { Loader2, Check, X, User, RefreshCw, Building, MapPin } from "lucide-react"
+import { Loader2, Check, X, User, RefreshCw, Building, MapPin, Briefcase } from "lucide-react"
 
 interface Employee {
   id: number
@@ -25,8 +25,8 @@ interface Employee {
   full_name: string
   company_id?: number | null
   branch_id?: number | null
-  role?: string
-  location?: string
+  designation?: string
+  company_name?: string
   is_sales_role?: boolean
 }
 
@@ -226,7 +226,9 @@ export function ReassignLeadDialog({ lead, open, onOpenChange, onReassignComplet
               </div>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <MapPin className="h-4 w-4" />
-                <span>{lead.location ? `Location: ${lead.location}` : `Branch: ${lead.branch_name}`}</span>
+                <span>
+                  {lead.branch_name ? `Branch: ${lead.branch_name}` : `Location: ${lead.location || "Unknown"}`}
+                </span>
               </div>
             </div>
 
@@ -248,16 +250,17 @@ export function ReassignLeadDialog({ lead, open, onOpenChange, onReassignComplet
                   <SelectContent>
                     {employees.length === 0 ? (
                       <SelectItem value="no-employees" disabled>
-                        No sales resources available for this lead
+                        No resources available for this lead
                       </SelectItem>
                     ) : (
                       employees.map((employee) => (
                         <SelectItem key={employee.id} value={employee.id.toString()} className="py-2">
                           <div className="flex flex-col">
                             <span>{employee.full_name}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {employee.role || "Sales Representative"}
-                              {employee.location ? ` • ${employee.location}` : ""}
+                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Briefcase className="h-3 w-3" />
+                              {employee.designation || "Staff"}
+                              {employee.company_name && ` • ${employee.company_name}`}
                             </span>
                           </div>
                         </SelectItem>

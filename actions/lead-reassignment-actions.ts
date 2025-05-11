@@ -14,24 +14,7 @@ export async function getEmployeesByCompanyAndBranch(
   const supabase = createClient()
 
   try {
-    // First, get branch location if we have a branch ID
-    let branchLocation = null
-    if (branchId) {
-      const { data: branchData, error: branchError } = await supabase
-        .from("branches")
-        .select("location")
-        .eq("id", branchId)
-        .single()
-
-      if (!branchError && branchData) {
-        branchLocation = branchData.location
-      }
-    }
-
-    // Use provided location or branch location
-    const effectiveLocation = location || branchLocation
-
-    // Start building our query
+    // Start building our query - now including designation and company information
     let query = supabase
       .from("employees")
       .select(`
@@ -41,12 +24,15 @@ export async function getEmployeesByCompanyAndBranch(
         last_name,
         job_title,
         status,
+        designation_id,
+        designations:designations(name),
         employee_companies!inner(
           company_id,
           branch_id,
           is_primary,
           allocation_percentage,
-          status
+          status,
+          companies:companies(name)
         )
       `)
       .eq("employee_companies.company_id", companyId)
@@ -70,11 +56,11 @@ export async function getEmployeesByCompanyAndBranch(
       // Get the company data
       const companyData = Array.isArray(emp.employee_companies) ? emp.employee_companies[0] : emp.employee_companies
 
-      // Calculate role from job_title - use a default if null
-      const role = emp.job_title || "Sales Representative"
+      // Get designation name
+      const designationName = emp.designations?.name || null
 
-      // Determine if this is a sales role - be more inclusive
-      const isSalesRole = true // Include all employees as potential assignees
+      // Get company name
+      const companyName = companyData?.companies?.name || null
 
       return {
         id: emp.id,
@@ -82,12 +68,11 @@ export async function getEmployeesByCompanyAndBranch(
         first_name: emp.first_name || "",
         last_name: emp.last_name || "",
         full_name: `${emp.first_name || ""} ${emp.last_name || ""}`.trim() || `Employee ${emp.id}`,
-        role: role,
+        designation: designationName || emp.job_title || "Staff",
+        company_name: companyName || "Unknown Company",
         company_id: companyData?.company_id,
         branch_id: companyData?.branch_id,
-        location: effectiveLocation, // Use the effective location
-        allocation_percentage: companyData?.allocation_percentage,
-        is_sales_role: isSalesRole,
+        is_sales_role: true, // Include all employees as potential assignees
       }
     })
 
