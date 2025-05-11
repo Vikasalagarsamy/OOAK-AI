@@ -25,7 +25,7 @@ interface Employee {
   full_name: string
   company_id?: number | null
   branch_id?: number | null
-  role?: string
+  job_title?: string
   location?: string
   is_sales_role?: boolean
 }
@@ -48,6 +48,9 @@ export function ReassignLeadDialog({ lead, open, onOpenChange, onReassignComplet
   useEffect(() => {
     if (open && lead) {
       fetchEmployees()
+    } else {
+      // Reset state when dialog closes
+      setSelectedEmployeeId("")
     }
   }, [open, lead])
 
@@ -114,7 +117,7 @@ export function ReassignLeadDialog({ lead, open, onOpenChange, onReassignComplet
       // Additional validation to ensure only sales roles are included
       // This is a safeguard in case the server-side filtering missed something
       const salesOnlyEmployees = filteredEmployees.filter((emp) => {
-        const role = (emp.role || "").toLowerCase()
+        const role = (emp.job_title || "").toLowerCase()
 
         // Explicitly exclude executive roles
         if (
@@ -133,7 +136,8 @@ export function ReassignLeadDialog({ lead, open, onOpenChange, onReassignComplet
           role.includes("sales") ||
           role.includes("account manager") ||
           role.includes("business development") ||
-          role.includes("account executive")
+          role.includes("account executive") ||
+          emp.is_sales_role === true
         )
       })
 
@@ -299,7 +303,7 @@ export function ReassignLeadDialog({ lead, open, onOpenChange, onReassignComplet
                           <div className="flex flex-col">
                             <span>{employee.full_name}</span>
                             <span className="text-xs text-muted-foreground">
-                              {employee.role || "Sales"}
+                              {employee.job_title || "Sales"}
                               {employee.location ? ` • ${employee.location}` : ""}
                             </span>
                           </div>
