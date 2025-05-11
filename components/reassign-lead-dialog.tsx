@@ -112,6 +112,7 @@ export function ReassignLeadDialog({ lead, open, onOpenChange, onReassignComplet
         return emp.id !== assignedTo
       })
 
+      console.log("Filtered employees:", filteredEmployees) // Add this for debugging
       setEmployees(filteredEmployees)
     } catch (error) {
       console.error("Error fetching employees:", error)
