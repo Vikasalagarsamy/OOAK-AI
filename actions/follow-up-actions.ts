@@ -132,7 +132,7 @@ export async function createFollowUp(
       priority: String(formData.priority),
       interaction_summary: formData.interaction_summary ? String(formData.interaction_summary) : null,
       status: "scheduled" as FollowUpStatus,
-      created_by: String(currentUser.id), // Ensure string type for text column
+      created_by: currentUser.id ? String(currentUser.id) : null, // Explicitly convert to string
       follow_up_required: false,
       next_follow_up_date: null,
     }
@@ -217,7 +217,7 @@ export async function updateFollowUpStatus(
 
     const updateData: any = {
       status: String(status),
-      updated_by: String(currentUser.id), // Ensure string type for UUID column
+      updated_by: currentUser.id ? String(currentUser.id) : null, // Explicit string conversion
       updated_at: new Date().toISOString(),
     }
 
@@ -227,7 +227,7 @@ export async function updateFollowUpStatus(
         updateData.completed_at = data.completed_at
           ? new Date(data.completed_at).toISOString()
           : new Date().toISOString()
-        updateData.completed_by = String(currentUser.id) // Ensure string type for UUID column
+        updateData.completed_by = currentUser.id ? String(currentUser.id) : null // Explicit string conversion
         updateData.outcome = data.outcome ? String(data.outcome) : null
         updateData.duration_minutes = data.duration_minutes ? Number(data.duration_minutes) : null
       }
@@ -463,7 +463,7 @@ export async function testFollowUpCreation(
       followup_type: followupType, // Using the provided type or defaulting to 'phone'
       status: "scheduled",
       priority: "medium",
-      created_by: String(currentUser.id),
+      created_by: currentUser?.id ? String(currentUser.id) : null, // Explicitly convert to string
       follow_up_required: false,
     }
 

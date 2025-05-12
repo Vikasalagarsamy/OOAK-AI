@@ -73,16 +73,21 @@ export function ScheduleFollowUpForm({ leadId, leadName, onSuccess }: ScheduleFo
           onSuccess()
         }
       } else {
+        console.error("Follow-up creation error details:", result.error)
         toast({
           title: "Error",
-          description: result.message,
+          description: result.message || "Failed to schedule follow-up",
           variant: "destructive",
         })
       }
     } catch (error) {
+      console.error("Unexpected error during follow-up creation:", error)
       toast({
         title: "Error",
-        description: "An unexpected error occurred",
+        description:
+          typeof error === "object" && error !== null && "message" in error
+            ? (error as Error).message
+            : "An unexpected error occurred",
         variant: "destructive",
       })
     } finally {

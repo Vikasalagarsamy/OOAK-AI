@@ -16,10 +16,11 @@ export async function initializeDatabase(): Promise<{
 
     // Verify lead_followups table
     try {
-      const exists = await verifyLeadFollowupsTable()
+      const result = await verifyLeadFollowupsTable()
       results.lead_followups = {
-        exists,
-        message: exists ? "Lead followups table exists" : "Failed to verify lead followups table",
+        exists: result.exists,
+        message: result.message,
+        error: result.error,
       }
     } catch (error) {
       console.error("Error verifying lead_followups table:", error)

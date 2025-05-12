@@ -364,113 +364,74 @@ export async function deleteLead(leadId: number): Promise<{ success: boolean; me
   }
 }
 
+// Schedule a follow-up for a lead
 export async function scheduleLeadFollowup(data: {
   leadId: number
   scheduledAt: string
   followupType: string
-  notes: string
+  notes?: string
   priority: string
-  summary: string
+  summary?: string
 }) {
   const supabase = createClient()
 
   try {
+    // Get the current user
     const currentUser = await getCurrentUser()
+
     if (!currentUser) {
       return { success: false, message: "User not authenticated" }
     }
 
-    // Validate the lead exists
-    const { data: lead, error: leadError } = await supabase
-      .from("leads")
-      .select("id, lead_number, client_name")
-      .eq("id", data.leadId)
-      .single()
+    console.log("Scheduling follow-up with data:", {
+      ...data,
+      currentUserId: currentUser.id,
+    })
 
-    if (leadError || !lead) {
-      console.error("Error validating lead:", leadError)
-      return { success: false, message: "Invalid lead ID" }
-    }
+    // Insert the follow-up
+    const { data: followup, error } = await supabase
+      .from("lead_followups")
+      .insert({
+        lead_id: data.leadId,
+        scheduled_at: data.scheduledAt,
+        followup_type: data.followupType,
+        notes: data.notes || null,
+        priority: data.priority,
+        interaction_summary: data.summary || null,
+        status: "scheduled",
+        // Ensure created_by is stored as text since that's how it's defined in the database
+        created_by: currentUser.id ? String(currentUser.id) : null,
+      })
+      .select()
 
-    // First attempt: Omit created_by field to avoid UUID issues
-    try {
-      const { data: followup, error } = await supabase
-        .from("lead_followups")
-        .insert({
-          lead_id: data.leadId,
-          scheduled_at: data.scheduledAt,
-          followup_type: data.followupType,
-          notes: data.notes,
-          priority: data.priority,
-          interaction_summary: data.summary,
-          status: "scheduled",
-        })
-        .select()
-
-      if (!error) {
-        // Log activity
-        await logActivity({
-          actionType: "create",
-          entityType: "follow_up",
-          entityId: followup[0].id.toString(),
-          entityName: `Follow-up for Lead ${lead.lead_number}`,
-          description: `Scheduled a ${data.followupType} follow-up for ${new Date(data.scheduledAt).toLocaleString()}`,
-          userName: `${currentUser.firstName} ${currentUser.lastName}`,
-        })
-
-        revalidatePath(`/sales/my-leads`)
-        revalidatePath(`/leads/${data.leadId}`)
-
-        return { success: true, message: "Follow-up scheduled successfully" }
-      }
-
-      // If first attempt fails, try with system UUID
-      console.warn("First attempt failed, trying with system UUID:", error)
-    } catch (err) {
-      console.error("Error in first attempt:", err)
-    }
-
-    // Second attempt: Use system UUID
-    try {
-      const { data: followup, error } = await supabase
-        .from("lead_followups")
-        .insert({
-          lead_id: data.leadId,
-          scheduled_at: data.scheduledAt,
-          followup_type: data.followupType,
-          notes: data.notes,
-          priority: data.priority,
-          interaction_summary: data.summary,
-          status: "scheduled",
-          created_by: "00000000-0000-0000-0000-000000000000", // System UUID
-        })
-        .select()
-
-      if (!error) {
-        // Log activity
-        await logActivity({
-          actionType: "create",
-          entityType: "follow_up",
-          entityId: followup[0].id.toString(),
-          entityName: `Follow-up for Lead ${lead.lead_number}`,
-          description: `Scheduled a ${data.followupType} follow-up for ${new Date(data.scheduledAt).toLocaleString()}`,
-          userName: `${currentUser.firstName} ${currentUser.lastName}`,
-        })
-
-        revalidatePath(`/sales/my-leads`)
-        revalidatePath(`/leads/${data.leadId}`)
-
-        return { success: true, message: "Follow-up scheduled successfully" }
-      }
-
-      return { success: false, message: `Error inserting follow-up: ${error.message}` }
-    } catch (error: any) {
+    if (error) {
       console.error("Error inserting follow-up:", error)
-      return { success: false, message: `Error inserting follow-up: ${error.message}` }
+      return { success: false, message: `Failed to schedule follow-up: ${error.message}` }
     }
-  } catch (error: any) {
-    console.error("Error scheduling follow-up:", error)
-    return { success: false, message: "An unexpected error occurred" }
+
+    // Update the lead's last_contacted field
+    const { error: updateError } = await supabase
+      .from("leads")
+      .update({ last_contacted: new Date().toISOString() })
+      .eq("id", data.leadId)
+
+    if (updateError) {
+      console.error("Error updating lead last_contacted:", updateError)
+      // We don't fail the whole operation if just this update fails
+    }
+
+    // Revalidate the leads page
+    revalidatePath("/sales/my-leads")
+    revalidatePath(`/sales/lead/${data.leadId}`)
+    revalidatePath("/follow-ups/dashboard")
+
+    return { success: true, message: "Follow-up scheduled successfully", data: followup }
+  } catch (error) {
+    console.error("Unexpected error scheduling follow-up:", error)
+    return {
+      success: false,
+      message: `An unexpected error occurred: ${error instanceof Error ? error.message : "Unknown error"}`,
+    }
   }
 }
 
