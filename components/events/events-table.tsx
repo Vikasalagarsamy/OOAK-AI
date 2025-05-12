@@ -1,20 +1,40 @@
 "use client"
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
-import { Calendar, Copy } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Button } from "@/components/ui/button"
+import { Calendar, Copy, Pencil, Trash2 } from "lucide-react"
 import type { Event } from "@/types/event"
-import { formatDate } from "@/lib/utils"
+import { formatDistanceToNow } from "date-fns"
 import { useToast } from "@/components/ui/use-toast"
 
 interface EventsTableProps {
   events: Event[]
-  onToggleStatus: (id: string) => void
+  onToggleStatus: (eventId: string) => Promise<void>
+  onEditEvent: (event: Event) => void
+  onDeleteEvent: (event: Event) => void
+  isLoading?: boolean
 }
 
-export function EventsTable({ events, onToggleStatus }: EventsTableProps) {
+export function EventsTable({
+  events,
+  onToggleStatus,
+  onEditEvent,
+  onDeleteEvent,
+  isLoading = false,
+}: EventsTableProps) {
   const { toast } = useToast()
+
+  // Function to format the date
+  const formatDate = (dateString: string) => {
+    try {
+      return formatDistanceToNow(new Date(dateString), { addSuffix: true })
+    } catch (error) {
+      return "Invalid date"
+    }
+  }
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
@@ -23,6 +43,45 @@ export function EventsTable({ events, onToggleStatus }: EventsTableProps) {
       description: `Event ID "${text}" has been copied to clipboard.`,
       duration: 3000,
     })
+  }
+
+  if (isLoading) {
+    return (
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Event ID</TableHead>
+              <TableHead>Name</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Created</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {Array.from({ length: 5 }).map((_, index) => (
+              <TableRow key={index}>
+                <TableCell>
+                  <Skeleton className="h-5 w-20" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-5 w-40" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-5 w-16" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-5 w-24" />
+                </TableCell>
+                <TableCell className="text-right">
+                  <Skeleton className="h-5 w-24 ml-auto" />
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    )
   }
 
   if (events.length === 0) {
@@ -40,39 +99,58 @@ export function EventsTable({ events, onToggleStatus }: EventsTableProps) {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Event Name</TableHead>
             <TableHead>Event ID</TableHead>
-            <TableHead>Created</TableHead>
+            <TableHead>Name</TableHead>
             <TableHead>Status</TableHead>
-            <TableHead className="w-[100px]">Actions</TableHead>
+            <TableHead>Created</TableHead>
+            <TableHead className="text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {events.map((event) => (
-            <TableRow key={event.id}>
-              <TableCell className="font-medium">{event.name}</TableCell>
+            <TableRow key={event.event_id}>
               <TableCell>
                 <div className="flex items-center space-x-2">
                   <code className="relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-sm">
-                    {event.id}
+                    {event.event_id}
                   </code>
-                  <button onClick={() => copyToClipboard(event.id)} className="text-gray-500 hover:text-gray-700">
+                  <button onClick={() => copyToClipboard(event.event_id)} className="text-gray-500 hover:text-gray-700">
                     <Copy className="h-4 w-4" />
                   </button>
                 </div>
               </TableCell>
-              <TableCell>{formatDate(event.createdAt)}</TableCell>
+              <TableCell className="font-medium">{event.name}</TableCell>
               <TableCell>
-                <Badge variant={event.isActive ? "success" : "secondary"}>
-                  {event.isActive ? "Active" : "Inactive"}
+                <Badge variant={event.is_active ? "success" : "secondary"}>
+                  {event.is_active ? "Active" : "Inactive"}
                 </Badge>
               </TableCell>
-              <TableCell>
-                <Switch
-                  checked={event.isActive}
-                  onCheckedChange={() => onToggleStatus(event.id)}
-                  aria-label={`Toggle ${event.name} status`}
-                />
+              <TableCell className="text-muted-foreground text-sm">{formatDate(event.created_at)}</TableCell>
+              <TableCell className="text-right">
+                <div className="flex items-center justify-end space-x-2">
+                  <Switch
+                    checked={event.is_active}
+                    onCheckedChange={() => onToggleStatus(event.event_id)}
+                    aria-label={`Toggle ${event.name} status`}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => onEditEvent(event)}
+                    aria-label={`Edit ${event.name}`}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => onDeleteEvent(event)}
+                    aria-label={`Delete ${event.name}`}
+                    className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
               </TableCell>
             </TableRow>
           ))}

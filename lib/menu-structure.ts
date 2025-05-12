@@ -187,6 +187,11 @@ export const menuStructure: Record<string, MenuItem> = {
         icon: "calendar",
       },
       {
+        name: "Events",
+        path: "/events",
+        icon: "calendar",
+      },
+      {
         name: "Event Types",
         path: "/event-coordination/event-types",
         icon: "list",

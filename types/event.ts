@@ -1,6 +1,9 @@
 export interface Event {
-  id: string
+  event_id: string // varchar(20) in the database
   name: string
-  isActive: boolean
-  createdAt: string
+  description?: string
+  is_active: boolean
+  created_at: string
+  updated_at?: string
+  created_by?: string
 }

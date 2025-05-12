@@ -1,15 +1,15 @@
-import type { Metadata } from "next"
 import EventManagement from "@/components/events/event-management"
-
-export const metadata: Metadata = {
-  title: "Event Management",
-  description: "Create and manage events for client quotations",
-}
 
 export default function EventsPage() {
   return (
-    <div className="container py-10">
-      <h1 className="text-3xl font-bold tracking-tight mb-6">Event Management</h1>
+    <div className="container mx-auto py-6 space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Events</h1>
+        <p className="text-muted-foreground mt-2">
+          Manage your events and their active status.
+        </p>
+      </div>
+      
       <EventManagement />
     </div>
   )

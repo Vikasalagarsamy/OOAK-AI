@@ -1,15 +1,25 @@
-/**
- * Generates a unique event ID with a prefix 'EVT-' followed by a random alphanumeric string
- */
-export function generateEventId(): string {
-  const prefix = "EVT-"
-  const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-  const length = 6
-  let result = ""
+import { v4 as uuidv4 } from "uuid"
 
-  for (let i = 0; i < length; i++) {
-    result += characters.charAt(Math.floor(Math.random() * characters.length))
-  }
+// Generate a proper UUID for the database
+export const generateEventId = (): string => {
+  return uuidv4()
+}
 
-  return `${prefix}${result}`
+// Format date for display
+export const formatEventDate = (dateString: string): string => {
+  const date = new Date(dateString)
+  return date.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+}
+
+// Generate a display ID for events (for UI purposes only)
+export const generateEventDisplayId = (id: string): string => {
+  // Take the first 8 characters of the UUID
+  const shortId = id.substring(0, 8).toUpperCase()
+  return `EVT-${shortId}`
 }
