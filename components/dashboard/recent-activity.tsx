@@ -4,9 +4,10 @@ import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { createClient } from "@/lib/supabase"
 import type { ActivityType } from "@/services/activity-service"
 import { useToast } from "@/components/ui/use-toast"
+import { Skeleton } from "@/components/ui/skeleton"
+import { AlertCircle } from "lucide-react"
 
 interface ActivityItem {
   id: string
@@ -31,84 +32,11 @@ export function RecentActivity({ activities: initialActivities }: RecentActivity
   const { toast } = useToast()
 
   useEffect(() => {
-    // Initialize with the server-provided activities
-    setActivities(initialActivities || [])
-
-    // Set up real-time subscription
-    let supabase
-    try {
-      supabase = createClient()
-    } catch (err) {
-      console.error("Failed to create Supabase client:", err)
-      setError("Could not connect to the database for real-time updates")
-      toast({
-        title: "Connection Error",
-        description: "Could not connect to the database for real-time updates",
-        variant: "destructive",
-      })
-      return
+    // Update activities when initialActivities change
+    if (initialActivities && initialActivities.length > 0) {
+      setActivities(initialActivities)
     }
-
-    setLoading(true)
-
-    // Subscribe to new activities
-    try {
-      const subscription = supabase
-        .channel("activities-changes")
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "activities",
-          },
-          (payload) => {
-            try {
-              // Format the new activity
-              const newActivity = {
-                id: payload.new.id,
-                title: `${formatActionType(payload.new.action_type)} ${payload.new.entity_type}`,
-                description: payload.new.description,
-                timestamp: formatTimestamp(payload.new.created_at),
-                type: payload.new.entity_type as ActivityType,
-                user: payload.new.user_name
-                  ? {
-                      name: payload.new.user_name,
-                      initials: getInitials(payload.new.user_name),
-                    }
-                  : undefined,
-              }
-
-              // Add the new activity to the top of the list
-              setActivities((prev) => [newActivity, ...prev.slice(0, 9)])
-            } catch (err) {
-              console.error("Error processing new activity:", err)
-            }
-          },
-        )
-        .subscribe(
-          () => {
-            setLoading(false)
-            setError(null)
-          },
-          (err) => {
-            console.error("Subscription error:", err)
-            setLoading(false)
-            setError("Failed to subscribe to real-time updates")
-          },
-        )
-
-      // Clean up subscription on unmount
-      return () => {
-        subscription.unsubscribe()
-      }
-    } catch (err) {
-      console.error("Error setting up subscription:", err)
-      setLoading(false)
-      setError("Failed to set up real-time updates")
-      return () => {}
-    }
-  }, [initialActivities, toast])
+  }, [initialActivities])
 
   const getActivityIcon = (type?: ActivityItem["type"]) => {
     // Return a default value if type is undefined
@@ -184,7 +112,21 @@ export function RecentActivity({ activities: initialActivities }: RecentActivity
       </CardHeader>
       <CardContent>
         <ScrollArea className="h-[400px] pr-4">
-          {activities && activities.length > 0 ? (
+          {loading && activities.length === 0 ? (
+            <div className="space-y-4">
+              {Array(5)
+                .fill(0)
+                .map((_, i) => (
+                  <div key={i} className="flex items-start space-x-4">
+                    <Skeleton className="h-10 w-10 rounded-full" />
+                    <div className="space-y-2 flex-1">
+                      <Skeleton className="h-4 w-3/4" />
+                      <Skeleton className="h-3 w-1/2" />
+                    </div>
+                  </div>
+                ))}
+            </div>
+          ) : activities && activities.length > 0 ? (
             <div className="space-y-6">
               {activities.map((activity) => (
                 <div key={activity.id} className="flex items-start space-x-4">
@@ -210,8 +152,10 @@ export function RecentActivity({ activities: initialActivities }: RecentActivity
               ))}
             </div>
           ) : (
-            <div className="flex items-center justify-center h-full">
+            <div className="flex flex-col items-center justify-center h-[300px] text-center">
+              <AlertCircle className="h-8 w-8 text-muted-foreground mb-2" />
               <p className="text-muted-foreground">No recent activities</p>
+              <p className="text-xs text-muted-foreground mt-1">Activities will appear here as they occur</p>
             </div>
           )}
         </ScrollArea>

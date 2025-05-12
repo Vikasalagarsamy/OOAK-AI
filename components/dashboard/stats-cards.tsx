@@ -2,6 +2,7 @@
 
 import { CreditCard, Building2, Users, Briefcase } from "lucide-react"
 import { StatsCard } from "@/components/dashboard/stats-card"
+import { Skeleton } from "@/components/ui/skeleton"
 
 interface StatItem {
   count: number
@@ -50,6 +51,22 @@ export function StatsCards({ stats, loading = false }: StatsCardsProps) {
       trend: stats.clients.trend,
     },
   ]
+
+  if (loading) {
+    return (
+      <>
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="rounded-lg border bg-card text-card-foreground shadow-sm">
+            <div className="p-6 flex flex-col space-y-2">
+              <Skeleton className="h-5 w-24" />
+              <Skeleton className="h-8 w-16" />
+              <Skeleton className="h-4 w-20" />
+            </div>
+          </div>
+        ))}
+      </>
+    )
+  }
 
   return (
     <>

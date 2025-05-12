@@ -31,32 +31,39 @@ export function RealTimeDepartmentChart({ initialData }: RealTimeDepartmentChart
   const [error, setError] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date())
   const [autoRefresh, setAutoRefresh] = useState(true)
+  const [updatedDepartment, setUpdatedDepartment] = useState<string | null>(null)
 
   // Function to refresh data
   const refreshData = async () => {
     try {
       setLoading(true)
       setError(null)
-      console.log("Refreshing department data...")
 
       const freshData = await getDepartmentDistribution().catch((err) => {
         console.error("Error in getDepartmentDistribution:", err)
         throw new Error("Failed to fetch department data")
       })
 
-      console.log("Received fresh department data:", freshData)
-
       if (freshData && freshData.length > 0) {
+        // Check which department changed
+        const changedDept = freshData.find((dept, i) => {
+          const oldDept = data[i]
+          return oldDept && oldDept.department === dept.department && oldDept.count !== dept.count
+        })
+
+        if (changedDept) {
+          setUpdatedDepartment(changedDept.department)
+          setTimeout(() => setUpdatedDepartment(null), 2000)
+        }
+
         setData(freshData)
         setLastUpdated(new Date())
       } else {
         setError("No department data returned")
-        console.error("No department data returned from refresh")
       }
     } catch (error) {
       console.error("Failed to refresh department data:", error)
       setError("Failed to load department data. Using sample data.")
-      // Keep using existing data, don't clear it
     } finally {
       setLoading(false)
     }
@@ -128,12 +135,19 @@ export function RealTimeDepartmentChart({ initialData }: RealTimeDepartmentChart
         data.map((item, i) => (
           <div key={i} className="space-y-1">
             <div className="flex items-center justify-between text-sm">
-              <div>{item.department}</div>
-              <div className="font-medium">{item.count}</div>
+              <div className={updatedDepartment === item.department ? "text-green-600 font-medium" : ""}>
+                {item.department}
+                {updatedDepartment === item.department && <span className="ml-1 text-xs animate-pulse">●</span>}
+              </div>
+              <div className={`font-medium ${updatedDepartment === item.department ? "text-green-600" : ""}`}>
+                {item.count}
+              </div>
             </div>
             <div className="rounded-full bg-muted h-2 w-full overflow-hidden">
               <div
-                className="bg-primary h-full transition-all duration-500 ease-in-out"
+                className={`h-full transition-all duration-500 ease-in-out ${
+                  updatedDepartment === item.department ? "bg-green-500" : "bg-primary"
+                }`}
                 style={{ width: `${maxCount ? (item.count / maxCount) * 100 : 0}%` }}
               ></div>
             </div>
