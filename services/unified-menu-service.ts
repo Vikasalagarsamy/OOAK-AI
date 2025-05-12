@@ -61,46 +61,186 @@ export async function getMenuForCurrentUser(): Promise<MenuItemWithPermission[]>
       isAdmin: user.isAdmin,
     })
 
-    // Use our database function to get menu permissions for the user
+    // Use direct queries instead of RPC functions to avoid UUID issues
     const supabase = createClient()
-    const { data, error } = await supabase.rpc("get_user_menu_permissions", {
-      p_user_id: user.id,
-    })
 
-    if (error) {
-      console.error("Error fetching menu permissions:", error)
+    try {
+      // First, get all menu items
+      const { data: menuItems, error: menuError } = await supabase
+        .from("menu_items")
+        .select("id, parent_id, name, path, icon, is_visible, sort_order")
+        .order("sort_order", { ascending: true })
+
+      if (menuError) {
+        console.error("Error fetching menu items:", menuError)
+        return []
+      }
+
+      // Then, get permissions for the user's role
+      const roleId = user.roleId
+      if (!roleId) {
+        console.error("User has no role ID")
+        return []
+      }
+
+      const { data: permissions, error: permError } = await supabase
+        .from("role_menu_permissions")
+        .select("menu_item_id, can_view, can_add, can_edit, can_delete")
+        .eq("role_id", roleId)
+
+      if (permError) {
+        console.error("Error fetching role permissions:", permError)
+        return []
+      }
+
+      // Create a map of permissions for quick lookup
+      const permissionsMap = new Map()
+      permissions.forEach((perm) => {
+        permissionsMap.set(perm.menu_item_id, {
+          canView: perm.can_view,
+          canAdd: perm.can_add,
+          canEdit: perm.can_edit,
+          canDelete: perm.can_delete,
+        })
+      })
+
+      // Combine menu items with permissions
+      const menuWithPermissions = menuItems.map((item) => {
+        const itemPermissions = permissionsMap.get(item.id) || {
+          canView: false,
+          canAdd: false,
+          canEdit: false,
+          canDelete: false,
+        }
+
+        return {
+          id: item.id,
+          parentId: item.parent_id,
+          name: item.name,
+          path: item.path,
+          icon: item.icon,
+          isVisible: item.is_visible,
+          sortOrder: item.sort_order || 0,
+          permissions: itemPermissions,
+          children: [],
+        }
+      })
+
+      // Filter out items the user doesn't have permission to view
+      const filteredMenu = menuWithPermissions.filter((item) => {
+        // Admin can see everything
+        if (user.isAdmin) return true
+
+        // Otherwise, check view permission
+        return item.permissions.canView
+      })
+
+      // Build menu tree
+      const menuTree = buildMenuTree(filteredMenu)
+      console.log(`getMenuForCurrentUser: Final menu tree has ${menuTree.length} top-level items`)
+
+      return menuTree
+    } catch (error) {
+      console.error("Error in direct query approach:", error)
+
+      // Last resort fallback - if all else fails, return a basic menu for admins
+      if (user.isAdmin) {
+        console.log("Falling back to basic admin menu")
+        return getBasicAdminMenu()
+      }
+
       return []
     }
-
-    console.log(`getMenuForCurrentUser: Retrieved ${data?.length || 0} menu items with permissions`)
-
-    // Convert the data to our expected format
-    const menuWithPermissions = (data || []).map((item) => ({
-      id: item.menu_item_id,
-      parentId: item.parent_id,
-      name: item.menu_name,
-      path: item.menu_path,
-      icon: item.icon,
-      isVisible: item.is_visible,
-      sortOrder: item.sort_order || 0,
-      permissions: {
-        canView: item.can_view,
-        canAdd: item.can_add,
-        canEdit: item.can_edit,
-        canDelete: item.can_delete,
-      },
-      children: [],
-    }))
-
-    // Build menu tree
-    const menuTree = buildMenuTree(menuWithPermissions)
-    console.log(`getMenuForCurrentUser: Final menu tree has ${menuTree.length} top-level items`)
-
-    return menuTree
   } catch (error) {
     console.error("Error getting menu for current user:", error)
-    throw error
+    return []
   }
+}
+
+// Fallback function to provide a basic menu for admins
+function getBasicAdminMenu(): MenuItemWithPermission[] {
+  return [
+    {
+      id: 1,
+      parentId: null,
+      name: "Dashboard",
+      path: "/dashboard",
+      icon: "home",
+      isVisible: true,
+      sortOrder: 10,
+      permissions: {
+        canView: true,
+        canAdd: true,
+        canEdit: true,
+        canDelete: true,
+      },
+      children: [],
+    },
+    {
+      id: 2,
+      parentId: null,
+      name: "Organization",
+      path: "/organization",
+      icon: "building",
+      isVisible: true,
+      sortOrder: 20,
+      permissions: {
+        canView: true,
+        canAdd: true,
+        canEdit: true,
+        canDelete: true,
+      },
+      children: [],
+    },
+    {
+      id: 3,
+      parentId: null,
+      name: "People",
+      path: "/people",
+      icon: "users",
+      isVisible: true,
+      sortOrder: 30,
+      permissions: {
+        canView: true,
+        canAdd: true,
+        canEdit: true,
+        canDelete: true,
+      },
+      children: [],
+    },
+    {
+      id: 4,
+      parentId: null,
+      name: "Sales",
+      path: "/sales",
+      icon: "dollar-sign",
+      isVisible: true,
+      sortOrder: 40,
+      permissions: {
+        canView: true,
+        canAdd: true,
+        canEdit: true,
+        canDelete: true,
+      },
+      children: [],
+    },
+    {
+      id: 5,
+      parentId: null,
+      name: "Admin",
+      path: "/admin",
+      icon: "settings",
+      isVisible: true,
+      sortOrder: 100,
+      permissions: {
+        canView: true,
+        canAdd: true,
+        canEdit: true,
+        canDelete: true,
+      },
+      children: [],
+    },
+  ]
 }
 
 // Helper function to build a nested menu tree

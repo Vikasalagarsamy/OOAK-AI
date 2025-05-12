@@ -1,4 +1,6 @@
 import { createClient as supabaseCreateClient } from "@supabase/supabase-js"
+import type { Database } from "@/types/supabase"
+import { createClient } from "@supabase/supabase-js"
 
 // Define types for better type safety
 type SupabaseClient = ReturnType<typeof supabaseCreateClient>
@@ -106,7 +108,7 @@ export function createBasicClient(): SupabaseClient {
 export const supabase = typeof window === "undefined" ? getSupabaseServer() : getSupabaseBrowser()
 
 // Legacy function for backward compatibility
-export function createClient() {
+export function createClientFunction() {
   // For server-side use a basic client without auth overrides to avoid JWT issues
   if (typeof window === "undefined") {
     return createBasicClient()
@@ -114,4 +116,21 @@ export function createClient() {
 
   // For client-side use the browser client
   return getSupabaseBrowser()
+}
+
+// Create a singleton Supabase client for client-side usage
+let supabaseClient: ReturnType<typeof createClient<Database>> | null = null
+
+export const getSupabaseClient = () => {
+  if (supabaseClient) return supabaseClient
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error("Missing Supabase environment variables")
+  }
+
+  supabaseClient = createClient<Database>(supabaseUrl, supabaseAnonKey)
+  return supabaseClient
 }

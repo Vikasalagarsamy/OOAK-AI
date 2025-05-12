@@ -1,80 +1,51 @@
 import type React from "react"
 import { Suspense } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { getDashboardStats } from "@/services/dashboard-service"
 import { Users, ArrowUpRight, ArrowDownRight } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import Link from "next/link"
-import { getRecentActivities } from "@/services/activity-service"
-import { getCurrentUser } from "@/actions/auth-actions"
-import { redirect } from "next/navigation"
-import { DashboardMenu } from "@/components/dashboard/dashboard-menu"
+import { StatsCards } from "@/components/dashboard/stats-cards"
+import { ChartCard } from "@/components/dashboard/chart-card"
+import { QuickActions } from "@/components/dashboard/quick-actions"
+import { RecentActivity } from "@/components/dashboard/recent-activity"
+import { BranchDistributionChart } from "@/components/dashboard/branch-distribution-chart"
+import { ProtectedPage } from "@/components/protected-page"
 
 export const revalidate = 60 // Revalidate this page every 60 seconds
 
-export default async function DashboardPage() {
-  const user = await getCurrentUser()
-
-  if (!user) {
-    redirect("/login?reason=unauthenticated")
-  }
-
-  // Fetch dashboard data with error handling
-  let dashboardData
-  let activities = []
-
-  try {
-    dashboardData = await getDashboardStats()
-  } catch (error) {
-    console.error("Error loading dashboard data:", error)
-    // Set default data
-    dashboardData = {
-      stats: {
-        companies: { count: 0, trend: { isPositive: true, value: 0 } },
-        branches: { count: 0, trend: { isPositive: true, value: 0 } },
-        employees: { count: 0, trend: { isPositive: true, value: 0 } },
-        clients: { count: 0, trend: { isPositive: true, value: 0 } },
-      },
-      employeesByDepartment: [],
-      branchesByCompany: [
-        { company: "Acme Corp", count: 5 },
-        { company: "TechCorp", count: 3 },
-        { company: "Global Industries", count: 7 },
-        { company: "Startup Inc", count: 1 },
-        { company: "Enterprise Ltd", count: 4 },
-      ],
-      employeeGrowth: [
-        { month: "Jan", count: 42 },
-        { month: "Feb", count: 47 },
-        { month: "Mar", count: 53 },
-        { month: "Apr", count: 58 },
-        { month: "May", count: 62 },
-        { month: "Jun", count: 68 },
-      ],
-      recentActivities: [],
-    }
-  }
-
-  try {
-    activities = await getRecentActivities(5)
-  } catch (error) {
-    console.error("Error loading activities:", error)
-    activities = []
-  }
-
+export default function DashboardPage() {
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground">Welcome to your dashboard. Here's a quick overview of your system.</p>
+    <ProtectedPage>
+      <div className="p-6 space-y-6">
+        <h1 className="text-3xl font-bold">Dashboard</h1>
+
+        <Suspense fallback={<div>Loading stats...</div>}>
+          <StatsCards />
+        </Suspense>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Suspense fallback={<div>Loading chart...</div>}>
+            <ChartCard />
+          </Suspense>
+
+          <Suspense fallback={<div>Loading distribution...</div>}>
+            <BranchDistributionChart />
+          </Suspense>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="md:col-span-2">
+            <Suspense fallback={<div>Loading activity...</div>}>
+              <RecentActivity />
+            </Suspense>
+          </div>
+
+          <div>
+            <QuickActions />
+          </div>
+        </div>
       </div>
-
-      <Suspense fallback={<DashboardMenuSkeleton />}>
-        <DashboardMenu />
-      </Suspense>
-
-      {/* Additional dashboard content can go here */}
-    </div>
+    </ProtectedPage>
   )
 }
 
