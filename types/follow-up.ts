@@ -1,5 +1,5 @@
 export type FollowUpStatus = "scheduled" | "in_progress" | "completed" | "cancelled" | "missed" | "rescheduled"
-export type ContactMethod = "email" | "phone" | "in_person" | "video_call" | "text_message" | "social_media" | "other"
+export type FollowUpType = "email" | "phone" | "in_person" | "video_call" | "text_message" | "social_media" | "other"
 export type Priority = "low" | "medium" | "high" | "urgent"
 
 export interface FollowUp {
@@ -7,7 +7,7 @@ export interface FollowUp {
   lead_id: number
   scheduled_at: string
   completed_at: string | null
-  contact_method: ContactMethod
+  followup_type: FollowUpType
   interaction_summary: string | null
   status: FollowUpStatus
   outcome: string | null
@@ -36,7 +36,7 @@ export interface Lead {
 export interface FollowUpFormData {
   lead_id: number
   scheduled_at: string
-  contact_method: ContactMethod
+  followup_type: FollowUpType
   notes?: string
   priority: Priority
   interaction_summary?: string

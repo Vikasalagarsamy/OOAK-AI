@@ -22,7 +22,7 @@ import { toast } from "@/components/ui/use-toast"
 const formSchema = z.object({
   lead_id: z.number().positive("Lead ID is required"),
   scheduled_at: z.string().min(1, "Scheduled date and time is required"),
-  contact_method: z.enum([
+  followup_type: z.enum([
     "email",
     "phone",
     "in_person",
@@ -51,7 +51,7 @@ export function ScheduleFollowUpForm({ leadId, leadName, onSuccess }: ScheduleFo
     defaultValues: {
       lead_id: leadId,
       scheduled_at: "",
-      contact_method: "phone",
+      followup_type: "phone",
       notes: "",
       priority: "medium",
       interaction_summary: "",
@@ -174,14 +174,14 @@ export function ScheduleFollowUpForm({ leadId, leadName, onSuccess }: ScheduleFo
 
           <FormField
             control={form.control}
-            name="contact_method"
+            name="followup_type"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Contact Method</FormLabel>
+                <FormLabel>Follow-up Type</FormLabel>
                 <Select onValueChange={field.onChange} defaultValue={field.value}>
                   <FormControl>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select a contact method" />
+                      <SelectValue placeholder="Select a follow-up type" />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>

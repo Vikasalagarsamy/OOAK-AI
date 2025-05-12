@@ -63,7 +63,7 @@ export function FollowUpDashboard() {
       ].filter((item) => item.value > 0)
     : []
 
-  // Prepare data for contact method chart
+  // Prepare data for follow-up type chart
   const methodData = stats
     ? Object.entries(stats.byMethod).map(([method, count]) => ({
         name: method.charAt(0).toUpperCase() + method.slice(1).replace("_", " "),
@@ -174,8 +174,8 @@ export function FollowUpDashboard() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Contact Methods</CardTitle>
-            <CardDescription>Distribution of follow-ups by contact method</CardDescription>
+            <CardTitle>Follow-up Types</CardTitle>
+            <CardDescription>Distribution of follow-ups by type</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-[300px]">

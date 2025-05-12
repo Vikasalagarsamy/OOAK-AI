@@ -106,7 +106,7 @@ export async function createFollowUp(
     const followUpData = {
       lead_id: formData.lead_id,
       scheduled_at: formData.scheduled_at,
-      contact_method: formData.contact_method,
+      followup_type: formData.followup_type,
       notes: formData.notes || null,
       priority: formData.priority,
       interaction_summary: formData.interaction_summary || null,
@@ -128,7 +128,7 @@ export async function createFollowUp(
       entityType: "follow_up",
       entityId: data[0].id.toString(),
       entityName: `Follow-up for Lead ${lead.lead_number}`,
-      description: `Scheduled a ${formData.contact_method} follow-up for ${new Date(formData.scheduled_at).toLocaleString()}`,
+      description: `Scheduled a ${formData.followup_type} follow-up for ${new Date(formData.scheduled_at).toLocaleString()}`,
       userName: `${currentUser.firstName} ${currentUser.lastName}`,
     })
 
@@ -329,11 +329,11 @@ export async function getFollowUpStats(): Promise<{
     throw new Error("Failed to fetch follow-up statistics")
   }
 
-  // Get counts by contact method
+  // Get counts by followup type
   const { data: methodCounts, error: methodError } = await supabase
     .from("lead_followups")
-    .select("contact_method, count", { count: "exact" })
-    .group("contact_method")
+    .select("followup_type, count", { count: "exact" })
+    .group("followup_type")
 
   if (methodError) {
     console.error("Error fetching follow-up method stats:", methodError)
@@ -367,7 +367,7 @@ export async function getFollowUpStats(): Promise<{
   })
 
   methodCounts?.forEach((item) => {
-    const method = item.contact_method
+    const method = item.followup_type
     const count = Number.parseInt(item.count as unknown as string)
     stats.byMethod[method] = count
   })

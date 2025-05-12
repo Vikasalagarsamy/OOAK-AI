@@ -6,31 +6,30 @@ export async function updateLeadFollowupsTable(): Promise<{ success: boolean; me
   const supabase = createClient()
 
   try {
-    // Execute the SQL to update the lead_followups table
-    const { error } = await supabase
-      .from("")
-      .select(`
-      DO $$
-      BEGIN
+    // Execute the SQL to update the lead_followups table using the correct method
+    const { error } = await supabase.rpc("exec_sql", {
+      sql_string: `
+        DO $$
         BEGIN
-          ALTER TABLE lead_followups 
-          ALTER COLUMN created_by DROP NOT NULL;
-        EXCEPTION WHEN OTHERS THEN
-          RAISE NOTICE 'Error making created_by nullable: %', SQLERRM;
-        END;
-      END $$;
+          BEGIN
+            ALTER TABLE lead_followups 
+            ALTER COLUMN created_by DROP NOT NULL;
+          EXCEPTION WHEN OTHERS THEN
+            RAISE NOTICE 'Error making created_by nullable: %', SQLERRM;
+          END;
+        END $$;
 
-      DO $$
-      BEGIN
+        DO $$
         BEGIN
-          ALTER TABLE lead_followups 
-          ALTER COLUMN created_by TYPE TEXT;
-        EXCEPTION WHEN OTHERS THEN
-          RAISE NOTICE 'Error changing created_by to TEXT: %', SQLERRM;
-        END;
-      END $$;
-    `)
-      .execute()
+          BEGIN
+            ALTER TABLE lead_followups 
+            ALTER COLUMN created_by TYPE TEXT;
+          EXCEPTION WHEN OTHERS THEN
+            RAISE NOTICE 'Error changing created_by to TEXT: %', SQLERRM;
+          END;
+        END $$;
+      `,
+    })
 
     if (error) {
       console.error("Error updating lead_followups table:", error)

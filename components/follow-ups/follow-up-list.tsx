@@ -48,9 +48,9 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { toast } from "@/components/ui/use-toast"
 
 import { getFollowUps, updateFollowUpStatus, deleteFollowUp } from "@/actions/follow-up-actions"
-import type { FollowUpWithLead, FollowUpStatus, ContactMethod } from "@/types/follow-up"
+import type { FollowUpWithLead, FollowUpStatus, FollowUpType } from "@/types/follow-up"
 
-const contactMethodIcons: Record<ContactMethod, React.ReactNode> = {
+const followupTypeIcons: Record<FollowUpType, React.ReactNode> = {
   email: <Mail className="h-4 w-4" />,
   phone: <Phone className="h-4 w-4" />,
   in_person: <Users className="h-4 w-4" />,
@@ -325,8 +325,8 @@ export function FollowUpList() {
                 </div>
 
                 <div className="flex items-center text-sm">
-                  <span className="mr-2">{contactMethodIcons[followUp.contact_method as ContactMethod]}</span>
-                  <span className="capitalize">{followUp.contact_method.replace("_", " ")}</span>
+                  <span className="mr-2">{followupTypeIcons[followUp.followup_type as FollowUpType]}</span>
+                  <span className="capitalize">{followUp.followup_type.replace("_", " ")}</span>
                 </div>
 
                 {followUp.interaction_summary && <p className="text-sm mt-2">{followUp.interaction_summary}</p>}
