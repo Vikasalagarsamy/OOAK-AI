@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { useToast } from "@/components/ui/use-toast"
 import { Loader2, AlertCircle } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { AlternativeSuccessMessage } from "@/components/ui/alternative-success-message"
 
 export default function LoginPage() {
   const [username, setUsername] = useState("")
@@ -19,6 +20,7 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState(false)
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
   const searchParams = useSearchParams()
@@ -66,6 +68,7 @@ export default function LoginPage() {
     setIsLoading(true)
     setError("")
     setSuccess(false)
+    setShowSuccessMessage(false)
     loginAttemptedRef.current = true
 
     if (!username.trim() || !password.trim()) {
@@ -81,16 +84,13 @@ export default function LoginPage() {
 
       if (result.success) {
         setSuccess(true)
-        toast({
-          title: "Login successful",
-          description: "Welcome back! Redirecting to dashboard...",
-        })
+        setShowSuccessMessage(true)
 
         // Small delay to ensure cookie is set before redirect
         setTimeout(() => {
           // Use window.location for a full page refresh to ensure proper state
           window.location.href = "/dashboard"
-        }, 1000)
+        }, 3000)
       } else {
         setError(result.error || "Authentication failed")
         toast({
@@ -188,6 +188,17 @@ export default function LoginPage() {
           </CardFooter>
         </Card>
       </div>
+
+      {/* Alternative Animated Success Message */}
+      <AlternativeSuccessMessage
+        message="Login Successful!"
+        subMessage="Redirecting you to your dashboard..."
+        visible={showSuccessMessage}
+        duration={2800}
+        onClose={() => setShowSuccessMessage(false)}
+        animationStyle="slide"
+        icon="thumbs-up"
+      />
     </div>
   )
 }

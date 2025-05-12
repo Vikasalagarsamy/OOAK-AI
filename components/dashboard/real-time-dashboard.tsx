@@ -71,22 +71,45 @@ export function RealTimeDashboard({ initialData }: { initialData?: any }) {
             {status === "connecting" ? (
               <Skeleton className="h-[300px] w-full" />
             ) : (
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={data.employeeGrowth}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip />
-                  <Line
-                    type="monotone"
-                    dataKey="count"
-                    stroke="#8884d8"
-                    activeDot={{ r: 8 }}
-                    strokeWidth={2}
-                    name="Employees"
-                  />
-                </LineChart>
-              </ResponsiveContainer>
+              <div className="relative">
+                {/* Real-time indicator */}
+                {status === "connected" && (
+                  <div className="absolute top-0 right-0 flex items-center gap-1 text-xs text-green-600 bg-green-50 px-2 py-1 rounded-md z-10">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                    </span>
+                    Live Data
+                  </div>
+                )}
+
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={data.employeeGrowth}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                    <YAxis tick={{ fontSize: 12 }} width={40} />
+                    <Tooltip
+                      formatter={(value) => [`${value} employees`, "Count"]}
+                      labelFormatter={(label) => `Month: ${label}`}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="count"
+                      stroke="#8884d8"
+                      activeDot={{ r: 8 }}
+                      strokeWidth={2}
+                      name="Employees"
+                      isAnimationActive={true}
+                      animationDuration={500}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+
+                {/* Data freshness indicator */}
+                <div className="absolute bottom-0 right-0 text-xs text-muted-foreground bg-background/80 px-2 py-1 rounded-tl-md">
+                  {lastUpdated ? `Updated: ${lastUpdated.toLocaleTimeString()}` : "Waiting for data..."}
+                </div>
+              </div>
             )}
           </CardContent>
         </Card>

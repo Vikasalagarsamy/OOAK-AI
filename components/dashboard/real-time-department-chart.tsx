@@ -9,7 +9,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 type DepartmentData = {
   department: string
   count: number
-  id?: string | number
 }
 
 interface RealTimeDepartmentChartProps {

@@ -6,9 +6,9 @@ export async function getDepartmentDistribution() {
   const supabase = createClient()
 
   try {
-    console.log("Fetching department distribution using fixed RPC function...")
+    console.log("Fetching department distribution using simplified RPC function...")
 
-    // Use our updated RPC function to get accurate department counts
+    // Use our updated RPC function with simplified return structure
     const { data: departmentCounts, error } = await supabase.rpc("get_employee_department_counts")
 
     if (error) {
@@ -19,10 +19,10 @@ export async function getDepartmentDistribution() {
     console.log("Department counts from RPC:", departmentCounts)
 
     // Transform the data into the format expected by the chart
+    // Note: We no longer have department_id in the return value
     const result = departmentCounts.map((item) => ({
       department: item.department_name || "Unknown",
       count: Number(item.employee_count),
-      id: item.department_id,
     }))
 
     // Sort by count descending for better visualization
