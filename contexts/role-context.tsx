@@ -37,6 +37,9 @@ export function RoleProvider({ children }: { children: ReactNode }) {
       console.log(`Filtered menu has ${Object.keys(menu).length} top-level items`)
 
       setFilteredMenu(menu)
+
+      // Store selected role in localStorage for persistence
+      localStorage.setItem("selectedRole", currentRole.id)
     } catch (error) {
       console.error("Error filtering menu:", error)
       // Fallback to full menu structure if filtering fails
@@ -44,23 +47,16 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     }
   }, [currentRole])
 
-  // In a real app, you would fetch the user's role from the server here
+  // On initial load, check if there's a saved role in localStorage
   useEffect(() => {
-    const fetchUserRole = async () => {
-      try {
-        // This would be an API call in a real application
-        // For now, we'll simulate it with a timeout
-        setTimeout(() => {
-          // Start with admin role for testing
-          setCurrentRole(adminRole)
-        }, 500)
-      } catch (error) {
-        console.error("Error fetching user role:", error)
+    const savedRoleId = localStorage.getItem("selectedRole")
+    if (savedRoleId) {
+      const savedRole = DEFAULT_ROLES.find((role) => role.id === savedRoleId)
+      if (savedRole) {
+        setCurrentRole(savedRole)
       }
     }
-
-    fetchUserRole()
-  }, [adminRole])
+  }, [])
 
   return (
     <RoleContext.Provider

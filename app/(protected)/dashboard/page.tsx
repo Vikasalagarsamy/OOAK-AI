@@ -1,53 +1,49 @@
+import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Activity, Users, DollarSign, Calendar } from "lucide-react"
 
 export default function DashboardPage() {
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-bold">Dashboard</h1>
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+        <p className="text-muted-foreground">Welcome to the Company Branch Manager dashboard.</p>
+      </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Total Employees</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">245</div>
-            <p className="text-xs text-muted-foreground">+12% from last month</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Active Leads</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">132</div>
-            <p className="text-xs text-muted-foreground">+4% from last week</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Revenue</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">$45,231</div>
-            <p className="text-xs text-muted-foreground">+20.1% from last month</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Upcoming Events</CardTitle>
-            <Calendar className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Companies</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">12</div>
-            <p className="text-xs text-muted-foreground">Next: Photography Workshop</p>
+            <p className="text-xs text-muted-foreground">+2 from last month</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Branches</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">28</div>
+            <p className="text-xs text-muted-foreground">+4 from last month</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Employees</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">573</div>
+            <p className="text-xs text-muted-foreground">+18 from last month</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Active Leads</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">42</div>
+            <p className="text-xs text-muted-foreground">+8 from last week</p>
           </CardContent>
         </Card>
       </div>
@@ -56,46 +52,48 @@ export default function DashboardPage() {
         <Card>
           <CardHeader>
             <CardTitle>Recent Activities</CardTitle>
-            <CardDescription>Latest activities across the platform</CardDescription>
+            <CardDescription>Latest activities across the organization</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div className="flex items-center">
-                <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
-                <div className="flex-1">
-                  <p className="text-sm">New lead created by John Doe</p>
-                  <p className="text-xs text-muted-foreground">2 hours ago</p>
-                </div>
+              <div className="border-b pb-2">
+                <p className="text-sm font-medium">New employee added</p>
+                <p className="text-xs text-muted-foreground">2 hours ago</p>
               </div>
-              <div className="flex items-center">
-                <div className="w-2 h-2 bg-blue-500 rounded-full mr-2"></div>
-                <div className="flex-1">
-                  <p className="text-sm">Client meeting scheduled with ABC Corp</p>
-                  <p className="text-xs text-muted-foreground">Yesterday</p>
-                </div>
+              <div className="border-b pb-2">
+                <p className="text-sm font-medium">New lead created</p>
+                <p className="text-xs text-muted-foreground">4 hours ago</p>
               </div>
-              <div className="flex items-center">
-                <div className="w-2 h-2 bg-yellow-500 rounded-full mr-2"></div>
-                <div className="flex-1">
-                  <p className="text-sm">New employee onboarded: Jane Smith</p>
-                  <p className="text-xs text-muted-foreground">2 days ago</p>
-                </div>
+              <div className="border-b pb-2">
+                <p className="text-sm font-medium">Branch updated</p>
+                <p className="text-xs text-muted-foreground">Yesterday</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium">New client added</p>
+                <p className="text-xs text-muted-foreground">Yesterday</p>
               </div>
             </div>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader>
             <CardTitle>Quick Actions</CardTitle>
             <CardDescription>Frequently used actions</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 gap-2">
-              <button className="p-2 bg-muted rounded-md hover:bg-muted/80 text-sm text-left">Create New Lead</button>
-              <button className="p-2 bg-muted rounded-md hover:bg-muted/80 text-sm text-left">Add Employee</button>
-              <button className="p-2 bg-muted rounded-md hover:bg-muted/80 text-sm text-left">Schedule Event</button>
-              <button className="p-2 bg-muted rounded-md hover:bg-muted/80 text-sm text-left">Generate Report</button>
+            <div className="space-y-2">
+              <Button className="w-full justify-start" variant="outline" asChild>
+                <a href="/people/employees/add">Add New Employee</a>
+              </Button>
+              <Button className="w-full justify-start" variant="outline" asChild>
+                <a href="/sales/create-lead">Create New Lead</a>
+              </Button>
+              <Button className="w-full justify-start" variant="outline" asChild>
+                <a href="/organization/clients">Manage Clients</a>
+              </Button>
+              <Button className="w-full justify-start" variant="outline" asChild>
+                <a href="/reports">View Reports</a>
+              </Button>
             </div>
           </CardContent>
         </Card>

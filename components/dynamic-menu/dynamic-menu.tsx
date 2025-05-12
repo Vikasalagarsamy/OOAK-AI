@@ -6,15 +6,22 @@ import { DesktopMenu } from "./desktop-menu"
 import { MobileMenu } from "./mobile-menu"
 import { useMenu } from "@/hooks/use-menu"
 import { Button } from "@/components/ui/button"
+import { useRole } from "@/contexts/role-context"
 
 export function DynamicMenu({ className }: { className?: string }) {
   const { refreshMenu } = useMenu()
+  const { currentRole } = useRole()
   const [isRefreshing, setIsRefreshing] = useState(false)
 
   // Add console log to check if component is rendering
   useEffect(() => {
     console.log("DynamicMenu component mounted")
   }, [])
+
+  // Refresh menu when role changes
+  useEffect(() => {
+    refreshMenu()
+  }, [currentRole, refreshMenu])
 
   const handleRefresh = async () => {
     setIsRefreshing(true)

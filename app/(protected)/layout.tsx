@@ -1,25 +1,38 @@
 import type React from "react"
+import { getCurrentUser } from "@/actions/auth-actions"
+import { redirect } from "next/navigation"
 import { Header } from "@/components/header"
-import { SidebarNavigation } from "@/components/sidebar-navigation"
-import { Breadcrumb } from "@/components/breadcrumb"
-import AuthCheck from "@/components/auth-check"
+import { Breadcrumbs } from "@/components/breadcrumbs"
+import { SimpleSidebar } from "@/components/simple-sidebar"
 import { Toaster } from "@/components/toaster"
 
-export default function ProtectedLayout({
+export default async function ProtectedLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  const user = await getCurrentUser()
+
+  if (!user) {
+    redirect("/login?reason=unauthenticated")
+  }
+
   return (
     <div className="min-h-screen flex flex-col">
-      <AuthCheck />
       <Header />
       <div className="flex flex-1 overflow-hidden">
-        <SidebarNavigation />
-        <main className="flex-1 overflow-auto p-6">
-          <Breadcrumb />
-          {children}
-        </main>
+        {/* Sidebar navigation - always visible on desktop */}
+        <div className="hidden md:block w-64 border-r bg-background overflow-auto">
+          <SimpleSidebar />
+        </div>
+
+        {/* Main content area */}
+        <div className="flex-1 overflow-auto">
+          <div className="p-6">
+            <Breadcrumbs />
+            <main>{children}</main>
+          </div>
+        </div>
       </div>
       <Toaster />
     </div>

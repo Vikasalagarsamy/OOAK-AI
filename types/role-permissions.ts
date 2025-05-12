@@ -8,8 +8,8 @@ export interface Role {
   id: string
   name: string
   description: string
-  permissions: string[] // Array of permission IDs
   isAdmin?: boolean
+  permissions?: string[]
 }
 
 // Default permissions
@@ -106,59 +106,57 @@ export const DEFAULT_PERMISSIONS: Permission[] = [
   },
 ]
 
-// Default roles with their permissions
+// Default roles for testing
 export const DEFAULT_ROLES: Role[] = [
   {
     id: "admin",
     name: "Administrator",
     description: "Full system access",
-    permissions: ["admin.all"],
     isAdmin: true,
+    permissions: ["*"],
   },
   {
     id: "manager",
     name: "Manager",
-    description: "Department and team management",
+    description: "Department management",
     permissions: [
-      "dashboard",
-      "audit",
-      "people.*",
-      "organization.companies",
-      "organization.branches",
-      "organization.clients",
-      "sales.*",
-      "reports.*",
+      "view_dashboard",
+      "manage_employees",
+      "view_reports",
+      "manage_departments",
+      "view_clients",
+      "manage_leads",
     ],
   },
   {
     id: "employee",
     name: "Employee",
-    description: "Basic employee access",
-    permissions: ["dashboard", "people.employees"],
+    description: "Basic access",
+    permissions: ["view_dashboard", "view_profile", "view_tasks"],
   },
   {
     id: "sales",
-    name: "Sales Representative",
-    description: "Sales team member",
-    permissions: ["dashboard", "sales.*", "organization.clients"],
+    name: "Sales Rep",
+    description: "Sales access",
+    permissions: ["view_dashboard", "view_clients", "manage_leads", "view_reports"],
   },
   {
     id: "hr",
-    name: "HR Personnel",
-    description: "Human resources staff",
-    permissions: ["dashboard", "audit", "people.*", "organization.roles"],
+    name: "HR Staff",
+    description: "HR department access",
+    permissions: ["view_dashboard", "manage_employees", "view_departments"],
   },
 ]
 
 // Helper function to check if a user has a specific permission
 export function hasPermission(role: Role, permissionId: string): boolean {
   // Admin has all permissions
-  if (role.isAdmin || role.permissions.includes("admin.all")) {
+  if (role.isAdmin || role.permissions?.includes("*")) {
     return true
   }
 
   // Direct permission match
-  if (role.permissions.includes(permissionId)) {
+  if (role.permissions?.includes(permissionId)) {
     return true
   }
 
@@ -166,7 +164,7 @@ export function hasPermission(role: Role, permissionId: string): boolean {
   const permissionParts = permissionId.split(".")
   if (permissionParts.length > 1) {
     const wildcardPermission = `${permissionParts[0]}.*`
-    return role.permissions.includes(wildcardPermission)
+    return role.permissions?.includes(wildcardPermission)
   }
 
   return false

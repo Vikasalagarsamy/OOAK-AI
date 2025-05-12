@@ -1,227 +1,193 @@
-export interface MenuItem {
-  path: string
-  icon: string
-  subMenus: SubMenuItem[]
-}
+import type { MenuItem } from "@/types/menu"
 
-export interface SubMenuItem {
-  name: string
-  path: string
-  icon: string
-}
-
+// Define the menu structure
 export const menuStructure: Record<string, MenuItem> = {
-  Dashboard: {
-    path: "/dashboard",
+  dashboard: {
+    label: "Dashboard",
     icon: "layout-dashboard",
-    subMenus: [],
+    href: "/dashboard",
   },
-  Organization: {
-    path: "/organization",
-    icon: "building-2",
-    subMenus: [
-      {
-        name: "Companies",
-        path: "/organization/companies",
-        icon: "building",
+  organization: {
+    label: "Organization",
+    icon: "building",
+    submenu: {
+      companies: {
+        label: "Companies",
+        href: "/organization/companies",
       },
-      {
-        name: "Branches",
-        path: "/organization/branches",
-        icon: "git-branch",
+      branches: {
+        label: "Branches",
+        href: "/organization/branches",
       },
-      {
-        name: "Vendors",
-        path: "/organization/vendors",
-        icon: "truck",
+      clients: {
+        label: "Clients",
+        href: "/organization/clients",
       },
-      {
-        name: "Suppliers",
-        path: "/organization/suppliers",
-        icon: "package",
+      suppliers: {
+        label: "Suppliers",
+        href: "/organization/suppliers",
       },
-      {
-        name: "Clients",
-        path: "/organization/clients",
-        icon: "users",
+      vendors: {
+        label: "Vendors",
+        href: "/organization/vendors",
       },
-      {
-        name: "Roles",
-        path: "/organization/roles",
-        icon: "shield",
+      roles: {
+        label: "Roles",
+        href: "/organization/roles",
       },
-      {
-        name: "User Accounts",
-        path: "/organization/user-accounts",
-        icon: "user-cog",
+      "user-accounts": {
+        label: "User Accounts",
+        href: "/organization/user-accounts",
       },
-      {
-        name: "Account Creation",
-        path: "/organization/account-creation",
-        icon: "user-plus",
+      "account-creation": {
+        label: "Account Creation",
+        href: "/organization/account-creation",
       },
-    ],
+    },
   },
-  People: {
-    path: "/people",
+  people: {
+    label: "People",
     icon: "users",
-    subMenus: [
-      {
-        name: "Dashboard",
-        path: "/people/dashboard",
-        icon: "layout-dashboard",
+    submenu: {
+      dashboard: {
+        label: "Dashboard",
+        href: "/people/dashboard",
       },
-      {
-        name: "Employees",
-        path: "/people/employees",
-        icon: "users",
+      employees: {
+        label: "Employees",
+        href: "/people/employees",
       },
-      {
-        name: "Departments",
-        path: "/people/departments",
-        icon: "building",
+      departments: {
+        label: "Departments",
+        href: "/people/departments",
       },
-      {
-        name: "Designations",
-        path: "/people/designations",
-        icon: "briefcase",
+      designations: {
+        label: "Designations",
+        href: "/people/designations",
       },
-    ],
+    },
   },
-  Sales: {
-    path: "/sales",
-    icon: "trending-up",
-    subMenus: [
-      {
-        name: "My Leads",
-        path: "/sales/my-leads",
-        icon: "briefcase",
+  sales: {
+    label: "Sales",
+    icon: "line-chart",
+    submenu: {
+      dashboard: {
+        label: "Dashboard",
+        href: "/sales",
       },
-      {
-        name: "Create Lead",
-        path: "/sales/create-lead",
-        icon: "user-plus",
+      "create-lead": {
+        label: "Create Lead",
+        href: "/sales/create-lead",
       },
-      {
-        name: "Manage Lead",
-        path: "/sales/manage-lead",
-        icon: "settings",
+      "my-leads": {
+        label: "My Leads",
+        href: "/sales/my-leads",
       },
-      {
-        name: "Unassigned Lead",
-        path: "/sales/unassigned-lead",
-        icon: "briefcase",
+      "unassigned-lead": {
+        label: "Unassigned Leads",
+        href: "/sales/unassigned-lead",
       },
-      {
-        name: "Lead Sources",
-        path: "/sales/lead-sources",
-        icon: "truck",
+      "lead-sources": {
+        label: "Lead Sources",
+        href: "/sales/lead-sources",
       },
-      {
-        name: "Follow Up",
-        path: "/sales/follow-up",
-        icon: "calendar",
+      "follow-up": {
+        label: "Follow Up",
+        href: "/sales/follow-up",
       },
-      {
-        name: "Quotation",
-        path: "/sales/quotation",
-        icon: "file-text",
+      quotation: {
+        label: "Quotation",
+        href: "/sales/quotation",
       },
-      {
-        name: "Order Confirmation",
-        path: "/sales/order-confirmation",
-        icon: "check-circle",
+      "order-confirmation": {
+        label: "Order Confirmation",
+        href: "/sales/order-confirmation",
       },
-      {
-        name: "Rejected Leads",
-        path: "/sales/rejected-leads",
-        icon: "x-circle",
+      "rejected-leads": {
+        label: "Rejected Leads",
+        href: "/sales/rejected-leads",
       },
-    ],
+    },
   },
-  Reports: {
-    path: "/reports",
-    icon: "bar-chart-2",
-    subMenus: [
-      {
-        name: "Lead Sources",
-        path: "/reports/lead-sources",
-        icon: "pie-chart",
+  reports: {
+    label: "Reports",
+    icon: "bar-chart",
+    submenu: {
+      "lead-sources": {
+        label: "Lead Source Analysis",
+        href: "/reports/lead-sources",
       },
-      {
-        name: "Sales Performance",
-        path: "/reports/sales-performance",
-        icon: "trending-up",
+      "conversion-funnel": {
+        label: "Conversion Funnel",
+        href: "/reports/conversion-funnel",
       },
-      {
-        name: "Employee Performance",
-        path: "/reports/employee-performance",
-        icon: "users",
+      "team-performance": {
+        label: "Team Performance",
+        href: "/reports/team-performance",
       },
-    ],
+      "trend-analysis": {
+        label: "Trend Analysis",
+        href: "/reports/trend-analysis",
+      },
+      "custom-reports": {
+        label: "Custom Reports",
+        href: "/reports/custom-reports",
+      },
+    },
   },
-  Admin: {
-    path: "/admin",
-    icon: "settings",
-    subMenus: [
-      {
-        name: "Menu & Role Permissions",
-        path: "/admin/menu-permissions",
-        icon: "lock",
-      },
-      // Removed all other Admin sub-menu items as requested
-    ],
-  },
-  "Event Coordination": {
-    path: "/event-coordination",
+  "event-coordination": {
+    label: "Event Coordination",
     icon: "calendar",
-    subMenus: [
-      {
-        name: "Events Dashboard",
-        path: "/event-coordination/dashboard",
-        icon: "layout-dashboard",
+    submenu: {
+      dashboard: {
+        label: "Events Dashboard",
+        href: "/events/dashboard",
       },
-      {
-        name: "Event Calendar",
-        path: "/event-coordination/calendar",
-        icon: "calendar",
+      calendar: {
+        label: "Event Calendar",
+        href: "/events/calendar",
       },
-      {
-        name: "Events",
-        path: "/events",
-        icon: "calendar",
+      events: {
+        label: "Events",
+        href: "/events",
       },
-      {
-        name: "Event Types",
-        path: "/event-coordination/event-types",
-        icon: "list",
+      "event-types": {
+        label: "Event Types",
+        href: "/events/types",
       },
-      {
-        name: "Venues",
-        path: "/event-coordination/venues",
-        icon: "map-pin",
+      venues: {
+        label: "Venues",
+        href: "/events/venues",
       },
-      {
-        name: "Staff Assignment",
-        path: "/event-coordination/staff-assignment",
-        icon: "users",
+      "staff-assignment": {
+        label: "Staff Assignment",
+        href: "/events/staff-assignment",
       },
-    ],
+    },
   },
-  Audit: {
-    path: "/audit",
+  audit: {
+    label: "Audit",
     icon: "clipboard-list",
-    subMenus: [
-      {
-        name: "Activity Logs",
-        path: "/audit/activity-logs",
-        icon: "list",
+    submenu: {
+      "activity-logs": {
+        label: "Activity Logs",
+        href: "/audit",
       },
-      {
-        name: "Employee Audit",
-        path: "/audit/employee",
-        icon: "user-check",
+      "employee-audit": {
+        label: "Employee Audit",
+        href: "/audit/employee",
       },
-    ],
+    },
+  },
+  admin: {
+    label: "Admin",
+    icon: "settings",
+    submenu: {
+      "menu-permissions": {
+        label: "Menu & Role Permissions",
+        href: "/admin/menu-permissions-manager",
+      },
+      // All other Admin menu items have been removed as requested
+    },
   },
 }
