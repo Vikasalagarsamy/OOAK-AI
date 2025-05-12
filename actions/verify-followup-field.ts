@@ -1,11 +1,32 @@
 "use server"
 
-import { getSupabaseServer } from "@/lib/supabase-client"
+import { createClient } from "@/lib/supabase/server"
 import { addIsTestColumnToFollowups } from "./add-is-test-column"
+import { ensureExecSqlFunction } from "./ensure-exec-sql-function"
 
 export async function verifyFollowupField(leadId: number) {
   try {
-    const supabase = getSupabaseServer()
+    // First ensure the exec_sql function exists
+    const functionResult = await ensureExecSqlFunction()
+    if (!functionResult.success) {
+      return {
+        success: false,
+        message: "Failed to create required database function",
+        details: functionResult.error || "Could not create exec_sql function",
+      }
+    }
+
+    // Then ensure the is_test column exists
+    const columnResult = await addIsTestColumnToFollowups()
+    if (!columnResult.success) {
+      return {
+        success: false,
+        message: "Failed to prepare database",
+        details: columnResult.error || "Could not add required columns",
+      }
+    }
+
+    const supabase = createClient()
 
     // Check if the lead exists
     const { data: leadData, error: leadError } = await supabase
@@ -27,16 +48,6 @@ export async function verifyFollowupField(leadId: number) {
         success: false,
         message: "Lead not found",
         details: `No lead found with ID ${leadId}`,
-      }
-    }
-
-    // Ensure the is_test column exists
-    const columnResult = await addIsTestColumnToFollowups()
-    if (!columnResult.success) {
-      return {
-        success: false,
-        message: "Failed to prepare database",
-        details: columnResult.error || "Could not add is_test column",
       }
     }
 

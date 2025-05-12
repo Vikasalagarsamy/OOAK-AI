@@ -1,54 +1,109 @@
 "use server"
 
-import { getSupabaseServer } from "@/lib/supabase-client"
-import fs from "fs"
-import path from "path"
+import { createClient } from "@/lib/supabase/server"
+import { ensureExecSqlFunction } from "./ensure-exec-sql-function"
 
 export async function addIsTestColumnToFollowups() {
   try {
-    const supabase = getSupabaseServer()
+    // First, ensure the exec_sql function exists
+    const functionResult = await ensureExecSqlFunction()
+    if (!functionResult.success) {
+      return functionResult
+    }
 
-    // Read the SQL file
-    const sqlPath = path.join(process.cwd(), "sql", "add-is-test-column-to-followups.sql")
-    const sql = fs.existsSync(sqlPath)
-      ? fs.readFileSync(sqlPath, "utf8")
-      : `
-        DO $$
-        BEGIN
-            IF NOT EXISTS (
-                SELECT 1
-                FROM information_schema.columns
-                WHERE table_name = 'lead_followups'
-                AND column_name = 'is_test'
-            ) THEN
-                ALTER TABLE lead_followups ADD COLUMN is_test BOOLEAN DEFAULT FALSE;
-                CREATE INDEX idx_lead_followups_is_test ON lead_followups(is_test);
-            END IF;
-        END $$;
-      `
+    const supabase = createClient()
 
-    // Execute the SQL
-    const { error } = await supabase.rpc("exec_sql", { sql_query: sql })
+    // Check if the column already exists
+    const { data: columnExists, error: checkError } = await supabase.rpc("column_exists", {
+      table_name: "lead_followups",
+      column_name: "is_test",
+    })
 
-    if (error) {
-      console.error("Error adding is_test column:", error)
+    if (checkError) {
+      // If the column_exists function doesn't exist, we need to create it
+      if (checkError.message.includes("function") && checkError.message.includes("does not exist")) {
+        // Create the column_exists function
+        const createColumnExistsFunctionSql = `
+          CREATE OR REPLACE FUNCTION column_exists(table_name text, column_name text)
+          RETURNS boolean AS $$
+          DECLARE
+            exists_bool boolean;
+          BEGIN
+            SELECT EXISTS (
+              SELECT 1
+              FROM information_schema.columns
+              WHERE table_name = $1
+              AND column_name = $2
+            ) INTO exists_bool;
+            
+            RETURN exists_bool;
+          END;
+          $$ LANGUAGE plpgsql;
+        `
+
+        const { error: createFunctionError } = await supabase.query(createColumnExistsFunctionSql)
+
+        if (createFunctionError) {
+          return {
+            success: false,
+            error: `Failed to create column_exists function: ${createFunctionError.message}`,
+          }
+        }
+
+        // Now check if the column exists using direct query
+        const { data: columnCheckData, error: directCheckError } = await supabase
+          .from("information_schema.columns")
+          .select("column_name")
+          .eq("table_name", "lead_followups")
+          .eq("column_name", "is_test")
+          .maybeSingle()
+
+        if (directCheckError) {
+          return {
+            success: false,
+            error: `Failed to check if column exists: ${directCheckError.message}`,
+          }
+        }
+
+        if (columnCheckData?.column_name === "is_test") {
+          return { success: true }
+        }
+      } else {
+        return {
+          success: false,
+          error: `Failed to check if column exists: ${checkError.message}`,
+        }
+      }
+    } else if (columnExists) {
+      // Column already exists, no need to add it
+      return { success: true }
+    }
+
+    // Add the is_test column
+    const addColumnSql = `
+      ALTER TABLE lead_followups 
+      ADD COLUMN IF NOT EXISTS is_test BOOLEAN DEFAULT FALSE;
+      
+      CREATE INDEX IF NOT EXISTS idx_lead_followups_is_test 
+      ON lead_followups(is_test);
+    `
+
+    // Execute the SQL using direct query
+    const { error: alterError } = await supabase.query(addColumnSql)
+
+    if (alterError) {
       return {
         success: false,
-        message: "Failed to add is_test column",
-        error: error.message,
+        error: `Failed to add is_test column: ${alterError.message}`,
       }
     }
 
-    return {
-      success: true,
-      message: "Successfully added is_test column to lead_followups table",
-    }
-  } catch (error) {
+    return { success: true }
+  } catch (error: any) {
     console.error("Unexpected error adding is_test column:", error)
     return {
       success: false,
-      message: "An unexpected error occurred",
-      error: error instanceof Error ? error.message : String(error),
+      error: `Unexpected error: ${error.message}`,
     }
   }
 }

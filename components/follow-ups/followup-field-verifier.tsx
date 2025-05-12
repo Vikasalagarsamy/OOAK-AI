@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input"
 import { AlertCircle, CheckCircle, Loader2 } from "lucide-react"
 import { verifyFollowupField } from "@/actions/verify-followup-field"
 import { addIsTestColumnToFollowups } from "@/actions/add-is-test-column"
+import { ensureExecSqlFunction } from "@/actions/ensure-exec-sql-function"
 
 export function FollowupFieldVerifier() {
   const [leadId, setLeadId] = useState("")
@@ -22,8 +23,19 @@ export function FollowupFieldVerifier() {
     setResult(null)
 
     try {
-      const columnResult = await addIsTestColumnToFollowups()
+      // First ensure the exec_sql function exists
+      const functionResult = await ensureExecSqlFunction()
+      if (!functionResult.success) {
+        setResult({
+          success: false,
+          message: "Failed to create required database function",
+          details: functionResult.error || "Could not create exec_sql function",
+        })
+        return false
+      }
 
+      // Then add the is_test column
+      const columnResult = await addIsTestColumnToFollowups()
       if (!columnResult.success) {
         setResult({
           success: false,
@@ -36,7 +48,7 @@ export function FollowupFieldVerifier() {
       setResult({
         success: true,
         message: "Database prepared successfully",
-        details: "Required columns have been added to the database",
+        details: "Required functions and columns have been added to the database",
       })
       return true
     } catch (error) {
@@ -65,6 +77,10 @@ export function FollowupFieldVerifier() {
     setResult(null)
 
     try {
+      // First ensure the database is prepared
+      await prepareDatabase()
+
+      // Then run the verification
       const verificationResult = await verifyFollowupField(Number(leadId))
       setResult(verificationResult)
     } catch (error) {
@@ -134,6 +150,15 @@ export function FollowupFieldVerifier() {
               {result.details && (
                 <div className={`mt-2 text-sm ${result.success ? "text-green-700" : "text-red-700"}`}>
                   {result.details}
+                </div>
+              )}
+
+              {!result.success && result.details?.includes("exec_sql") && (
+                <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
+                  <p className="font-medium">Database function missing</p>
+                  <p className="mt-1">
+                    The required database function 'exec_sql' is missing. Click "Prepare Database" to create it.
+                  </p>
                 </div>
               )}
             </div>

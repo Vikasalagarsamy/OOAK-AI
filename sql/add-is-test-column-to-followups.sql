@@ -1,20 +1,28 @@
--- Check if the is_test column exists in the lead_followups table
+-- First, create the column_exists function if it doesn't exist
+CREATE OR REPLACE FUNCTION column_exists(table_name text, column_name text)
+RETURNS boolean AS $$
+DECLARE
+  exists_bool boolean;
+BEGIN
+  SELECT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = $1
+    AND column_name = $2
+  ) INTO exists_bool;
+  
+  RETURN exists_bool;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Then, add the is_test column if it doesn't exist
 DO $$
 BEGIN
-    IF NOT EXISTS (
-        SELECT 1
-        FROM information_schema.columns
-        WHERE table_name = 'lead_followups'
-        AND column_name = 'is_test'
-    ) THEN
-        -- Add the is_test column with a default value of false
-        ALTER TABLE lead_followups ADD COLUMN is_test BOOLEAN DEFAULT FALSE;
-        
-        -- Add an index to improve performance when querying test records
-        CREATE INDEX idx_lead_followups_is_test ON lead_followups(is_test);
-        
-        RAISE NOTICE 'Added is_test column to lead_followups table';
-    ELSE
-        RAISE NOTICE 'is_test column already exists in lead_followups table';
-    END IF;
+  IF NOT column_exists('lead_followups', 'is_test') THEN
+    ALTER TABLE lead_followups 
+    ADD COLUMN is_test BOOLEAN DEFAULT FALSE;
+    
+    CREATE INDEX idx_lead_followups_is_test 
+    ON lead_followups(is_test);
+  END IF;
 END $$;
