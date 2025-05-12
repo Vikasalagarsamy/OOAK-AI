@@ -1,5 +1,7 @@
+import type { VALID_FOLLOWUP_TYPES } from "@/actions/follow-up-actions"
+
 export type FollowUpStatus = "scheduled" | "in_progress" | "completed" | "cancelled" | "missed" | "rescheduled"
-export type FollowUpType = "email" | "phone" | "in_person" | "video_call" | "text_message" | "social_media" | "other"
+export type FollowupType = (typeof VALID_FOLLOWUP_TYPES)[number]
 export type Priority = "low" | "medium" | "high" | "urgent"
 
 export interface FollowUp {
@@ -7,7 +9,7 @@ export interface FollowUp {
   lead_id: number
   scheduled_at: string
   completed_at: string | null
-  followup_type: FollowUpType
+  followup_type: FollowupType
   interaction_summary: string | null
   status: FollowUpStatus
   outcome: string | null
@@ -36,9 +38,9 @@ export interface Lead {
 export interface FollowUpFormData {
   lead_id: number
   scheduled_at: string
-  followup_type: FollowUpType
+  followup_type: FollowupType // Use the constrained type here
   notes?: string
-  priority: Priority
+  priority: string
   interaction_summary?: string
 }
 

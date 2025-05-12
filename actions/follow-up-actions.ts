@@ -6,6 +6,18 @@ import type { FollowUpFormData, FollowUpStatus, FollowUpWithLead } from "@/types
 import { getCurrentUser } from "@/lib/auth-utils"
 import { logActivity } from "@/services/activity-service"
 
+export const VALID_FOLLOWUP_TYPES = [
+  "email",
+  "phone",
+  "in_person",
+  "video_call",
+  "text_message",
+  "social_media",
+  "other",
+] as const
+
+export type FollowupType = (typeof VALID_FOLLOWUP_TYPES)[number]
+
 export async function getFollowUps(filters?: {
   status?: FollowUpStatus | FollowUpStatus[]
   leadId?: number
@@ -82,7 +94,7 @@ export async function getFollowUpById(id: number): Promise<FollowUpWithLead | nu
 
 export async function createFollowUp(
   formData: FollowUpFormData,
-): Promise<{ success: boolean; message: string; id?: number }> {
+): Promise<{ success: boolean; message: string; id?: number; error?: any }> {
   const supabase = createClient()
 
   try {
@@ -103,23 +115,40 @@ export async function createFollowUp(
       return { success: false, message: "Invalid lead ID" }
     }
 
-    const followUpData = {
-      lead_id: formData.lead_id,
-      scheduled_at: formData.scheduled_at,
-      followup_type: formData.followup_type,
-      notes: formData.notes || null,
-      priority: formData.priority,
-      interaction_summary: formData.interaction_summary || null,
-      status: "scheduled" as FollowUpStatus,
-      created_by: currentUser.id,
-      follow_up_required: false,
+    // Validate follow-up type
+    if (!VALID_FOLLOWUP_TYPES.includes(formData.followup_type as FollowupType)) {
+      return {
+        success: false,
+        message: `Invalid follow-up type. Must be one of: ${VALID_FOLLOWUP_TYPES.join(", ")}`,
+      }
     }
 
+    // Ensure proper data types for database insertion
+    const followUpData = {
+      lead_id: Number(formData.lead_id),
+      scheduled_at: new Date(formData.scheduled_at).toISOString(),
+      followup_type: String(formData.followup_type),
+      notes: formData.notes ? String(formData.notes) : null,
+      priority: String(formData.priority),
+      interaction_summary: formData.interaction_summary ? String(formData.interaction_summary) : null,
+      status: "scheduled" as FollowUpStatus,
+      created_by: String(currentUser.id), // Ensure string type for text column
+      follow_up_required: false,
+      next_follow_up_date: null,
+    }
+
+    console.log("Inserting follow-up data:", followUpData)
+
+    // Use direct SQL for debugging purposes
     const { data, error } = await supabase.from("lead_followups").insert(followUpData).select()
 
     if (error) {
       console.error("Error creating follow-up:", error)
-      return { success: false, message: `Failed to create follow-up: ${error.message}` }
+      return {
+        success: false,
+        message: `Failed to create follow-up: ${error.message}`,
+        error: error,
+      }
     }
 
     // Log activity
@@ -142,7 +171,11 @@ export async function createFollowUp(
     }
   } catch (error) {
     console.error("Error creating follow-up:", error)
-    return { success: false, message: "An unexpected error occurred" }
+    return {
+      success: false,
+      message: "An unexpected error occurred",
+      error: error,
+    }
   }
 }
 
@@ -156,7 +189,7 @@ export async function updateFollowUpStatus(
     follow_up_required?: boolean
     next_follow_up_date?: string
   },
-): Promise<{ success: boolean; message: string }> {
+): Promise<{ success: boolean; message: string; error?: any }> {
   const supabase = createClient()
 
   try {
@@ -179,35 +212,45 @@ export async function updateFollowUpStatus(
 
     if (fetchError || !followUp) {
       console.error("Error fetching follow-up:", fetchError)
-      return { success: false, message: "Follow-up not found" }
+      return { success: false, message: "Follow-up not found", error: fetchError }
     }
 
     const updateData: any = {
-      status,
-      updated_by: currentUser.id,
+      status: String(status),
+      updated_by: String(currentUser.id), // Ensure string type for UUID column
       updated_at: new Date().toISOString(),
     }
 
     // Add additional data if provided
     if (data) {
       if (status === "completed") {
-        updateData.completed_at = data.completed_at || new Date().toISOString()
-        updateData.completed_by = currentUser.id
-        updateData.outcome = data.outcome
-        updateData.duration_minutes = data.duration_minutes
+        updateData.completed_at = data.completed_at
+          ? new Date(data.completed_at).toISOString()
+          : new Date().toISOString()
+        updateData.completed_by = String(currentUser.id) // Ensure string type for UUID column
+        updateData.outcome = data.outcome ? String(data.outcome) : null
+        updateData.duration_minutes = data.duration_minutes ? Number(data.duration_minutes) : null
       }
 
       if (data.follow_up_required !== undefined) {
-        updateData.follow_up_required = data.follow_up_required
+        updateData.follow_up_required = Boolean(data.follow_up_required)
         updateData.next_follow_up_date = data.next_follow_up_date
+          ? new Date(data.next_follow_up_date).toISOString()
+          : null
       }
     }
+
+    console.log("Updating follow-up with data:", updateData)
 
     const { error: updateError } = await supabase.from("lead_followups").update(updateData).eq("id", id)
 
     if (updateError) {
       console.error("Error updating follow-up:", updateError)
-      return { success: false, message: `Failed to update follow-up: ${updateError.message}` }
+      return {
+        success: false,
+        message: `Failed to update follow-up: ${updateError.message}`,
+        error: updateError,
+      }
     }
 
     // Log activity
@@ -226,11 +269,15 @@ export async function updateFollowUpStatus(
     return { success: true, message: "Follow-up updated successfully" }
   } catch (error) {
     console.error("Error updating follow-up:", error)
-    return { success: false, message: "An unexpected error occurred" }
+    return {
+      success: false,
+      message: "An unexpected error occurred",
+      error: error,
+    }
   }
 }
 
-export async function deleteFollowUp(id: number): Promise<{ success: boolean; message: string }> {
+export async function deleteFollowUp(id: number): Promise<{ success: boolean; message: string; error?: any }> {
   const supabase = createClient()
 
   try {
@@ -252,14 +299,18 @@ export async function deleteFollowUp(id: number): Promise<{ success: boolean; me
 
     if (fetchError) {
       console.error("Error fetching follow-up:", fetchError)
-      return { success: false, message: "Follow-up not found" }
+      return { success: false, message: "Follow-up not found", error: fetchError }
     }
 
     const { error: deleteError } = await supabase.from("lead_followups").delete().eq("id", id)
 
     if (deleteError) {
       console.error("Error deleting follow-up:", deleteError)
-      return { success: false, message: `Failed to delete follow-up: ${deleteError.message}` }
+      return {
+        success: false,
+        message: `Failed to delete follow-up: ${deleteError.message}`,
+        error: deleteError,
+      }
     }
 
     // Log activity
@@ -278,7 +329,11 @@ export async function deleteFollowUp(id: number): Promise<{ success: boolean; me
     return { success: true, message: "Follow-up deleted successfully" }
   } catch (error) {
     console.error("Error deleting follow-up:", error)
-    return { success: false, message: "An unexpected error occurred" }
+    return {
+      success: false,
+      message: "An unexpected error occurred",
+      error: error,
+    }
   }
 }
 
@@ -373,4 +428,75 @@ export async function getFollowUpStats(): Promise<{
   })
 
   return stats
+}
+
+// Add a diagnostic function to help troubleshoot follow-up creation issues
+export async function testFollowUpCreation(
+  leadId: number,
+  followupType = "phone",
+): Promise<{
+  success: boolean
+  message: string
+  data?: any
+  error?: any
+}> {
+  const supabase = createClient()
+
+  try {
+    const currentUser = await getCurrentUser()
+    if (!currentUser) {
+      return { success: false, message: "No authenticated user found" }
+    }
+
+    // Validate the followup type against our constant
+    if (!VALID_FOLLOWUP_TYPES.includes(followupType as FollowupType)) {
+      return {
+        success: false,
+        message: `Invalid follow-up type. Must be one of: ${VALID_FOLLOWUP_TYPES.join(", ")}`,
+      }
+    }
+
+    // Create minimal test data with a valid followup_type value
+    const testData = {
+      lead_id: Number(leadId),
+      scheduled_at: new Date().toISOString(),
+      followup_type: followupType, // Using the provided type or defaulting to 'phone'
+      status: "scheduled",
+      priority: "medium",
+      created_by: String(currentUser.id),
+      follow_up_required: false,
+    }
+
+    console.log("Testing follow-up creation with data:", testData)
+
+    // Try to insert the test data
+    const { data, error } = await supabase.from("lead_followups").insert(testData).select()
+
+    if (error) {
+      console.error("Test follow-up creation failed:", error)
+      return {
+        success: false,
+        message: `Test failed: ${error.message}`,
+        error: error,
+      }
+    }
+
+    // Clean up the test data
+    if (data && data[0] && data[0].id) {
+      await supabase.from("lead_followups").delete().eq("id", data[0].id)
+    }
+
+    return {
+      success: true,
+      message: "Test follow-up creation succeeded",
+      data: data,
+    }
+  } catch (error) {
+    console.error("Error in test follow-up creation:", error)
+    return {
+      success: false,
+      message: "Unexpected error during test",
+      error: error,
+    }
+  }
 }
