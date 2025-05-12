@@ -1,78 +1,70 @@
 "use client"
 
 import { useState } from "react"
+import { z } from "zod"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { z } from "zod"
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogClose,
+} from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { CalendarIcon } from "lucide-react"
 import { format } from "date-fns"
+import { cn } from "@/lib/utils"
+import { Calendar } from "@/components/ui/calendar"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { VALID_FOLLOWUP_TYPES, scheduleLeadFollowup } from "@/actions/follow-up-actions"
 import { toast } from "@/components/ui/use-toast"
 
-import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
-import { Textarea } from "@/components/ui/textarea"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Calendar } from "@/components/ui/calendar"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { scheduleLeadFollowup } from "@/actions/lead-actions"
-
-const followupSchema = z.object({
+const formSchema = z.object({
   leadId: z.number(),
   scheduledAt: z.date(),
-  followupType: z.string(),
-  priority: z.string(),
-  summary: z.string().optional(),
+  followupType: z.enum(VALID_FOLLOWUP_TYPES),
   notes: z.string().optional(),
+  priority: z.enum(["low", "medium", "high"]),
+  summary: z.string().optional(),
 })
 
-type FollowupFormValues = z.infer<typeof followupSchema>
-
-interface ScheduleFollowupDialogProps {
+type ScheduleFollowupDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   leadId: number
+  onSuccess?: () => void
 }
 
-export function ScheduleFollowupDialog({ open, onOpenChange, leadId }: ScheduleFollowupDialogProps) {
+export function ScheduleFollowupDialog({ open, onOpenChange, leadId, onSuccess }: ScheduleFollowupDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [timeHours, setTimeHours] = useState("12")
-  const [timeMinutes, setTimeMinutes] = useState("00")
-  const [timePeriod, setTimePeriod] = useState("PM")
 
-  const form = useForm<FollowupFormValues>({
-    resolver: zodResolver(followupSchema),
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
     defaultValues: {
       leadId,
       scheduledAt: new Date(),
       followupType: "phone",
       priority: "medium",
-      summary: "",
       notes: "",
+      summary: "",
     },
   })
 
-  const onSubmit = async (values: FollowupFormValues) => {
+  async function onSubmit(values: z.infer<typeof formSchema>) {
     try {
       setIsSubmitting(true)
+      console.log("Submitting follow-up form with values:", values)
 
-      // Set the time on the scheduled date
-      const scheduledDate = new Date(values.scheduledAt)
-      let hours = Number.parseInt(timeHours)
-      if (timePeriod === "PM" && hours < 12) hours += 12
-      if (timePeriod === "AM" && hours === 12) hours = 0
-      scheduledDate.setHours(hours, Number.parseInt(timeMinutes), 0, 0)
-      values.scheduledAt = scheduledDate
-
-      console.log("Submitting follow-up with values:", values)
-
+      // Convert the date to ISO string for the API
       const result = await scheduleLeadFollowup({
-        leadId: values.leadId,
+        ...values,
         scheduledAt: values.scheduledAt.toISOString(),
-        followupType: values.followupType,
-        notes: values.notes,
-        priority: values.priority,
-        summary: values.summary,
       })
 
       if (result.success) {
@@ -80,21 +72,23 @@ export function ScheduleFollowupDialog({ open, onOpenChange, leadId }: ScheduleF
           title: "Success",
           description: "Follow-up scheduled successfully",
         })
+        form.reset()
         onOpenChange(false)
+        if (onSuccess) onSuccess()
       } else {
-        console.error("Failed to schedule follow-up:", result.message)
         toast({
-          title: "Error",
-          description: result.message,
           variant: "destructive",
+          title: "Failed to schedule follow-up",
+          description: result.message || "An error occurred",
         })
+        console.error("Error scheduling follow-up:", result)
       }
     } catch (error) {
-      console.error("Error scheduling follow-up:", error)
+      console.error("Error in follow-up submission:", error)
       toast({
-        title: "Error",
-        description: "Failed to schedule follow-up. Please try again.",
         variant: "destructive",
+        title: "Error",
+        description: "An unexpected error occurred",
       })
     } finally {
       setIsSubmitting(false)
@@ -106,10 +100,12 @@ export function ScheduleFollowupDialog({ open, onOpenChange, leadId }: ScheduleF
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>Schedule Follow-up</DialogTitle>
+          <DialogDescription>Schedule a follow-up for this lead</DialogDescription>
         </DialogHeader>
+
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
                 name="scheduledAt"
@@ -119,68 +115,29 @@ export function ScheduleFollowupDialog({ open, onOpenChange, leadId }: ScheduleF
                     <Popover>
                       <PopoverTrigger asChild>
                         <FormControl>
-                          <Button variant="outline" className="w-full pl-3 text-left font-normal">
+                          <Button
+                            variant={"outline"}
+                            className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")}
+                          >
                             {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
                             <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                           </Button>
                         </FormControl>
                       </PopoverTrigger>
                       <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus />
+                        <Calendar
+                          mode="single"
+                          selected={field.value}
+                          onSelect={field.onChange}
+                          disabled={(date) => date < new Date()}
+                          initialFocus
+                        />
                       </PopoverContent>
                     </Popover>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-
-              <div className="grid grid-cols-4 gap-2">
-                <div className="col-span-1">
-                  <FormLabel>Time</FormLabel>
-                  <Select value={timeHours} onValueChange={setTimeHours}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Hour" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Array.from({ length: 12 }, (_, i) => (i + 1).toString().padStart(2, "0")).map((hour) => (
-                        <SelectItem key={hour} value={hour}>
-                          {hour}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="col-span-1 pt-7">
-                  <span className="text-center block">:</span>
-                </div>
-                <div className="col-span-1">
-                  <FormLabel>&nbsp;</FormLabel>
-                  <Select value={timeMinutes} onValueChange={setTimeMinutes}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Min" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Array.from({ length: 12 }, (_, i) => (i * 5).toString().padStart(2, "0")).map((min) => (
-                        <SelectItem key={min} value={min}>
-                          {min}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="col-span-1">
-                  <FormLabel>&nbsp;</FormLabel>
-                  <Select value={timePeriod} onValueChange={setTimePeriod}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="AM">AM</SelectItem>
-                      <SelectItem value="PM">PM</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
 
               <FormField
                 control={form.control}
@@ -191,7 +148,7 @@ export function ScheduleFollowupDialog({ open, onOpenChange, leadId }: ScheduleF
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Select follow-up type" />
+                          <SelectValue placeholder="Select type" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
@@ -208,72 +165,65 @@ export function ScheduleFollowupDialog({ open, onOpenChange, leadId }: ScheduleF
                   </FormItem>
                 )}
               />
-
-              <FormField
-                control={form.control}
-                name="priority"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Priority</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select priority" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="low">Low</SelectItem>
-                        <SelectItem value="medium">Medium</SelectItem>
-                        <SelectItem value="high">High</SelectItem>
-                        <SelectItem value="urgent">Urgent</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="summary"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Summary</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        placeholder="Provide a brief summary of what this follow-up will cover"
-                        {...field}
-                        value={field.value || ""}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="notes"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Notes</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        placeholder="Add any additional notes or details about this follow-up"
-                        {...field}
-                        value={field.value || ""}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
             </div>
 
+            <FormField
+              control={form.control}
+              name="priority"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Priority</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select priority" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="summary"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Summary</FormLabel>
+                  <FormControl>
+                    <Textarea placeholder="Brief summary of what this follow-up is about" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="notes"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Notes</FormLabel>
+                  <FormControl>
+                    <Textarea placeholder="Any additional notes or details" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                Cancel
-              </Button>
+              <DialogClose asChild>
+                <Button type="button" variant="outline">
+                  Cancel
+                </Button>
+              </DialogClose>
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting ? "Scheduling..." : "Schedule Follow-up"}
               </Button>

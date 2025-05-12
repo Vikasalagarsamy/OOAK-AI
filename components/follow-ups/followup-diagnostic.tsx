@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { testFollowUpCreation } from "@/actions/follow-up-actions"
 import { CheckCircle, AlertCircle, Info } from "lucide-react"
 
 // Valid follow-up types according to the database constraint
@@ -30,8 +29,10 @@ export function FollowupDiagnostic() {
     setResult(null)
 
     try {
-      const response = await testFollowUpCreation(Number(leadId), followupType)
-      setResult(response)
+      // Instead of calling an action directly, we'll use a simple fetch
+      const response = await fetch(`/api/diagnostic/test-followup?leadId=${leadId}&type=${followupType}`)
+      const data = await response.json()
+      setResult(data)
     } catch (err) {
       setError("An unexpected error occurred during the diagnostic")
       console.error("Diagnostic error:", err)

@@ -1,10 +1,11 @@
 "use server"
 
-import { createClient } from "@/lib/supabase/server"
+import { createClient } from "@/lib/supabase-server"
 import { revalidatePath } from "next/cache"
-import type { FollowUpFormData, FollowUpStatus, FollowUpWithLead } from "@/types/follow-up"
+import type { FollowUpStatus, FollowUpWithLead } from "@/types/follow-up"
 import { getCurrentUser } from "@/lib/auth-utils"
 import { logActivity } from "@/services/activity-service"
+import { z } from "zod"
 
 export const VALID_FOLLOWUP_TYPES = [
   "email",
@@ -15,6 +16,17 @@ export const VALID_FOLLOWUP_TYPES = [
   "social_media",
   "other",
 ] as const
+
+export const FollowUpSchema = z.object({
+  lead_id: z.number(),
+  scheduled_at: z.string().datetime(),
+  followup_type: z.enum(VALID_FOLLOWUP_TYPES),
+  notes: z.string().optional(),
+  priority: z.enum(["low", "medium", "high"]),
+  interaction_summary: z.string().optional(),
+})
+
+export type FollowUpFormData = z.infer<typeof FollowUpSchema>
 
 export type FollowupType = (typeof VALID_FOLLOWUP_TYPES)[number]
 
@@ -92,6 +104,7 @@ export async function getFollowUpById(id: number): Promise<FollowUpWithLead | nu
   return data as FollowUpWithLead
 }
 
+// Add this function back to maintain backward compatibility
 export async function createFollowUp(
   formData: FollowUpFormData,
 ): Promise<{ success: boolean; message: string; id?: number; error?: any }> {
@@ -176,6 +189,61 @@ export async function createFollowUp(
       message: "An unexpected error occurred",
       error: error,
     }
+  }
+}
+
+export async function scheduleLeadFollowup(data: {
+  leadId: number
+  scheduledAt: string
+  followupType: string
+  notes?: string
+  priority: string
+  summary?: string
+}) {
+  const supabase = createClient()
+
+  try {
+    console.log("Scheduling follow-up with data:", data)
+
+    // Get current user
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      console.error("No authenticated user found")
+      return { success: false, message: "Authentication required" }
+    }
+
+    // Insert the follow-up
+    const { data: followup, error } = await supabase
+      .from("lead_followups")
+      .insert({
+        lead_id: data.leadId,
+        scheduled_at: data.scheduledAt,
+        followup_type: data.followupType,
+        notes: data.notes || "",
+        priority: data.priority,
+        interaction_summary: data.summary || "",
+        status: "scheduled",
+        created_by: String(user.id), // Explicitly convert to string
+      })
+      .select()
+
+    if (error) {
+      console.error("Error inserting follow-up:", error)
+      return { success: false, message: `Failed to schedule follow-up: ${error.message}` }
+    }
+
+    console.log("Follow-up scheduled successfully:", followup)
+    revalidatePath(`/sales/lead/${data.leadId}`)
+    revalidatePath("/sales/my-leads")
+    revalidatePath("/follow-ups")
+
+    return { success: true, message: "Follow-up scheduled successfully", data: followup }
+  } catch (error: any) {
+    console.error("Unexpected error in scheduleLeadFollowup:", error)
+    return { success: false, message: `An unexpected error occurred: ${error.message || String(error)}` }
   }
 }
 
@@ -431,49 +499,30 @@ export async function getFollowUpStats(): Promise<{
 }
 
 // Add a diagnostic function to help troubleshoot follow-up creation issues
-export async function testFollowUpCreation(
-  leadId: number,
-  followupType = "phone",
-): Promise<{
-  success: boolean
-  message: string
-  data?: any
-  error?: any
-}> {
+export async function testFollowUpCreation(leadId: number, followupType = "phone") {
   const supabase = createClient()
 
   try {
-    const currentUser = await getCurrentUser()
-    if (!currentUser) {
-      return { success: false, message: "No authenticated user found" }
-    }
+    // Get current user
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
 
-    // Validate the followup type against our constant
-    if (!VALID_FOLLOWUP_TYPES.includes(followupType as FollowupType)) {
-      return {
-        success: false,
-        message: `Invalid follow-up type. Must be one of: ${VALID_FOLLOWUP_TYPES.join(", ")}`,
-      }
-    }
-
-    // Create minimal test data with a valid followup_type value
+    // Create minimal test data
     const testData = {
       lead_id: Number(leadId),
       scheduled_at: new Date().toISOString(),
-      followup_type: followupType, // Using the provided type or defaulting to 'phone'
+      followup_type: followupType,
       status: "scheduled",
       priority: "medium",
-      created_by: currentUser?.id ? String(currentUser.id) : null, // Explicitly convert to string
-      follow_up_required: false,
+      created_by: user?.id ? String(user.id) : null,
     }
 
     console.log("Testing follow-up creation with data:", testData)
 
-    // Try to insert the test data
     const { data, error } = await supabase.from("lead_followups").insert(testData).select()
 
     if (error) {
-      console.error("Test follow-up creation failed:", error)
       return {
         success: false,
         message: `Test failed: ${error.message}`,
@@ -481,22 +530,16 @@ export async function testFollowUpCreation(
       }
     }
 
-    // Clean up the test data
-    if (data && data[0] && data[0].id) {
-      await supabase.from("lead_followups").delete().eq("id", data[0].id)
-    }
-
     return {
       success: true,
       message: "Test follow-up creation succeeded",
       data: data,
     }
-  } catch (error) {
-    console.error("Error in test follow-up creation:", error)
+  } catch (error: any) {
     return {
       success: false,
       message: "Unexpected error during test",
-      error: error,
+      error: error.message || String(error),
     }
   }
 }
