@@ -20,7 +20,7 @@ export async function getUpcomingNotifications(minutesThreshold = 15) {
       .select(`
         id,
         scheduled_at,
-        followup_type,
+        contact_method,
         lead_id,
         interaction_summary,
         priority,
@@ -42,7 +42,7 @@ export async function getUpcomingNotifications(minutesThreshold = 15) {
       notifications: data.map((item) => ({
         id: item.id,
         scheduledAt: item.scheduled_at,
-        followupType: item.followup_type,
+        contactMethod: item.contact_method,
         leadId: item.lead_id,
         leadNumber: item.lead?.lead_number,
         clientName: item.lead?.client_name,
@@ -71,7 +71,7 @@ export async function getOverdueFollowUps() {
       .select(`
         id,
         scheduled_at,
-        followup_type,
+        contact_method,
         lead_id,
         interaction_summary,
         priority,
@@ -92,7 +92,7 @@ export async function getOverdueFollowUps() {
       overdue: data.map((item) => ({
         id: item.id,
         scheduledAt: item.scheduled_at,
-        followupType: item.followup_type,
+        contactMethod: item.contact_method,
         leadId: item.lead_id,
         leadNumber: item.lead?.lead_number,
         clientName: item.lead?.client_name,
@@ -134,7 +134,7 @@ export async function getDailySummary() {
       .select(`
         id,
         scheduled_at,
-        followup_type,
+        contact_method,
         lead:leads(lead_number, client_name)
       `)
       .eq("status", "scheduled")

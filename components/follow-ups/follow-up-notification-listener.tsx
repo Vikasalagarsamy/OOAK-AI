@@ -11,7 +11,7 @@ import { useRouter } from "next/navigation"
 interface Notification {
   id: number
   scheduledAt: string
-  followupType: string
+  contactMethod: string
   leadId: number
   leadNumber: string
   clientName: string
@@ -23,7 +23,7 @@ interface Notification {
 interface OverdueNotification {
   id: number
   scheduledAt: string
-  followupType: string
+  contactMethod: string
   leadId: number
   leadNumber: string
   clientName: string
@@ -70,7 +70,7 @@ export function FollowUpNotificationListener() {
             // Show in-app toast notification
             toast({
               title: `Upcoming Follow-up: ${notification.clientName}`,
-              description: `${notification.timeUntil} - ${notification.followupType.replace(/_/g, " ")}`,
+              description: `${notification.timeUntil} - ${notification.contactMethod.replace(/_/g, " ")}`,
               action: (
                 <Button variant="outline" size="sm" onClick={() => router.push(`/follow-ups?id=${notification.id}`)}>
                   <Calendar className="mr-2 h-4 w-4" />
@@ -82,7 +82,7 @@ export function FollowUpNotificationListener() {
             // Show browser notification if supported
             if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
               new Notification(`Upcoming Follow-up: ${notification.clientName}`, {
-                body: `${notification.timeUntil} - ${notification.followupType.replace(/_/g, " ")}`,
+                body: `${notification.timeUntil} - ${notification.contactMethod.replace(/_/g, " ")}`,
                 icon: "/favicon.ico",
               })
             }
