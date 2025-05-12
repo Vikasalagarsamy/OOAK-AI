@@ -1,8 +1,7 @@
 "use server"
 
-import { createClient } from "@/lib/supabase/server"
+import { createClient } from "@/lib/supabase-server"
 import { revalidatePath } from "next/cache"
-import { cookies } from "next/headers"
 import type { Event } from "@/types/event"
 
 // Function to generate a very short unique ID (definitely under 20 chars)
@@ -18,7 +17,7 @@ function generateShortId(): string {
 
 // Get all events
 export async function getEvents(): Promise<Event[]> {
-  const supabase = createClient(cookies())
+  const supabase = createClient()
 
   const { data, error } = await supabase.from("events").select("*").order("created_at", { ascending: false })
 
@@ -32,7 +31,7 @@ export async function getEvents(): Promise<Event[]> {
 
 // Create a new event
 export async function createEvent(name: string, isActive: boolean): Promise<Event> {
-  const supabase = createClient(cookies())
+  const supabase = createClient()
 
   // Generate a very short ID that definitely fits within varchar(20)
   const event_id = generateShortId()
@@ -67,7 +66,7 @@ export async function createEvent(name: string, isActive: boolean): Promise<Even
 
 // Edit an existing event
 export async function updateEvent(eventId: string, name: string, isActive: boolean): Promise<Event> {
-  const supabase = createClient(cookies())
+  const supabase = createClient()
 
   try {
     const { data, error } = await supabase
@@ -96,7 +95,7 @@ export async function updateEvent(eventId: string, name: string, isActive: boole
 
 // Delete an event
 export async function deleteEvent(eventId: string): Promise<void> {
-  const supabase = createClient(cookies())
+  const supabase = createClient()
 
   try {
     const { error } = await supabase.from("events").delete().eq("event_id", eventId)
@@ -115,7 +114,7 @@ export async function deleteEvent(eventId: string): Promise<void> {
 
 // Toggle event status
 export async function toggleEventStatus(eventId: string): Promise<Event> {
-  const supabase = createClient(cookies())
+  const supabase = createClient()
 
   // First, get the current status
   const { data: event, error: fetchError } = await supabase
@@ -151,7 +150,7 @@ export async function toggleEventStatus(eventId: string): Promise<Event> {
 
 // Search events
 export async function searchEvents(query: string): Promise<Event[]> {
-  const supabase = createClient(cookies())
+  const supabase = createClient()
 
   const { data, error } = await supabase
     .from("events")
