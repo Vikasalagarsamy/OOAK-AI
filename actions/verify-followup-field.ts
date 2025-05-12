@@ -1,23 +1,12 @@
 "use server"
 
 import { createClient } from "@/lib/supabase/server"
-import { addIsTestColumnToFollowups } from "./add-is-test-column"
-import { ensureExecSqlFunction } from "./ensure-exec-sql-function"
+import { checkAndAddIsTestColumn } from "./check-and-add-is-test-column"
 
 export async function verifyFollowupField(leadId: number) {
   try {
-    // First ensure the exec_sql function exists
-    const functionResult = await ensureExecSqlFunction()
-    if (!functionResult.success) {
-      return {
-        success: false,
-        message: "Failed to create required database function",
-        details: functionResult.error || "Could not create exec_sql function",
-      }
-    }
-
-    // Then ensure the is_test column exists
-    const columnResult = await addIsTestColumnToFollowups()
+    // First ensure the is_test column exists
+    const columnResult = await checkAndAddIsTestColumn()
     if (!columnResult.success) {
       return {
         success: false,
