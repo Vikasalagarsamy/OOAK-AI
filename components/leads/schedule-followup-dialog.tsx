@@ -5,13 +5,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
-import { Loader2, Calendar, Clock } from "lucide-react"
+import { Loader2, Calendar, Clock, Check } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import { Input } from "@/components/ui/input"
 import { scheduleLeadFollowup } from "@/actions/lead-actions"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Calendar as CalendarComponent } from "@/components/ui/calendar"
-import { format } from "date-fns"
+import { ModernCalendar } from "@/components/ui/modern-calendar"
+import { format, addDays, addWeeks, addMonths } from "date-fns"
 import { cn } from "@/lib/utils"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
@@ -26,6 +26,12 @@ interface ScheduleFollowupDialogProps {
   onFollowupScheduled: () => void
 }
 
+// Sample data for existing follow-ups (in a real app, this would come from the database)
+const existingFollowups = [
+  new Date(2025, 4, 15), // May 15, 2025
+  new Date(2025, 4, 22), // May 22, 2025
+]
+
 export function ScheduleFollowupDialog({ lead, open, onOpenChange, onFollowupScheduled }: ScheduleFollowupDialogProps) {
   const { toast } = useToast()
   const [date, setDate] = useState<Date | undefined>(undefined)
@@ -33,6 +39,14 @@ export function ScheduleFollowupDialog({ lead, open, onOpenChange, onFollowupSch
   const [followupType, setFollowupType] = useState("call")
   const [notes, setNotes] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [calendarOpen, setCalendarOpen] = useState(false)
+
+  // Quick date selection options
+  const quickDateOptions = [
+    { label: "Tomorrow", getValue: () => addDays(new Date(), 1) },
+    { label: "Next Week", getValue: () => addWeeks(new Date(), 1) },
+    { label: "Next Month", getValue: () => addMonths(new Date(), 1) },
+  ]
 
   const handleSubmit = async () => {
     if (!date) {
@@ -80,6 +94,11 @@ export function ScheduleFollowupDialog({ lead, open, onOpenChange, onFollowupSch
     }
   }
 
+  const handleDateSelect = (selectedDate: Date) => {
+    setDate(selectedDate)
+    setCalendarOpen(false)
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px] p-0 overflow-hidden">
@@ -110,10 +129,10 @@ export function ScheduleFollowupDialog({ lead, open, onOpenChange, onFollowupSch
             </Select>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label>Date</Label>
-              <Popover>
+          <div className="grid gap-2">
+            <Label>Date</Label>
+            <div className="flex flex-col space-y-2">
+              <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
@@ -124,26 +143,59 @@ export function ScheduleFollowupDialog({ lead, open, onOpenChange, onFollowupSch
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start" side="bottom" sideOffset={4}>
-                  <CalendarComponent
-                    mode="single"
-                    selected={date}
-                    onSelect={setDate}
-                    initialFocus
-                    disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
-                    showOutsideDays={false}
-                    numberOfMonths={1}
-                    className="rounded-md border"
+                  <ModernCalendar
+                    selectedDate={date}
+                    onDateSelect={handleDateSelect}
+                    minDate={new Date()}
+                    highlightedDates={existingFollowups}
                   />
                 </PopoverContent>
               </Popover>
-            </div>
 
-            <div className="grid gap-2">
-              <Label>Time</Label>
-              <div className="flex items-center">
-                <Clock className="mr-2 h-4 w-4 text-muted-foreground" />
-                <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="flex-1" />
+              <div className="flex flex-wrap gap-2">
+                {quickDateOptions.map((option, index) => (
+                  <Button
+                    key={index}
+                    variant="outline"
+                    size="sm"
+                    className="text-xs"
+                    onClick={() => {
+                      const newDate = option.getValue()
+                      setDate(newDate)
+                    }}
+                  >
+                    {option.label}
+                  </Button>
+                ))}
               </div>
+            </div>
+          </div>
+
+          <div className="grid gap-2">
+            <Label>Time</Label>
+            <div className="flex items-center">
+              <Clock className="mr-2 h-4 w-4 text-muted-foreground" />
+              <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="flex-1" />
+            </div>
+            <div className="flex flex-wrap gap-2 mt-1">
+              {["09:00", "12:00", "15:00", "17:00"].map((timeOption) => (
+                <Button
+                  key={timeOption}
+                  variant={time === timeOption ? "default" : "outline"}
+                  size="sm"
+                  className="text-xs"
+                  onClick={() => setTime(timeOption)}
+                >
+                  {format(
+                    new Date().setHours(
+                      Number.parseInt(timeOption.split(":")[0]),
+                      Number.parseInt(timeOption.split(":")[1]),
+                    ),
+                    "h:mm a",
+                  )}
+                  {time === timeOption && <Check className="ml-1 h-3 w-3" />}
+                </Button>
+              ))}
             </div>
           </div>
 
