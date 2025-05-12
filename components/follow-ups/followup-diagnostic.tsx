@@ -8,7 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { CheckCircle, AlertCircle, Info } from "lucide-react"
 
-// Valid follow-up types according to the database constraint
+// Valid follow-up types as a simple array to avoid any issues
 const VALID_FOLLOWUP_TYPES = ["email", "phone", "in_person", "video_call", "text_message", "social_media", "other"]
 
 export function FollowupDiagnostic() {
@@ -29,12 +29,15 @@ export function FollowupDiagnostic() {
     setResult(null)
 
     try {
-      // Instead of calling an action directly, we'll use a simple fetch
+      // Simple fetch to avoid any server action issues
       const response = await fetch(`/api/diagnostic/test-followup?leadId=${leadId}&type=${followupType}`)
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
       const data = await response.json()
       setResult(data)
-    } catch (err) {
-      setError("An unexpected error occurred during the diagnostic")
+    } catch (err: any) {
+      setError(`An error occurred: ${err.message || "Unknown error"}`)
       console.error("Diagnostic error:", err)
     } finally {
       setIsLoading(false)
@@ -72,7 +75,7 @@ export function FollowupDiagnostic() {
               <SelectContent>
                 {VALID_FOLLOWUP_TYPES.map((type) => (
                   <SelectItem key={type} value={type}>
-                    {type.replace("_", " ").replace(/\b\w/g, (l) => l.toUpperCase())}
+                    {type.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -114,13 +117,14 @@ export function FollowupDiagnostic() {
           <AlertTitle>About Follow-up Types</AlertTitle>
           <AlertDescription>
             <p>The follow-up type must be one of the following values:</p>
-            <ul className="list-disc list-inside mt-1 pl-2 grid grid-cols-2">
+            <div className="mt-1 pl-2 grid grid-cols-2">
               {VALID_FOLLOWUP_TYPES.map((type) => (
-                <li key={type} className="text-sm">
-                  {type.replace("_", " ")}
-                </li>
+                <div key={type} className="text-sm flex items-center gap-1">
+                  <span>•</span>
+                  <span>{type.replace(/_/g, " ")}</span>
+                </div>
               ))}
-            </ul>
+            </div>
           </AlertDescription>
         </Alert>
       </CardContent>

@@ -1,5 +1,8 @@
-import { createClient } from "@/lib/supabase-server"
+import { createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
+
+// Disable static generation for this API route
+export const dynamic = "force-dynamic"
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
@@ -24,6 +27,16 @@ export async function GET(request: NextRequest) {
       data: { user },
     } = await supabase.auth.getUser()
 
+    if (!user) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Authentication required",
+        },
+        { status: 401 },
+      )
+    }
+
     // Create minimal test data
     const testData = {
       lead_id: Number(leadId),
@@ -31,7 +44,7 @@ export async function GET(request: NextRequest) {
       followup_type: followupType,
       status: "scheduled",
       priority: "medium",
-      created_by: user?.id ? String(user.id) : null,
+      created_by: String(user.id),
     }
 
     console.log("Testing follow-up creation with data:", testData)
@@ -47,6 +60,11 @@ export async function GET(request: NextRequest) {
         },
         { status: 500 },
       )
+    }
+
+    // Clean up the test data
+    if (data && data[0] && data[0].id) {
+      await supabase.from("lead_followups").delete().eq("id", data[0].id)
     }
 
     return NextResponse.json({

@@ -1,10 +1,17 @@
-import { FollowUpDiagnostic } from "@/components/debug/follow-up-diagnostic"
+import DiagnosticClient from "./client"
 
-export default function FollowUpDiagnosticPage() {
+// Disable static generation for this page
+export const dynamic = "force-dynamic"
+
+export default function FollowupDiagnosticPage() {
   return (
-    <div className="container py-10">
+    <div className="container py-8">
       <h1 className="text-2xl font-bold mb-6">Follow-up System Diagnostic</h1>
-      <FollowUpDiagnostic />
+      <p className="mb-6 text-muted-foreground">
+        Use this tool to diagnose issues with the follow-up scheduling system.
+      </p>
+
+      <DiagnosticClient />
     </div>
   )
 }
