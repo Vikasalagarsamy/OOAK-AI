@@ -1,9 +1,10 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Loader2, RefreshCw, AlertCircle } from "lucide-react"
-import { getDepartmentDistribution } from "@/actions/department-actions"
+import { Loader2, RefreshCw, AlertCircle, CheckCircle2 } from "lucide-react"
+import { getDepartmentDistribution, validateDepartmentData } from "@/actions/department-actions"
 import { Button } from "@/components/ui/button"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 type DepartmentData = {
   department: string
@@ -12,10 +13,10 @@ type DepartmentData = {
 }
 
 interface RealTimeDepartmentChartProps {
-  initialData: DepartmentData[]
+  initialData?: DepartmentData[]
 }
 
-export function RealTimeDepartmentChart({ initialData }: RealTimeDepartmentChartProps) {
+export function RealTimeDepartmentChart({ initialData = [] }: RealTimeDepartmentChartProps) {
   const [data, setData] = useState<DepartmentData[]>(
     initialData && initialData.length > 0
       ? initialData
@@ -32,6 +33,21 @@ export function RealTimeDepartmentChart({ initialData }: RealTimeDepartmentChart
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date())
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [updatedDepartment, setUpdatedDepartment] = useState<string | null>(null)
+  const [dataValid, setDataValid] = useState<boolean | null>(null)
+  const [validationMessage, setValidationMessage] = useState<string | null>(null)
+
+  // Function to validate data integrity
+  const validateData = async () => {
+    try {
+      const result = await validateDepartmentData()
+      setDataValid(result.valid)
+      setValidationMessage(result.valid ? "Data validation passed" : result.issues?.[0] || "Unknown validation issue")
+    } catch (error) {
+      console.error("Error validating data:", error)
+      setDataValid(false)
+      setValidationMessage("Error during validation")
+    }
+  }
 
   // Function to refresh data
   const refreshData = async () => {
@@ -46,18 +62,21 @@ export function RealTimeDepartmentChart({ initialData }: RealTimeDepartmentChart
 
       if (freshData && freshData.length > 0) {
         // Check which department changed
-        const changedDept = freshData.find((dept, i) => {
-          const oldDept = data[i]
-          return oldDept && oldDept.department === dept.department && oldDept.count !== dept.count
+        const changedDepts = freshData.filter((dept) => {
+          const oldDept = data.find((d) => d.department === dept.department)
+          return oldDept && oldDept.count !== dept.count
         })
 
-        if (changedDept) {
-          setUpdatedDepartment(changedDept.department)
+        if (changedDepts.length > 0) {
+          setUpdatedDepartment(changedDepts[0].department)
           setTimeout(() => setUpdatedDepartment(null), 2000)
         }
 
         setData(freshData)
         setLastUpdated(new Date())
+
+        // Validate data after refresh
+        validateData()
       } else {
         setError("No department data returned")
       }
@@ -74,6 +93,9 @@ export function RealTimeDepartmentChart({ initialData }: RealTimeDepartmentChart
     // Initial refresh if no data
     if (!initialData || initialData.length === 0) {
       refreshData()
+    } else {
+      // Validate initial data
+      validateData()
     }
 
     let interval: NodeJS.Timeout | null = null
@@ -92,10 +114,31 @@ export function RealTimeDepartmentChart({ initialData }: RealTimeDepartmentChart
   // Calculate maximum count for percentage calculations
   const maxCount = Math.max(...data.map((d) => d.count), 1)
 
+  // Calculate total employees
+  const totalEmployees = data.reduce((sum, dept) => sum + dept.count, 0)
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs text-muted-foreground">Last updated: {lastUpdated.toLocaleTimeString()}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">Last updated: {lastUpdated.toLocaleTimeString()}</span>
+
+          {dataValid !== null && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className={`inline-flex items-center ${dataValid ? "text-green-500" : "text-red-500"}`}>
+                    {dataValid ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{validationMessage}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+        </div>
+
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
@@ -129,6 +172,8 @@ export function RealTimeDepartmentChart({ initialData }: RealTimeDepartmentChart
         </div>
       )}
 
+      <div className="text-sm font-medium mb-2">Total Employees: {totalEmployees}</div>
+
       {data.length === 0 ? (
         <div className="py-8 text-center text-muted-foreground">No department data available</div>
       ) : (
@@ -139,8 +184,13 @@ export function RealTimeDepartmentChart({ initialData }: RealTimeDepartmentChart
                 {item.department}
                 {updatedDepartment === item.department && <span className="ml-1 text-xs animate-pulse">●</span>}
               </div>
-              <div className={`font-medium ${updatedDepartment === item.department ? "text-green-600" : ""}`}>
-                {item.count}
+              <div className="flex items-center gap-2">
+                <div className={`font-medium ${updatedDepartment === item.department ? "text-green-600" : ""}`}>
+                  {item.count}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {totalEmployees > 0 ? `${Math.round((item.count / totalEmployees) * 100)}%` : "0%"}
+                </div>
               </div>
             </div>
             <div className="rounded-full bg-muted h-2 w-full overflow-hidden">

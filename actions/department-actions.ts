@@ -1,65 +1,34 @@
 "use server"
 
-import { createClient } from "@/lib/supabase"
+import { createClient } from "@/lib/supabase/server"
 
 export async function getDepartmentDistribution() {
+  const supabase = createClient()
+
   try {
-    console.log("Fetching department distribution data...")
-    const supabase = createClient()
+    console.log("Fetching department distribution using fixed RPC function...")
 
-    if (!supabase) {
-      console.error("Failed to create Supabase client")
+    // Use our updated RPC function to get accurate department counts
+    const { data: departmentCounts, error } = await supabase.rpc("get_employee_department_counts")
+
+    if (error) {
+      console.error("Error fetching department counts:", error)
       return getFallbackDepartmentData()
     }
 
-    // Get all departments with their names
-    const { data: departments, error: deptError } = await supabase.from("departments").select("id, name").order("name")
+    console.log("Department counts from RPC:", departmentCounts)
 
-    if (deptError) {
-      console.error("Error fetching departments:", deptError)
-      return getFallbackDepartmentData()
-    }
-
-    console.log(`Found ${departments?.length || 0} departments:`, departments)
-
-    if (!departments || departments.length === 0) {
-      console.log("No departments found, returning fallback data")
-      return getFallbackDepartmentData()
-    }
-
-    // Initialize result with department names and zero counts
-    const departmentCounts = departments.map((dept) => ({
-      department: dept.name,
-      count: 0,
-      id: dept.id,
+    // Transform the data into the format expected by the chart
+    const result = departmentCounts.map((item) => ({
+      department: item.department_name || "Unknown",
+      count: Number(item.employee_count),
+      id: item.department_id,
     }))
 
-    // Get employee counts by department
-    for (const dept of departmentCounts) {
-      try {
-        console.log(`Fetching employee count for department ${dept.department} (ID: ${dept.id})`)
-
-        const { count, error } = await supabase
-          .from("employee_departments")
-          .select("*", { count: "exact", head: true })
-          .eq("department_id", dept.id)
-
-        if (error) {
-          console.error(`Error fetching employee count for department ${dept.department}:`, error)
-        } else {
-          console.log(`Department ${dept.department} has ${count || 0} employees`)
-          dept.count = count || 0
-        }
-      } catch (countError) {
-        console.error(`Error counting employees for department ${dept.department}:`, countError)
-        // Continue with next department instead of failing completely
-      }
-    }
-
-    // Always return data - even if it's all zeros
-    return departmentCounts
+    // Sort by count descending for better visualization
+    return result.sort((a, b) => b.count - a.count)
   } catch (error) {
-    console.error("Error fetching department distribution:", error)
+    console.error("Error in getDepartmentDistribution:", error)
     return getFallbackDepartmentData()
   }
 }
@@ -73,4 +42,42 @@ function getFallbackDepartmentData() {
     { department: "Finance", count: 8 },
     { department: "HR", count: 5 },
   ]
+}
+
+// Add a validation function to check data integrity
+export async function validateDepartmentData() {
+  const supabase = createClient()
+
+  try {
+    // Check for employees with invalid department IDs
+    const { data: departments } = await supabase.from("departments").select("id")
+    const departmentIds = departments?.map((d) => d.id) || []
+
+    // Only run this check if we have departments
+    if (departmentIds.length > 0) {
+      const { data: invalidDeptEmployees, error } = await supabase
+        .from("employees")
+        .select("id, first_name, last_name, department_id")
+        .not("department_id", "is", null)
+        .not("department_id", "in", `(${departmentIds.join(",")})`)
+
+      if (error) {
+        console.error("Error checking for invalid department references:", error)
+        return { valid: false, issues: ["Database query error"] }
+      }
+
+      if (invalidDeptEmployees && invalidDeptEmployees.length > 0) {
+        return {
+          valid: false,
+          issues: [`Found ${invalidDeptEmployees.length} employees with invalid department references`],
+          invalidEmployees: invalidDeptEmployees,
+        }
+      }
+    }
+
+    return { valid: true }
+  } catch (error) {
+    console.error("Error validating department data:", error)
+    return { valid: false, issues: ["Exception during validation"] }
+  }
 }
