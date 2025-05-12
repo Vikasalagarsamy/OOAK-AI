@@ -1,11 +1,14 @@
-import { createClient as supabaseCreateClient } from "@supabase/supabase-js"
+import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 
 // Define types for better type safety
-type SupabaseClient = ReturnType<typeof supabaseCreateClient>
+type SupabaseClient = ReturnType<typeof createSupabaseClient>
 
 // Global variables to store client instances
 let browserClient: SupabaseClient | null = null
 const serverClient: SupabaseClient | null = null
+
+// Create a singleton instance
+let supabaseClient: ReturnType<typeof createSupabaseClient> | null = null
 
 // Function to get and validate Supabase credentials
 function getSupabaseCredentials() {
@@ -44,7 +47,7 @@ export function getSupabaseBrowser(): SupabaseClient {
     console.log("Creating browser Supabase client with URL:", supabaseUrl)
 
     // Use the imported supabaseCreateClient directly
-    browserClient = supabaseCreateClient(supabaseUrl, supabaseAnonKey, {
+    browserClient = createSupabaseClient(supabaseUrl, supabaseAnonKey, {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
@@ -67,7 +70,7 @@ export function getSupabaseServer(): SupabaseClient {
       console.log("Creating server Supabase client with URL:", supabaseUrl)
 
       // Use the imported supabaseCreateClient directly
-      return supabaseCreateClient(supabaseUrl, supabaseServiceKey, {
+      return createSupabaseClient(supabaseUrl, supabaseServiceKey, {
         auth: {
           persistSession: false,
           autoRefreshToken: false,
@@ -90,7 +93,7 @@ export function createBasicClient(): SupabaseClient {
     console.log("Creating basic Supabase client with URL:", supabaseUrl)
 
     // Create a simple client without auth overrides
-    return supabaseCreateClient(supabaseUrl, supabaseAnonKey, {
+    return createSupabaseClient(supabaseUrl, supabaseAnonKey, {
       auth: {
         persistSession: false,
         autoRefreshToken: false,
@@ -114,4 +117,18 @@ export function createClient() {
 
   // For client-side use the browser client
   return getSupabaseBrowser()
+}
+
+export function getSupabaseClient() {
+  if (supabaseClient) return supabaseClient
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!supabaseUrl || !supabaseKey) {
+    throw new Error("Missing Supabase environment variables")
+  }
+
+  supabaseClient = createSupabaseClient(supabaseUrl, supabaseKey)
+  return supabaseClient
 }

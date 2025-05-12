@@ -1,5 +1,4 @@
 import { createClient as createSupabaseClient } from "@supabase/supabase-js"
-import type { Database } from "@/types/supabase"
 
 // Create a singleton Supabase client that works in both Pages and App Router
 export function createClient() {
@@ -10,7 +9,7 @@ export function createClient() {
     throw new Error("Missing Supabase environment variables")
   }
 
-  return createSupabaseClient<Database>(supabaseUrl, supabaseKey, {
+  return createSupabaseClient(supabaseUrl, supabaseKey, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,
