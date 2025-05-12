@@ -83,7 +83,7 @@ export function ScheduleFollowupDialog({ lead, open, onOpenChange, onFollowupSch
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px] p-0 overflow-hidden">
-        <DialogHeader>
+        <DialogHeader className="p-6 pb-0">
           <DialogTitle>Schedule Follow-up</DialogTitle>
         </DialogHeader>
         <div className="grid gap-4 p-6">
@@ -130,6 +130,9 @@ export function ScheduleFollowupDialog({ lead, open, onOpenChange, onFollowupSch
                     onSelect={setDate}
                     initialFocus
                     disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                    showOutsideDays={false}
+                    numberOfMonths={1}
+                    className="rounded-md border"
                   />
                 </PopoverContent>
               </Popover>
@@ -155,7 +158,7 @@ export function ScheduleFollowupDialog({ lead, open, onOpenChange, onFollowupSch
             />
           </div>
         </div>
-        <DialogFooter>
+        <DialogFooter className="p-6 pt-0">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
             Cancel
           </Button>
