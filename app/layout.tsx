@@ -3,8 +3,8 @@ import "./globals.css"
 import { Inter } from "next/font/google"
 import { Toaster } from "@/components/toaster"
 import { ThemeProvider } from "@/components/theme-provider"
-import { RoleProvider } from "@/contexts/role-context"
 import { initializeDatabase } from "@/lib/init-database"
+import { FollowUpNotificationListener } from "@/components/follow-ups/follow-up-notification-listener"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -38,9 +38,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
-          <RoleProvider>{children}</RoleProvider>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+          {children}
           <Toaster />
+          <FollowUpNotificationListener />
         </ThemeProvider>
       </body>
     </html>

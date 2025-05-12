@@ -12,7 +12,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogClose,
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -27,11 +26,17 @@ import { toast } from "@/components/ui/use-toast"
 
 const formSchema = z.object({
   leadId: z.number(),
-  scheduledAt: z.date(),
-  followupType: z.enum(VALID_FOLLOWUP_TYPES),
+  scheduledAt: z.date({
+    required_error: "Follow-up date is required",
+  }),
+  followupType: z.enum(VALID_FOLLOWUP_TYPES, {
+    required_error: "Please select a follow-up type",
+  }),
   notes: z.string().optional(),
-  priority: z.enum(["low", "medium", "high"]),
-  summary: z.string().optional(),
+  priority: z.enum(["low", "medium", "high"], {
+    required_error: "Priority is required",
+  }),
+  summary: z.string().min(3, "Summary must be at least 3 characters").optional(),
 })
 
 type ScheduleFollowupDialogProps = {
@@ -61,6 +66,17 @@ export function ScheduleFollowupDialog({ open, onOpenChange, leadId, onSuccess }
       setIsSubmitting(true)
       console.log("Submitting follow-up form with values:", values)
 
+      // Validate date is not in the past
+      if (values.scheduledAt < new Date(new Date().setHours(0, 0, 0, 0))) {
+        toast({
+          variant: "destructive",
+          title: "Invalid date",
+          description: "Follow-up date cannot be in the past",
+        })
+        setIsSubmitting(false)
+        return
+      }
+
       // Convert the date to ISO string for the API
       const result = await scheduleLeadFollowup({
         ...values,
@@ -69,8 +85,9 @@ export function ScheduleFollowupDialog({ open, onOpenChange, leadId, onSuccess }
 
       if (result.success) {
         toast({
-          title: "Success",
-          description: "Follow-up scheduled successfully",
+          title: "Follow-up Saved",
+          description: "The follow-up has been successfully scheduled",
+          variant: "default",
         })
         form.reset()
         onOpenChange(false)
@@ -78,8 +95,8 @@ export function ScheduleFollowupDialog({ open, onOpenChange, leadId, onSuccess }
       } else {
         toast({
           variant: "destructive",
-          title: "Failed to schedule follow-up",
-          description: result.message || "An error occurred",
+          title: "Failed to save follow-up",
+          description: result.message || "An error occurred while saving to the database",
         })
         console.error("Error scheduling follow-up:", result)
       }
@@ -87,11 +104,24 @@ export function ScheduleFollowupDialog({ open, onOpenChange, leadId, onSuccess }
       console.error("Error in follow-up submission:", error)
       toast({
         variant: "destructive",
-        title: "Error",
-        description: "An unexpected error occurred",
+        title: "System Error",
+        description: "An unexpected error occurred. Please try again later.",
       })
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  function handleCancel() {
+    const isDirty = form.formState.isDirty
+
+    if (isDirty) {
+      if (window.confirm("You have unsaved changes. Are you sure you want to cancel?")) {
+        form.reset()
+        onOpenChange(false)
+      }
+    } else {
+      onOpenChange(false)
     }
   }
 
@@ -219,13 +249,18 @@ export function ScheduleFollowupDialog({ open, onOpenChange, leadId, onSuccess }
             />
 
             <DialogFooter>
-              <DialogClose asChild>
-                <Button type="button" variant="outline">
-                  Cancel
-                </Button>
-              </DialogClose>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Scheduling..." : "Schedule Follow-up"}
+              <Button type="button" variant="outline" onClick={handleCancel}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isSubmitting} className="min-w-[120px]">
+                {isSubmitting ? (
+                  <>
+                    <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"></span>
+                    Saving...
+                  </>
+                ) : (
+                  "Save Follow-up"
+                )}
               </Button>
             </DialogFooter>
           </form>

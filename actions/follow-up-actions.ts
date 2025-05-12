@@ -205,6 +205,19 @@ export async function scheduleLeadFollowup(data: {
   try {
     console.log("Scheduling follow-up with data:", data)
 
+    // Validate input data
+    if (!data.leadId || isNaN(Number(data.leadId))) {
+      return { success: false, message: "Invalid lead ID" }
+    }
+
+    if (!data.scheduledAt || new Date(data.scheduledAt).toString() === "Invalid Date") {
+      return { success: false, message: "Invalid scheduled date" }
+    }
+
+    if (!VALID_FOLLOWUP_TYPES.includes(data.followupType as FollowupType)) {
+      return { success: false, message: "Invalid follow-up type" }
+    }
+
     // Get current user
     const {
       data: { user },
@@ -215,9 +228,21 @@ export async function scheduleLeadFollowup(data: {
       return { success: false, message: "Authentication required" }
     }
 
+    // Verify the lead exists
+    const { data: leadExists, error: leadCheckError } = await supabase
+      .from("leads")
+      .select("id")
+      .eq("id", data.leadId)
+      .single()
+
+    if (leadCheckError || !leadExists) {
+      console.error("Lead does not exist:", leadCheckError)
+      return { success: false, message: "The specified lead does not exist" }
+    }
+
     // Insert the follow-up
     const { data: followup, error } = await supabase
-      .from("lead_followups")
+      .from("lead_followups") // Ensure this matches your actual table name
       .insert({
         lead_id: data.leadId,
         scheduled_at: data.scheduledAt,
@@ -226,24 +251,42 @@ export async function scheduleLeadFollowup(data: {
         priority: data.priority,
         interaction_summary: data.summary || "",
         status: "scheduled",
-        created_by: String(user.id), // Explicitly convert to string
+        created_by: String(user.id),
+        created_at: new Date().toISOString(),
       })
       .select()
 
     if (error) {
       console.error("Error inserting follow-up:", error)
+
+      // Check for specific error types
+      if (error.code === "23505") {
+        return { success: false, message: "A follow-up with these details already exists" }
+      } else if (error.code === "23503") {
+        return { success: false, message: "Referenced lead or user does not exist" }
+      }
+
       return { success: false, message: `Failed to schedule follow-up: ${error.message}` }
     }
 
     console.log("Follow-up scheduled successfully:", followup)
+
+    // Revalidate relevant paths to update UI
     revalidatePath(`/sales/lead/${data.leadId}`)
     revalidatePath("/sales/my-leads")
     revalidatePath("/follow-ups")
 
-    return { success: true, message: "Follow-up scheduled successfully", data: followup }
+    return {
+      success: true,
+      message: "Follow-up scheduled successfully",
+      data: followup,
+    }
   } catch (error: any) {
     console.error("Unexpected error in scheduleLeadFollowup:", error)
-    return { success: false, message: `An unexpected error occurred: ${error.message || String(error)}` }
+    return {
+      success: false,
+      message: `An unexpected error occurred: ${error.message || String(error)}`,
+    }
   }
 }
 
