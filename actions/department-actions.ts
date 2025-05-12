@@ -6,26 +6,45 @@ export async function getDepartmentDistribution() {
   const supabase = createClient()
 
   try {
-    console.log("Fetching department distribution using simplified RPC function...")
+    console.log("Fetching department distribution using foreign table relationships...")
 
-    // Use our updated RPC function with simplified return structure
-    const { data: departmentCounts, error } = await supabase.rpc("get_employee_department_counts")
+    // Use Supabase's foreign table relationships to get department counts
+    const { data, error } = await supabase
+      .from("departments")
+      .select(`
+        id,
+        name,
+        employees(*)
+      `)
+      .order("name")
 
     if (error) {
-      console.error("Error fetching department counts:", error)
+      console.error("Error fetching departments with employees:", error)
       return getFallbackDepartmentData()
     }
 
-    console.log("Department counts from RPC:", departmentCounts)
-
     // Transform the data into the format expected by the chart
-    // Note: We no longer have department_id in the return value
-    const result = departmentCounts.map((item) => ({
-      department: item.department_name || "Unknown",
-      count: Number(item.employee_count),
+    const result = data.map((item) => ({
+      department: item.name,
+      count: item.employees?.length || 0,
     }))
 
-    // Sort by count descending for better visualization
+    // Get count of employees with no department
+    const { data: empsNoDept, error: noDeptError } = await supabase
+      .from("employees")
+      .select("id")
+      .is("department_id", null)
+
+    if (noDeptError) {
+      console.error("Error counting employees with no department:", noDeptError)
+    } else if (empsNoDept && empsNoDept.length > 0) {
+      result.push({
+        department: "No Department",
+        count: empsNoDept.length,
+      })
+    }
+
+    // Sort by count descending
     return result.sort((a, b) => b.count - a.count)
   } catch (error) {
     console.error("Error in getDepartmentDistribution:", error)
