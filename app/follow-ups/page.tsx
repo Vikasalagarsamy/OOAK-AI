@@ -1,3 +1,4 @@
+import { Suspense } from "react"
 import { FollowUpDashboardPage } from "@/components/follow-ups/follow-up-dashboard-page"
 
 export const metadata = {
@@ -8,7 +9,9 @@ export const metadata = {
 export default function FollowUpsPage() {
   return (
     <div className="container py-6">
-      <FollowUpDashboardPage />
+      <Suspense fallback={<div>Loading follow-up dashboard...</div>}>
+        <FollowUpDashboardPage />
+      </Suspense>
     </div>
   )
 }

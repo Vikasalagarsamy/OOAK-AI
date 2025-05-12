@@ -3,6 +3,8 @@ import { RealTimeDashboard } from "@/components/dashboard/real-time-dashboard"
 import { getDashboardStats } from "@/services/dashboard-service"
 import { Skeleton } from "@/components/ui/skeleton"
 
+// Add this export to make the page dynamic since it uses cookies
+export const dynamic = "force-dynamic"
 export const revalidate = 60 // Fallback revalidation if real-time updates fail
 
 export default async function DashboardPage() {
