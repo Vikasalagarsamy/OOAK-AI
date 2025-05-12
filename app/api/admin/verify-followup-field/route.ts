@@ -1,31 +1,45 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { testFollowupScheduling } from "@/verification/test-followup-scheduling"
-import { getCurrentUser } from "@/lib/auth-utils"
+import { verifyFollowupField } from "@/actions/verify-followup-field"
+import { addIsTestColumnToFollowups } from "@/actions/add-is-test-column"
 
 export async function POST(request: NextRequest) {
-  // Verify user authentication and authorization
-  const currentUser = await getCurrentUser()
-  if (!currentUser || !currentUser.isAdmin) {
-    return NextResponse.json({ error: "Unauthorized access" }, { status: 403 })
-  }
-
   try {
+    // Parse the request body
     const body = await request.json()
     const { leadId } = body
 
     if (!leadId || isNaN(Number(leadId))) {
-      return NextResponse.json({ success: false, message: "Invalid lead ID" }, { status: 400 })
+      return NextResponse.json(
+        { success: false, message: "Invalid lead ID", details: "Lead ID must be a number" },
+        { status: 400 },
+      )
     }
 
-    const result = await testFollowupScheduling(Number(leadId))
+    // Ensure the database is prepared
+    const prepResult = await addIsTestColumnToFollowups()
+    if (!prepResult.success) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Failed to prepare database",
+          details: prepResult.error || "Could not add required columns",
+        },
+        { status: 500 },
+      )
+    }
+
+    // Run the verification
+    const result = await verifyFollowupField(Number(leadId))
+
     return NextResponse.json(result)
   } catch (error) {
     console.error("Error in verify-followup-field API:", error)
+
     return NextResponse.json(
       {
         success: false,
-        message: "Failed to verify follow-up field",
-        error: error instanceof Error ? error.message : String(error),
+        message: "An unexpected error occurred",
+        details: error instanceof Error ? error.message : String(error),
       },
       { status: 500 },
     )
