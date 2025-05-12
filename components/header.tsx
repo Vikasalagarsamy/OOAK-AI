@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { Bell, LogOut, Settings, User, Moon } from "lucide-react"
+import { Bell, LogOut, Settings, User, Moon, Shield } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,16 +15,41 @@ import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar"
 import { MobileNavigation } from "./mobile-navigation"
 import { Badge } from "./ui/badge"
 import { useTheme } from "next-themes"
+import { useCurrentUser } from "@/hooks/use-current-user"
+import { Skeleton } from "./ui/skeleton"
 
 export function Header() {
   const [hasNotifications, setHasNotifications] = useState(true)
   const [notificationCount, setNotificationCount] = useState(3)
   const { setTheme } = useTheme()
+  const { user, loading } = useCurrentUser()
 
   const viewNotifications = () => {
     setHasNotifications(false)
     setNotificationCount(0)
     // In a real app, you would mark notifications as read in the database
+  }
+
+  // Generate avatar initials from user data
+  const getInitials = () => {
+    if (user?.firstName && user?.lastName) {
+      return `${user.firstName[0]}${user.lastName[0]}`.toUpperCase()
+    }
+    if (user?.username) {
+      return user.username.substring(0, 2).toUpperCase()
+    }
+    return "AU" // Default fallback
+  }
+
+  // Get display name
+  const getDisplayName = () => {
+    if (user?.firstName && user?.lastName) {
+      return `${user.firstName} ${user.lastName}`
+    }
+    if (user?.username) {
+      return user.username
+    }
+    return "Administrator" // Default fallback
   }
 
   return (
@@ -65,15 +90,34 @@ export function Header() {
               <Button variant="ghost" size="icon" className="relative h-8 w-8 rounded-full">
                 <Avatar className="h-8 w-8">
                   <AvatarImage src="/abstract-geometric-shapes.png" alt="User avatar" />
-                  <AvatarFallback>AU</AvatarFallback>
+                  <AvatarFallback>{getInitials()}</AvatarFallback>
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-56" align="end" forceMount>
-              <div className="flex flex-col space-y-1 p-2">
-                <p className="text-sm font-medium">Admin User</p>
-                <p className="text-xs text-muted-foreground">admin@example.com</p>
-              </div>
+              {loading ? (
+                <div className="flex flex-col space-y-2 p-2">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-3 w-24" />
+                </div>
+              ) : (
+                <div className="flex flex-col space-y-1 p-2">
+                  <div className="flex items-center">
+                    <p className="text-sm font-medium">{getDisplayName()}</p>
+                    {user?.isAdmin && (
+                      <Badge
+                        variant="outline"
+                        className="ml-2 bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
+                      >
+                        <Shield className="h-3 w-3 mr-1" />
+                        Admin
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">{user?.email || ""}</p>
+                  <p className="text-xs text-muted-foreground">Role: {user?.roleName || "User"}</p>
+                </div>
+              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem asChild>
                 <Link href="/profile" className="flex items-center">
