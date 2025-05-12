@@ -82,11 +82,11 @@ export function ScheduleFollowupDialog({ lead, open, onOpenChange, onFollowupSch
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[500px] p-0 overflow-hidden">
         <DialogHeader>
           <DialogTitle>Schedule Follow-up</DialogTitle>
         </DialogHeader>
-        <div className="grid gap-4 py-4">
+        <div className="grid gap-4 p-6">
           <div className="grid gap-2">
             <Label>Lead</Label>
             <div className="text-sm font-medium">
@@ -123,7 +123,7 @@ export function ScheduleFollowupDialog({ lead, open, onOpenChange, onFollowupSch
                     {date ? format(date, "PPP") : "Select date"}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
+                <PopoverContent className="w-auto p-0" align="start" side="bottom" sideOffset={4}>
                   <CalendarComponent
                     mode="single"
                     selected={date}
