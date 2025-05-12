@@ -5,12 +5,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
-import { Loader2, Calendar, Clock, Check } from "lucide-react"
+import { Loader2, Calendar, Clock } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import { Input } from "@/components/ui/input"
 import { scheduleLeadFollowup } from "@/actions/lead-actions"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { ModernCalendar } from "@/components/ui/modern-calendar"
+import { Calendar as CalendarComponent } from "@/components/ui/calendar"
 import { format, addDays, addWeeks, addMonths } from "date-fns"
 import { cn } from "@/lib/utils"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -26,12 +26,6 @@ interface ScheduleFollowupDialogProps {
   onFollowupScheduled: () => void
 }
 
-// Sample data for existing follow-ups (in a real app, this would come from the database)
-const existingFollowups = [
-  new Date(2025, 4, 15), // May 15, 2025
-  new Date(2025, 4, 22), // May 22, 2025
-]
-
 export function ScheduleFollowupDialog({ lead, open, onOpenChange, onFollowupScheduled }: ScheduleFollowupDialogProps) {
   const { toast } = useToast()
   const [date, setDate] = useState<Date | undefined>(undefined)
@@ -39,7 +33,7 @@ export function ScheduleFollowupDialog({ lead, open, onOpenChange, onFollowupSch
   const [followupType, setFollowupType] = useState("call")
   const [notes, setNotes] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [calendarOpen, setCalendarOpen] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   // Quick date selection options
   const quickDateOptions = [
@@ -49,6 +43,8 @@ export function ScheduleFollowupDialog({ lead, open, onOpenChange, onFollowupSch
   ]
 
   const handleSubmit = async () => {
+    setError(null)
+
     if (!date) {
       toast({
         title: "Date required",
@@ -66,6 +62,24 @@ export function ScheduleFollowupDialog({ lead, open, onOpenChange, onFollowupSch
       const [hours, minutes] = time.split(":").map(Number)
       dateTime.setHours(hours, minutes)
 
+      // Validate the date is in the future
+      if (dateTime <= new Date()) {
+        toast({
+          title: "Invalid date/time",
+          description: "Please select a future date and time for the follow-up",
+          variant: "destructive",
+        })
+        setIsSubmitting(false)
+        return
+      }
+
+      console.log("Scheduling follow-up with data:", {
+        leadId: lead.id,
+        dateTime: dateTime.toISOString(),
+        followupType,
+        notes,
+      })
+
       const result = await scheduleLeadFollowup(lead.id, dateTime.toISOString(), followupType, notes)
 
       if (result.success) {
@@ -76,6 +90,8 @@ export function ScheduleFollowupDialog({ lead, open, onOpenChange, onFollowupSch
         onFollowupScheduled()
         onOpenChange(false)
       } else {
+        console.error("Error from scheduleLeadFollowup:", result.message)
+        setError(result.message || "Failed to schedule follow-up")
         toast({
           title: "Failed to schedule follow-up",
           description: result.message || "An error occurred while scheduling the follow-up",
@@ -83,7 +99,8 @@ export function ScheduleFollowupDialog({ lead, open, onOpenChange, onFollowupSch
         })
       }
     } catch (error) {
-      console.error("Error scheduling follow-up:", error)
+      console.error("Exception in handleSubmit:", error)
+      setError("An unexpected error occurred. Please try again.")
       toast({
         title: "Failed to schedule follow-up",
         description: "An unexpected error occurred",
@@ -92,11 +109,6 @@ export function ScheduleFollowupDialog({ lead, open, onOpenChange, onFollowupSch
     } finally {
       setIsSubmitting(false)
     }
-  }
-
-  const handleDateSelect = (selectedDate: Date) => {
-    setDate(selectedDate)
-    setCalendarOpen(false)
   }
 
   return (
@@ -132,7 +144,7 @@ export function ScheduleFollowupDialog({ lead, open, onOpenChange, onFollowupSch
           <div className="grid gap-2">
             <Label>Date</Label>
             <div className="flex flex-col space-y-2">
-              <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+              <Popover>
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
@@ -143,11 +155,15 @@ export function ScheduleFollowupDialog({ lead, open, onOpenChange, onFollowupSch
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start" side="bottom" sideOffset={4}>
-                  <ModernCalendar
-                    selectedDate={date}
-                    onDateSelect={handleDateSelect}
-                    minDate={new Date()}
-                    highlightedDates={existingFollowups}
+                  <CalendarComponent
+                    mode="single"
+                    selected={date}
+                    onSelect={setDate}
+                    initialFocus
+                    disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                    showOutsideDays={false}
+                    numberOfMonths={1}
+                    className="rounded-md border"
                   />
                 </PopoverContent>
               </Popover>
@@ -193,7 +209,6 @@ export function ScheduleFollowupDialog({ lead, open, onOpenChange, onFollowupSch
                     ),
                     "h:mm a",
                   )}
-                  {time === timeOption && <Check className="ml-1 h-3 w-3" />}
                 </Button>
               ))}
             </div>
@@ -209,6 +224,12 @@ export function ScheduleFollowupDialog({ lead, open, onOpenChange, onFollowupSch
               rows={3}
             />
           </div>
+
+          {error && (
+            <div className="bg-red-50 text-red-800 p-3 rounded-md text-sm">
+              <strong>Error:</strong> {error}
+            </div>
+          )}
         </div>
         <DialogFooter className="p-6 pt-0">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>

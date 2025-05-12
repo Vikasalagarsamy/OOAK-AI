@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import { logActivity } from "@/services/activity-service"
 import { getCurrentUser } from "@/lib/auth-utils"
+import { verifyLeadFollowupsTable } from "@/utils/table-verification"
 
 // Update the updateLeadStatus function to handle rejected leads
 export async function updateLeadStatus(
@@ -373,37 +374,106 @@ export async function scheduleLeadFollowup(
   const supabase = createClient()
 
   try {
+    // Validate inputs
+    if (!leadId || !dateTime || !followupType) {
+      console.error("Missing required fields:", { leadId, dateTime, followupType })
+      return { success: false, message: "Missing required fields" }
+    }
+
     const currentUser = await getCurrentUser()
     if (!currentUser || !currentUser.id) {
+      console.error("Authentication required for scheduling follow-up")
       return { success: false, message: "Authentication required" }
     }
 
-    const { error } = await supabase.from("lead_followups").insert({
-      lead_id: leadId,
-      followup_type: followupType,
-      scheduled_at: dateTime,
-      notes: notes,
-      created_by: currentUser.id,
-    })
+    // First check if the lead exists
+    const { data: lead, error: leadError } = await supabase
+      .from("leads")
+      .select("id, lead_number, client_name")
+      .eq("id", leadId)
+      .single()
 
-    if (error) {
-      console.error("Error scheduling follow-up:", error)
-      return { success: false, message: "Failed to schedule follow-up" }
+    if (leadError) {
+      console.error("Error fetching lead:", leadError)
+      return { success: false, message: "Failed to find lead" }
     }
 
-    await logActivity({
-      actionType: "schedule",
-      entityType: "lead_followup",
-      entityId: leadId.toString(),
-      entityName: `Lead ${leadId}`,
-      description: `Follow-up scheduled for ${dateTime} (${followupType})`,
-      userName: `${currentUser.firstName} ${currentUser.lastName}`,
-    })
+    // Verify the lead_followups table exists
+    const verificationResult = await verifyLeadFollowupsTable()
+
+    if (!verificationResult.exists) {
+      console.error("Error with lead_followups table:", verificationResult.error)
+      return {
+        success: false,
+        message: "Failed to verify follow-up table: " + (verificationResult.message || "Unknown error"),
+      }
+    }
+
+    // First, try inserting without the created_by field
+    try {
+      const { error: insertError } = await supabase.from("lead_followups").insert({
+        lead_id: leadId,
+        followup_type: followupType,
+        scheduled_at: dateTime,
+        notes: notes || null,
+        // Omit created_by to avoid UUID issues
+      })
+
+      if (!insertError) {
+        // Success! No need to try other approaches
+        console.log("Successfully inserted follow-up without created_by field")
+      } else {
+        console.error("Error inserting follow-up without created_by:", insertError)
+
+        // If the error is not related to created_by, try with a system UUID
+        if (!insertError.message.includes("created_by")) {
+          // Try with a system-generated UUID
+          const systemUuid = "00000000-0000-0000-0000-000000000000" // System UUID
+
+          const { error: retryError } = await supabase.from("lead_followups").insert({
+            lead_id: leadId,
+            followup_type: followupType,
+            scheduled_at: dateTime,
+            notes: notes || null,
+            created_by: systemUuid,
+          })
+
+          if (retryError) {
+            console.error("Error on retry with system UUID:", retryError)
+            return { success: false, message: `Failed to schedule follow-up: ${retryError.message}` }
+          }
+        } else {
+          return { success: false, message: `Failed to schedule follow-up: ${insertError.message}` }
+        }
+      }
+    } catch (insertError) {
+      console.error("Exception inserting follow-up:", insertError)
+      return {
+        success: false,
+        message: `Failed to schedule follow-up: ${insertError instanceof Error ? insertError.message : "Unknown error"}`,
+      }
+    }
+
+    // Log the activity
+    try {
+      await logActivity({
+        actionType: "schedule",
+        entityType: "lead_followup",
+        entityId: leadId.toString(),
+        entityName: `Lead ${lead.lead_number}`,
+        description: `Follow-up scheduled for ${new Date(dateTime).toLocaleString()} (${followupType})`,
+        userName: `${currentUser.firstName} ${currentUser.lastName}`,
+      })
+    } catch (logError) {
+      console.error("Error logging activity (non-fatal):", logError)
+      // Continue anyway, as this is non-critical
+    }
 
     revalidatePath(`/sales/lead/${leadId}`)
+    revalidatePath(`/sales/my-leads`)
     return { success: true, message: "Follow-up scheduled successfully" }
   } catch (error) {
-    console.error("Error scheduling follow-up:", error)
+    console.error("Unexpected error scheduling follow-up:", error)
     return { success: false, message: "An unexpected error occurred" }
   }
 }
