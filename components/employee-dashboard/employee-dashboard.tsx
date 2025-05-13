@@ -21,22 +21,27 @@ export function EmployeeDashboard() {
   const [departmentDistribution, setDepartmentDistribution] = useState<{ name: string; count: number }[]>([])
   const [statusDistribution, setStatusDistribution] = useState<{ status: string; count: number }[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [stats, deptDist, statusDist] = await Promise.all([
-          getEmployeeStats(),
-          getDepartmentDistribution(),
-          getStatusDistribution(),
-        ])
+        setIsLoading(true)
+        setError(null)
 
+        // Fetch data sequentially to avoid any potential issues
+        const stats = await getEmployeeStats()
         setEmployeeStats(stats)
+
+        const deptDist = await getDepartmentDistribution()
         setDepartmentDistribution(deptDist)
+
+        const statusDist = await getStatusDistribution()
         setStatusDistribution(statusDist)
-        setIsLoading(false)
       } catch (error) {
         console.error("Error fetching dashboard data:", error)
+        setError("Failed to load dashboard data. Please try again later.")
+      } finally {
         setIsLoading(false)
       }
     }
@@ -44,8 +49,36 @@ export function EmployeeDashboard() {
     fetchData()
   }, [])
 
+  if (error) {
+    return (
+      <div className="bg-red-50 border border-red-200 text-red-800 rounded-md p-4 my-4">
+        <h3 className="text-lg font-semibold">Error</h3>
+        <p>{error}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="mt-2 px-3 py-1 bg-red-100 text-red-800 rounded hover:bg-red-200 transition-colors"
+        >
+          Retry
+        </button>
+      </div>
+    )
+  }
+
   if (isLoading) {
-    return <div className="flex justify-center items-center h-64">Loading dashboard data...</div>
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="h-24 bg-gray-200 animate-pulse rounded-lg" />
+          ))}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {[...Array(2)].map((_, i) => (
+            <div key={i} className="h-80 bg-gray-200 animate-pulse rounded-lg" />
+          ))}
+        </div>
+      </div>
+    )
   }
 
   return (

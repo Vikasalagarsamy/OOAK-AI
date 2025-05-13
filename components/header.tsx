@@ -1,6 +1,6 @@
 "use client"
 import Link from "next/link"
-import { LogOut, Settings, User, Moon, Shield } from "lucide-react"
+import { LogOut, Settings, User, Moon, Sun, Shield } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,7 +17,7 @@ import { Skeleton } from "./ui/skeleton"
 import { NotificationsDropdown } from "./notifications/notifications-dropdown"
 
 export function Header() {
-  const { setTheme } = useTheme()
+  const { theme, setTheme } = useTheme()
   const { user, loading } = useCurrentUser()
 
   // Generate avatar initials from user data
@@ -42,6 +42,11 @@ export function Header() {
     return "Administrator" // Default fallback
   }
 
+  // Toggle theme function
+  const toggleTheme = () => {
+    setTheme(theme === "dark" ? "light" : "dark")
+  }
+
   return (
     <header className="sticky top-0 z-40 w-full border-b bg-background">
       <div className="flex h-16 items-center justify-between px-4 md:px-6">
@@ -56,11 +61,12 @@ export function Header() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setTheme("dark")}
+            onClick={toggleTheme}
             className="h-9 w-9"
             aria-label="Toggle theme"
+            title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
           >
-            <Moon className="h-5 w-5" />
+            {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
           </Button>
 
           <NotificationsDropdown />

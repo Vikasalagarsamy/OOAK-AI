@@ -52,7 +52,7 @@ export default function RootLayout({
         <div className="pt-10">
           {" "}
           {/* Add padding to the top to account for the fixed banner */}
-          <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+          <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
             {children}
             <Toaster />
             <FollowUpNotificationListener />
