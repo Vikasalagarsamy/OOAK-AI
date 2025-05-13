@@ -14,7 +14,8 @@ interface RoleContextType {
   isAdmin: boolean
 }
 
-const RoleContext = createContext<RoleContextType | undefined>(undefined)
+// Export the context so it can be accessed directly if needed
+export const RoleContext = createContext<RoleContextType | undefined>(undefined)
 
 export function RoleProvider({ children }: { children: ReactNode }) {
   // Find the admin role

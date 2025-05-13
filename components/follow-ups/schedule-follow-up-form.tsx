@@ -18,6 +18,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils"
 import { createFollowUp } from "@/actions/follow-up-actions"
 import { toast } from "@/components/ui/use-toast"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
 const formSchema = z.object({
   lead_id: z.number().positive("Lead ID is required"),
@@ -44,13 +45,14 @@ type ScheduleFollowUpFormProps = {
 
 export function ScheduleFollowUpForm({ leadId, leadName, onSuccess }: ScheduleFollowUpFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [debugInfo, setDebugInfo] = useState<string | null>(null)
   const router = useRouter()
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       lead_id: leadId,
-      scheduled_at: "",
+      scheduled_at: new Date().toISOString(), // Set default to current time
       followup_type: "phone",
       notes: "",
       priority: "medium",
@@ -60,8 +62,16 @@ export function ScheduleFollowUpForm({ leadId, leadName, onSuccess }: ScheduleFo
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsSubmitting(true)
+    setDebugInfo(null)
+
     try {
+      // Log the values being submitted
+      console.log("Submitting follow-up form with values:", values)
+
       const result = await createFollowUp(values)
+
+      // Log the result for debugging
+      console.log("Follow-up creation result:", result)
 
       if (result.success) {
         toast({
@@ -74,6 +84,10 @@ export function ScheduleFollowUpForm({ leadId, leadName, onSuccess }: ScheduleFo
         }
       } else {
         console.error("Follow-up creation error details:", result.error)
+
+        // Set debug info for display
+        setDebugInfo(JSON.stringify(result.error, null, 2))
+
         toast({
           title: "Error",
           description: result.message || "Failed to schedule follow-up",
@@ -82,6 +96,10 @@ export function ScheduleFollowUpForm({ leadId, leadName, onSuccess }: ScheduleFo
       }
     } catch (error) {
       console.error("Unexpected error during follow-up creation:", error)
+
+      // Set debug info for display
+      setDebugInfo(typeof error === "object" && error !== null ? JSON.stringify(error, null, 2) : String(error))
+
       toast({
         title: "Error",
         description:
@@ -265,8 +283,24 @@ export function ScheduleFollowUpForm({ leadId, leadName, onSuccess }: ScheduleFo
           )}
         />
 
-        <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? "Scheduling..." : "Schedule Follow-up"}
+        {debugInfo && (
+          <Alert variant="destructive">
+            <AlertTitle>Debug Information</AlertTitle>
+            <AlertDescription>
+              <pre className="text-xs overflow-auto max-h-40">{debugInfo}</pre>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        <Button type="submit" disabled={isSubmitting} className="w-full">
+          {isSubmitting ? (
+            <>
+              <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"></span>
+              Scheduling...
+            </>
+          ) : (
+            "Schedule Follow-up"
+          )}
         </Button>
       </form>
     </Form>

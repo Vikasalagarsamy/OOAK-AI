@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
@@ -41,10 +41,14 @@ type MenuItem = {
   title: string
   href?: string
   icon: React.ReactNode
+  requiredRole?: string[] // Roles that can access this item
+  adminOnly?: boolean // If true, only admins can see this
   submenu?: {
     title: string
     href: string
     icon: React.ReactNode
+    requiredRole?: string[] // Roles that can access this subitem
+    adminOnly?: boolean // If true, only admins can see this
   }[]
 }
 
@@ -88,16 +92,19 @@ const allMenuItems: MenuItem[] = [
         title: "Roles",
         href: "/organization/roles",
         icon: <Shield className="h-4 w-4" />,
+        adminOnly: true,
       },
       {
         title: "User Accounts",
         href: "/organization/user-accounts",
         icon: <UserCog className="h-4 w-4" />,
+        adminOnly: true,
       },
       {
         title: "Account Creation",
         href: "/organization/account-creation",
         icon: <UserPlus className="h-4 w-4" />,
+        adminOnly: true,
       },
     ],
   },
@@ -279,24 +286,108 @@ const allMenuItems: MenuItem[] = [
   {
     title: "Admin",
     icon: <Settings className="h-5 w-5" />,
+    adminOnly: true, // Only admins can see this menu
     submenu: [
       {
         title: "Menu & Role Permissions",
         href: "/admin/menu-permissions",
         icon: <Lock className="h-4 w-4" />,
+        adminOnly: true,
       },
       // All other Admin menu items have been removed as requested
     ],
   },
 ]
 
+// Create a custom hook to safely use role information
+function useSafeRole() {
+  // Try to get role information, but don't throw if it's not available
+  let useRole
+  try {
+    // Dynamically import the useRole hook
+    ;({ useRole } = require("@/contexts/role-context"))
+  } catch (error) {
+    // If the module or hook doesn't exist, return a default function
+    console.warn("Role context module not available, using default role settings")
+    useRole = () => ({
+      currentRole: { id: "admin", name: "Administrator", isAdmin: true },
+      isAdmin: true,
+      filteredMenu: {},
+      availableRoles: [],
+      setCurrentRole: () => {},
+    })
+  }
+
+  try {
+    // Try to use the hook
+    return useRole()
+  } catch (error) {
+    // If the hook throws (e.g., no provider), return default values
+    console.warn("Role provider not available, using default role settings")
+    return {
+      currentRole: { id: "admin", name: "Administrator", isAdmin: true },
+      isAdmin: true,
+      filteredMenu: {},
+      availableRoles: [],
+      setCurrentRole: () => {},
+    }
+  }
+}
+
 export function SimpleSidebar() {
   const pathname = usePathname()
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({})
 
+  // Use our safe role hook
+  const { isAdmin, currentRole } = useSafeRole()
+  const currentRoleId = currentRole?.id || "admin"
+
+  // Filter menu items based on user role
+  const filteredMenuItems = useMemo(() => {
+    return allMenuItems.filter((item) => {
+    console.log("item", item);
+      // If the item is admin-only and user is not admin, hide it
+      if (item.adminOnly && !isAdmin) {
+        return false
+      }
+
+      // If the item has a required role and user doesn't have it, hide it
+      if (item.requiredRole && !item.requiredRole.includes(currentRoleId)) {
+        return false
+      }
+
+      // If the item has submenu items, filter those too
+      if (item.submenu) {
+        const filteredSubmenu = item.submenu.filter((subItem) => {
+          if (subItem.adminOnly && !isAdmin) {
+            return false
+          }
+          if (subItem.requiredRole && !subItem.requiredRole.includes(currentRoleId)) {
+            return false
+          }
+          return true
+        })
+
+        // If all submenu items are filtered out, hide the parent menu
+        if (filteredSubmenu.length === 0) {
+          return false
+        }
+
+        // Update the submenu with filtered items
+        item.submenu = filteredSubmenu
+      }
+
+      return true
+    })
+  }, [currentRoleId, isAdmin])
+
+   console.log("filteredMenuItems", filteredMenuItems);
+
   // Auto-expand the menu that contains the current path
   useEffect(() => {
-    const currentMenu = allMenuItems.find((item) => item.submenu?.some((subItem) => pathname.startsWith(subItem.href)))
+    const currentMenu = filteredMenuItems.find((item) =>
+      item.submenu?.some((subItem) => pathname.startsWith(subItem.href)),
+    )
 
     if (currentMenu) {
       setOpenMenus((prev) => ({
@@ -304,7 +395,7 @@ export function SimpleSidebar() {
         [currentMenu.title]: true,
       }))
     }
-  }, [pathname])
+  }, [pathname, filteredMenuItems])
 
   const toggleMenu = (title: string) => {
     setOpenMenus((prev) => ({
@@ -319,7 +410,7 @@ export function SimpleSidebar() {
         <div className="px-3 py-2">
           <h2 className="mb-2 px-4 text-lg font-semibold">Navigation</h2>
           <div className="space-y-1">
-            {allMenuItems.map((item) => (
+            {filteredMenuItems.map((item) => (
               <div key={item.title} className="mb-1">
                 {item.submenu ? (
                   <>
@@ -378,7 +469,7 @@ export function SimpleSidebar() {
         </div>
       </div>
 
-      {/* Role Switcher at the bottom of the sidebar */}
+      {/* Role Switcher at the bottom of the sidebar - only show if role context is available */}
       <SidebarRoleSwitcher />
     </div>
   )

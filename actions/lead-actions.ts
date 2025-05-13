@@ -372,7 +372,7 @@ export async function scheduleLeadFollowup(data: {
   notes?: string
   priority: string
   summary?: string
-}) {
+}): Promise<{ success: boolean; message?: string; data?: any }> {
   const supabase = createClient()
 
   try {
@@ -388,21 +388,60 @@ export async function scheduleLeadFollowup(data: {
       currentUserId: currentUser.id,
     })
 
-    // Insert the follow-up
-    const { data: followup, error } = await supabase
-      .from("lead_followups")
-      .insert({
-        lead_id: data.leadId,
-        scheduled_at: data.scheduledAt,
-        followup_type: data.followupType,
-        notes: data.notes || null,
-        priority: data.priority,
-        interaction_summary: data.summary || null,
-        status: "scheduled",
-        // Ensure created_by is stored as text since that's how it's defined in the database
-        created_by: currentUser.id ? String(currentUser.id) : null,
+    // Check if the lead_followups table exists
+    const { data: tableExists, error: tableCheckError } = await supabase.from("lead_followups").select("id").limit(1)
+
+    if (tableCheckError) {
+      console.error("Error checking lead_followups table:", tableCheckError)
+      return {
+        success: false,
+        message: `Failed to access lead_followups table: ${tableCheckError.message}`,
+      }
+    }
+
+    // Check which column name to use (followup_type or contact_method)
+    let columnToUse = "followup_type"
+
+    try {
+      // Try to check if followup_type column exists
+      const { data: followupTypeExists, error: columnCheckError } = await supabase.rpc("column_exists", {
+        table_name: "lead_followups",
+        column_name: "followup_type",
       })
-      .select()
+
+      if (columnCheckError || !followupTypeExists) {
+        // If followup_type doesn't exist, try contact_method
+        const { data: contactMethodExists } = await supabase.rpc("column_exists", {
+          table_name: "lead_followups",
+          column_name: "contact_method",
+        })
+
+        if (contactMethodExists) {
+          columnToUse = "contact_method"
+        }
+      }
+    } catch (error) {
+      console.error("Error checking column existence:", error)
+      // Continue with default column name
+    }
+
+    // Prepare the insert data
+    const insertData: any = {
+      lead_id: data.leadId,
+      scheduled_at: data.scheduledAt,
+      notes: data.notes || null,
+      priority: data.priority,
+      interaction_summary: data.summary || null,
+      status: "scheduled",
+      // Ensure created_by is stored as text since that's how it's defined in the database
+      created_by: currentUser.id ? String(currentUser.id) : null,
+    }
+
+    // Set the correct column based on our check
+    insertData[columnToUse] = data.followupType
+
+    // Insert the follow-up
+    const { data: followup, error } = await supabase.from("lead_followups").insert(insertData).select()
 
     if (error) {
       console.error("Error inserting follow-up:", error)
@@ -425,7 +464,11 @@ export async function scheduleLeadFollowup(data: {
     revalidatePath(`/sales/lead/${data.leadId}`)
     revalidatePath("/follow-ups/dashboard")
 
-    return { success: true, message: "Follow-up scheduled successfully", data: followup }
+    return {
+      success: true,
+      message: "Follow-up scheduled successfully",
+      data: followup ? followup[0] : null,
+    }
   } catch (error) {
     console.error("Unexpected error scheduling follow-up:", error)
     return {

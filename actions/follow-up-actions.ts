@@ -1,6 +1,6 @@
 "use server"
 
-import { createClient } from "@/lib/supabase-server"
+import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import type { FollowUpStatus, FollowUpWithLead } from "@/types/follow-up"
 import { getCurrentUser } from "@/lib/auth-utils"
@@ -22,7 +22,7 @@ export const FollowUpSchema = z.object({
   scheduled_at: z.string().datetime(),
   followup_type: z.enum(VALID_FOLLOWUP_TYPES),
   notes: z.string().optional(),
-  priority: z.enum(["low", "medium", "high"]),
+  priority: z.enum(["low", "medium", "high", "urgent"]),
   interaction_summary: z.string().optional(),
 })
 
@@ -39,72 +39,81 @@ export async function getFollowUps(filters?: {
 }): Promise<FollowUpWithLead[]> {
   const supabase = createClient()
 
-  let query = supabase.from("lead_followups").select(`
+  try {
+    let query = supabase.from("lead_followups").select(`
       *,
       lead:leads(lead_number, client_name)
     `)
 
-  // Apply filters
-  if (filters) {
-    if (filters.status) {
-      if (Array.isArray(filters.status)) {
-        query = query.in("status", filters.status)
-      } else {
-        query = query.eq("status", filters.status)
+    // Apply filters
+    if (filters) {
+      if (filters.status) {
+        if (Array.isArray(filters.status)) {
+          query = query.in("status", filters.status)
+        } else {
+          query = query.eq("status", filters.status)
+        }
+      }
+
+      if (filters.leadId) {
+        query = query.eq("lead_id", filters.leadId)
+      }
+
+      if (filters.startDate) {
+        query = query.gte("scheduled_at", filters.startDate)
+      }
+
+      if (filters.endDate) {
+        query = query.lte("scheduled_at", filters.endDate)
+      }
+
+      if (filters.priority) {
+        query = query.eq("priority", filters.priority)
       }
     }
 
-    if (filters.leadId) {
-      query = query.eq("lead_id", filters.leadId)
+    // Order by scheduled date
+    query = query.order("scheduled_at", { ascending: true })
+
+    const { data, error } = await query
+
+    if (error) {
+      console.error("Error fetching follow-ups:", error)
+      throw new Error(`Failed to fetch follow-ups: ${error.message}`)
     }
 
-    if (filters.startDate) {
-      query = query.gte("scheduled_at", filters.startDate)
-    }
-
-    if (filters.endDate) {
-      query = query.lte("scheduled_at", filters.endDate)
-    }
-
-    if (filters.priority) {
-      query = query.eq("priority", filters.priority)
-    }
+    return data || [] // Ensure we always return an array, even if data is null
+  } catch (error) {
+    console.error("Error in getFollowUps:", error)
+    return [] // Return empty array on error
   }
-
-  // Order by scheduled date
-  query = query.order("scheduled_at", { ascending: true })
-
-  const { data, error } = await query
-
-  if (error) {
-    console.error("Error fetching follow-ups:", error)
-    throw new Error("Failed to fetch follow-ups")
-  }
-
-  return data as FollowUpWithLead[]
 }
 
 export async function getFollowUpById(id: number): Promise<FollowUpWithLead | null> {
   const supabase = createClient()
 
-  const { data, error } = await supabase
-    .from("lead_followups")
-    .select(`
-      *,
-      lead:leads(lead_number, client_name)
-    `)
-    .eq("id", id)
-    .single()
+  try {
+    const { data, error } = await supabase
+      .from("lead_followups")
+      .select(`
+        *,
+        lead:leads(lead_number, client_name)
+      `)
+      .eq("id", id)
+      .single()
 
-  if (error) {
-    console.error("Error fetching follow-up:", error)
+    if (error) {
+      console.error("Error fetching follow-up:", error)
+      return null
+    }
+
+    return data as FollowUpWithLead
+  } catch (error) {
+    console.error("Error in getFollowUpById:", error)
     return null
   }
-
-  return data as FollowUpWithLead
 }
 
-// Add this function back to maintain backward compatibility
 export async function createFollowUp(
   formData: FollowUpFormData,
 ): Promise<{ success: boolean; message: string; id?: number; error?: any }> {
@@ -136,23 +145,45 @@ export async function createFollowUp(
       }
     }
 
-    // Ensure proper data types for database insertion
-    const followUpData = {
+    // Check if the contact_method column exists
+    const hasContactMethod = await checkIfColumnExists("lead_followups", "contact_method")
+    // Check if the followup_type column exists
+    const hasFollowupType = await checkIfColumnExists("lead_followups", "followup_type")
+
+    // Prepare the data based on the column name
+    const followUpData: Record<string, any> = {
       lead_id: Number(formData.lead_id),
       scheduled_at: new Date(formData.scheduled_at).toISOString(),
-      followup_type: String(formData.followup_type),
       notes: formData.notes ? String(formData.notes) : null,
       priority: String(formData.priority),
       interaction_summary: formData.interaction_summary ? String(formData.interaction_summary) : null,
-      status: "scheduled" as FollowUpStatus,
-      created_by: currentUser.id ? String(currentUser.id) : null, // Explicitly convert to string
+      status: "scheduled",
+      created_by: currentUser.id ? String(currentUser.id) : null,
+      created_at: new Date().toISOString(),
       follow_up_required: false,
       next_follow_up_date: null,
     }
 
+    // Set the appropriate column based on what exists in the database
+    if (hasContactMethod) {
+      followUpData.contact_method = String(formData.followup_type)
+    }
+    if (hasFollowupType) {
+      followUpData.followup_type = String(formData.followup_type)
+    }
+
+    // If neither column exists, add a clear error message
+    if (!hasContactMethod && !hasFollowupType) {
+      return {
+        success: false,
+        message:
+          "Database schema error: Neither contact_method nor followup_type columns exist in the lead_followups table.",
+      }
+    }
+
     console.log("Inserting follow-up data:", followUpData)
 
-    // Use direct SQL for debugging purposes
+    // Insert the data
     const { data, error } = await supabase.from("lead_followups").insert(followUpData).select()
 
     if (error) {
@@ -164,15 +195,27 @@ export async function createFollowUp(
       }
     }
 
+    if (!data || data.length === 0) {
+      return {
+        success: false,
+        message: "Follow-up was created but no data was returned.",
+      }
+    }
+
     // Log activity
-    await logActivity({
-      actionType: "create",
-      entityType: "follow_up",
-      entityId: data[0].id.toString(),
-      entityName: `Follow-up for Lead ${lead.lead_number}`,
-      description: `Scheduled a ${formData.followup_type} follow-up for ${new Date(formData.scheduled_at).toLocaleString()}`,
-      userName: `${currentUser.firstName} ${currentUser.lastName}`,
-    })
+    try {
+      await logActivity({
+        actionType: "create",
+        entityType: "follow_up",
+        entityId: data[0].id.toString(),
+        entityName: `Follow-up for Lead ${lead.lead_number}`,
+        description: `Scheduled a ${formData.followup_type} follow-up for ${new Date(formData.scheduled_at).toLocaleString()}`,
+        userName: `${currentUser.firstName} ${currentUser.lastName}`,
+      })
+    } catch (logError) {
+      console.error("Error logging activity:", logError)
+      // Continue execution even if logging fails
+    }
 
     revalidatePath("/follow-ups")
     revalidatePath(`/leads/${formData.lead_id}`)
@@ -189,6 +232,30 @@ export async function createFollowUp(
       message: "An unexpected error occurred",
       error: error,
     }
+  }
+}
+
+// Helper function to check if a column exists in a table
+async function checkIfColumnExists(tableName: string, columnName: string): Promise<boolean> {
+  const supabase = createClient()
+
+  try {
+    // Use information_schema to check if column exists
+    const { data, error } = await supabase
+      .from("information_schema.columns")
+      .select("column_name")
+      .eq("table_name", tableName)
+      .eq("column_name", columnName)
+
+    if (error) {
+      console.error(`Error checking if column ${columnName} exists:`, error)
+      return false
+    }
+
+    return data && data.length > 0
+  } catch (error) {
+    console.error(`Error in checkIfColumnExists for ${columnName}:`, error)
+    return false
   }
 }
 
@@ -221,10 +288,11 @@ export async function scheduleLeadFollowup(data: {
     // Get current user
     const {
       data: { user },
+      error: userError,
     } = await supabase.auth.getUser()
 
-    if (!user) {
-      console.error("No authenticated user found")
+    if (userError || !user) {
+      console.error("Error getting user:", userError)
       return { success: false, message: "Authentication required" }
     }
 
@@ -240,21 +308,42 @@ export async function scheduleLeadFollowup(data: {
       return { success: false, message: "The specified lead does not exist" }
     }
 
+    // Check if the contact_method column exists
+    const hasContactMethod = await checkIfColumnExists("lead_followups", "contact_method")
+    // Check if the followup_type column exists
+    const hasFollowupType = await checkIfColumnExists("lead_followups", "followup_type")
+
+    // Prepare the data based on the column name
+    const followUpData: Record<string, any> = {
+      lead_id: data.leadId,
+      scheduled_at: data.scheduledAt,
+      notes: data.notes || "",
+      priority: data.priority,
+      interaction_summary: data.summary || "",
+      status: "scheduled",
+      created_by: String(user.id),
+      created_at: new Date().toISOString(),
+    }
+
+    // Set the appropriate column based on what exists in the database
+    if (hasContactMethod) {
+      followUpData.contact_method = data.followupType
+    }
+    if (hasFollowupType) {
+      followUpData.followup_type = data.followupType
+    }
+
+    // If neither column exists, add a clear error message
+    if (!hasContactMethod && !hasFollowupType) {
+      return {
+        success: false,
+        message:
+          "Database schema error: Neither contact_method nor followup_type columns exist in the lead_followups table.",
+      }
+    }
+
     // Insert the follow-up
-    const { data: followup, error } = await supabase
-      .from("lead_followups") // Ensure this matches your actual table name
-      .insert({
-        lead_id: data.leadId,
-        scheduled_at: data.scheduledAt,
-        followup_type: data.followupType,
-        notes: data.notes || "",
-        priority: data.priority,
-        interaction_summary: data.summary || "",
-        status: "scheduled",
-        created_by: String(user.id),
-        created_at: new Date().toISOString(),
-      })
-      .select()
+    const { data: followup, error } = await supabase.from("lead_followups").insert(followUpData).select()
 
     if (error) {
       console.error("Error inserting follow-up:", error)
@@ -264,9 +353,18 @@ export async function scheduleLeadFollowup(data: {
         return { success: false, message: "A follow-up with these details already exists" }
       } else if (error.code === "23503") {
         return { success: false, message: "Referenced lead or user does not exist" }
+      } else if (error.code === "42703") {
+        return { success: false, message: "Database column error. Please contact support." }
       }
 
       return { success: false, message: `Failed to schedule follow-up: ${error.message}` }
+    }
+
+    if (!followup || followup.length === 0) {
+      return {
+        success: false,
+        message: "Follow-up was created but no data was returned.",
+      }
     }
 
     console.log("Follow-up scheduled successfully:", followup)
@@ -279,13 +377,14 @@ export async function scheduleLeadFollowup(data: {
     return {
       success: true,
       message: "Follow-up scheduled successfully",
-      data: followup,
+      data: followup[0], // Return the first followup object instead of the array
     }
   } catch (error: any) {
     console.error("Unexpected error in scheduleLeadFollowup:", error)
     return {
       success: false,
       message: `An unexpected error occurred: ${error.message || String(error)}`,
+      error: error,
     }
   }
 }
