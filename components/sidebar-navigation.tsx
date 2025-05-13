@@ -360,7 +360,7 @@ export function SidebarNavigation() {
   return (
     <div className="h-screen w-64 bg-background border-r flex flex-col">
       <div className="p-4 border-b">
-        <h2 className="font-semibold text-lg">Company Manager</h2>
+        <h2 className="font-semibold text-lg">ONE OF A KIND PORTAL</h2>
       </div>
       <ScrollArea className="flex-1">
         <nav className="p-2">
