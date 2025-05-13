@@ -86,17 +86,6 @@ export function FollowUpDetailsDialog({ followUp, open, onOpenChange, onStatusCh
   const [showCompleteDialog, setShowCompleteDialog] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
 
-  // Define safe values with fallbacks for all properties
-  const status = followUp?.status || "scheduled"
-  const priority = followUp?.priority || "medium"
-  const followupType = followUp?.followup_type || "other"
-  const followupTypeDisplay = typeof followupType === "string" ? followupType.replace(/_/g, " ") : "other"
-  const clientName = followUp?.lead?.client_name || "Unknown Client"
-  const leadNumber = followUp?.lead?.lead_number || "N/A"
-  const scheduledAt = followUp?.scheduled_at ? new Date(followUp.scheduled_at) : new Date()
-  const createdAt = followUp?.created_at ? new Date(followUp.created_at) : new Date()
-  const completedAt = followUp?.completed_at ? new Date(followUp.completed_at) : null
-
   async function handleComplete() {
     if (!outcome.trim()) {
       toast({
@@ -187,19 +176,19 @@ export function FollowUpDetailsDialog({ followUp, open, onOpenChange, onStatusCh
           <div className="space-y-4 py-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
-                <h3 className="font-medium text-lg">{clientName}</h3>
+                <h3 className="font-medium text-lg">{followUp.lead?.client_name || "Unknown Client"}</h3>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <span>Lead #{leadNumber}</span>
+                  <span>Lead #{followUp.lead?.lead_number || "N/A"}</span>
                 </div>
               </div>
 
               <div className="flex items-center gap-2">
-                <Badge className={statusColors[status] || statusColors.scheduled}>
-                  {status.charAt(0).toUpperCase() + status.slice(1)}
+                <Badge className={statusColors[followUp.status]}>
+                  {followUp.status.charAt(0).toUpperCase() + followUp.status.slice(1)}
                 </Badge>
 
-                <Badge className={priorityColors[priority] || priorityColors.medium}>
-                  {priority.charAt(0).toUpperCase() + priority.slice(1)} Priority
+                <Badge className={priorityColors[followUp.priority]}>
+                  {followUp.priority.charAt(0).toUpperCase() + followUp.priority.slice(1)} Priority
                 </Badge>
               </div>
             </div>
@@ -211,18 +200,18 @@ export function FollowUpDetailsDialog({ followUp, open, onOpenChange, onStatusCh
                 <h4 className="text-sm font-medium mb-1">Scheduled Date & Time</h4>
                 <div className="flex items-center text-sm">
                   <Calendar className="mr-1 h-4 w-4 text-muted-foreground" />
-                  <span className="mr-3">{format(scheduledAt, "MMMM d, yyyy")}</span>
+                  <span className="mr-3">{format(new Date(followUp.scheduled_at), "MMMM d, yyyy")}</span>
 
                   <Clock className="mr-1 h-4 w-4 text-muted-foreground" />
-                  <span>{format(scheduledAt, "h:mm a")}</span>
+                  <span>{format(new Date(followUp.scheduled_at), "h:mm a")}</span>
                 </div>
               </div>
 
               <div>
                 <h4 className="text-sm font-medium mb-1">Follow-up Type</h4>
                 <div className="flex items-center text-sm">
-                  {followupTypeIcons[followupType] || <HelpCircle className="mr-1 h-4 w-4" />}
-                  <span className="ml-1 capitalize">{followupTypeDisplay}</span>
+                  {followupTypeIcons[followUp.followup_type] || <HelpCircle className="mr-1 h-4 w-4" />}
+                  <span className="ml-1 capitalize">{followUp.followup_type.replace(/_/g, " ")}</span>
                 </div>
               </div>
 
@@ -230,7 +219,7 @@ export function FollowUpDetailsDialog({ followUp, open, onOpenChange, onStatusCh
                 <h4 className="text-sm font-medium mb-1">Created</h4>
                 <div className="flex items-center text-sm">
                   <Calendar className="mr-1 h-4 w-4 text-muted-foreground" />
-                  <span>{format(createdAt, "MMMM d, yyyy")}</span>
+                  <span>{format(new Date(followUp.created_at), "MMMM d, yyyy")}</span>
                 </div>
               </div>
 
@@ -238,48 +227,48 @@ export function FollowUpDetailsDialog({ followUp, open, onOpenChange, onStatusCh
                 <h4 className="text-sm font-medium mb-1">Created By</h4>
                 <div className="flex items-center text-sm">
                   <User className="mr-1 h-4 w-4 text-muted-foreground" />
-                  <span>{followUp?.created_by || "System"}</span>
+                  <span>{followUp.created_by || "System"}</span>
                 </div>
               </div>
             </div>
 
-            {followUp?.interaction_summary && (
+            {followUp.interaction_summary && (
               <div>
                 <h4 className="text-sm font-medium mb-1">Summary</h4>
                 <p className="text-sm">{followUp.interaction_summary}</p>
               </div>
             )}
 
-            {followUp?.notes && (
+            {followUp.notes && (
               <div>
                 <h4 className="text-sm font-medium mb-1">Notes</h4>
                 <p className="text-sm">{followUp.notes}</p>
               </div>
             )}
 
-            {followUp?.outcome && (
+            {followUp.outcome && (
               <div>
                 <h4 className="text-sm font-medium mb-1">Outcome</h4>
                 <p className="text-sm">{followUp.outcome}</p>
               </div>
             )}
 
-            {completedAt && (
+            {followUp.completed_at && (
               <div>
                 <h4 className="text-sm font-medium mb-1">Completed On</h4>
                 <div className="flex items-center text-sm">
                   <Calendar className="mr-1 h-4 w-4 text-muted-foreground" />
-                  <span>{format(completedAt, "MMMM d, yyyy")}</span>
+                  <span>{format(new Date(followUp.completed_at), "MMMM d, yyyy")}</span>
 
                   <Clock className="ml-3 mr-1 h-4 w-4 text-muted-foreground" />
-                  <span>{format(completedAt, "h:mm a")}</span>
+                  <span>{format(new Date(followUp.completed_at), "h:mm a")}</span>
                 </div>
               </div>
             )}
           </div>
 
           <DialogFooter className="gap-2">
-            {status === "scheduled" && (
+            {followUp.status === "scheduled" && (
               <>
                 <Button variant="outline" onClick={() => setShowCompleteDialog(true)}>
                   <CheckCircle className="mr-2 h-4 w-4" />
