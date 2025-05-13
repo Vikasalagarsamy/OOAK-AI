@@ -5,6 +5,7 @@ import { Toaster } from "@/components/toaster"
 import { ThemeProvider } from "@/components/theme-provider"
 import { initializeDatabase } from "@/lib/init-database"
 import { FollowUpNotificationListener } from "@/components/follow-ups/follow-up-notification-listener"
+import { RoleProvider } from "@/contexts/role-context"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -39,9 +40,11 @@ export default function RootLayout({
     <html lang="en">
       <body className={inter.className}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          {children}
-          <Toaster />
-          <FollowUpNotificationListener />
+          <RoleProvider>
+            {children}
+            <Toaster />
+            <FollowUpNotificationListener />
+          </RoleProvider>
         </ThemeProvider>
       </body>
     </html>

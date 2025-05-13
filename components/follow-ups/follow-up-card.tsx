@@ -66,6 +66,14 @@ export function FollowUpCard({ followUp, onView, onComplete, selected = false, o
 
   const isToday = isSameDay(new Date(followUp.scheduled_at), new Date())
 
+  // Add null checks and default values to prevent errors
+  const followupType = followUp.followup_type || "other"
+  const followupTypeDisplay = typeof followupType === "string" ? followupType.replace(/_/g, " ") : "other"
+  const status = followUp.status || "scheduled"
+  const priority = followUp.priority || "medium"
+  const clientName = followUp.lead?.client_name || "Unknown Client"
+  const leadNumber = followUp.lead?.lead_number || "No Lead #"
+
   return (
     <Card className={`overflow-hidden ${selected ? "border-primary" : ""}`}>
       <CardContent className="p-4">
@@ -75,19 +83,19 @@ export function FollowUpCard({ followUp, onView, onComplete, selected = false, o
           <div className="flex-1">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
               <div className="flex items-center gap-2">
-                <h3 className="font-medium">{followUp.lead?.client_name || "Unknown Client"}</h3>
+                <h3 className="font-medium">{clientName}</h3>
                 <Badge variant="outline" className="text-xs">
-                  {followUp.lead?.lead_number || "No Lead #"}
+                  {leadNumber}
                 </Badge>
               </div>
 
               <div className="flex items-center gap-2">
-                <Badge className={statusColors[followUp.status]}>
-                  {followUp.status.charAt(0).toUpperCase() + followUp.status.slice(1)}
+                <Badge className={statusColors[status] || statusColors.scheduled}>
+                  {status.charAt(0).toUpperCase() + status.slice(1)}
                 </Badge>
 
-                <Badge className={priorityColors[followUp.priority]}>
-                  {followUp.priority.charAt(0).toUpperCase() + followUp.priority.slice(1)}
+                <Badge className={priorityColors[priority] || priorityColors.medium}>
+                  {priority.charAt(0).toUpperCase() + priority.slice(1)}
                 </Badge>
 
                 {isOverdue && (
@@ -96,7 +104,7 @@ export function FollowUpCard({ followUp, onView, onComplete, selected = false, o
                   </Badge>
                 )}
 
-                {isToday && followUp.status === "scheduled" && (
+                {isToday && status === "scheduled" && (
                   <Badge variant="secondary" className="ml-2">
                     Today
                   </Badge>
@@ -112,8 +120,8 @@ export function FollowUpCard({ followUp, onView, onComplete, selected = false, o
               <span className="mr-3">{format(new Date(followUp.scheduled_at), "h:mm a")}</span>
 
               <span className="flex items-center">
-                {followupTypeIcons[followUp.followup_type] || <HelpCircle className="mr-1 h-4 w-4" />}
-                <span className="ml-1 capitalize">{followUp.followup_type.replace(/_/g, " ")}</span>
+                {followupTypeIcons[followupType] || <HelpCircle className="mr-1 h-4 w-4" />}
+                <span className="ml-1 capitalize">{followupTypeDisplay}</span>
               </span>
             </div>
 
@@ -141,7 +149,7 @@ export function FollowUpCard({ followUp, onView, onComplete, selected = false, o
           </Tooltip>
         </TooltipProvider>
 
-        {followUp.status === "scheduled" && (
+        {status === "scheduled" && (
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -164,7 +172,7 @@ export function FollowUpCard({ followUp, onView, onComplete, selected = false, o
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={onView}>View Details</DropdownMenuItem>
-            {followUp.status === "scheduled" && (
+            {status === "scheduled" && (
               <>
                 <DropdownMenuItem onClick={onComplete}>Mark as Completed</DropdownMenuItem>
                 <DropdownMenuItem>Reschedule</DropdownMenuItem>

@@ -34,304 +34,498 @@ import {
   ClipboardList,
   UserCheck,
   Lock,
+  Eye,
+  Edit,
+  Trash,
 } from "lucide-react"
 import { SidebarRoleSwitcher } from "./sidebar-role-switcher"
+import type { Permission } from "@/types/role"
+import { useRole } from "@/contexts/role-context" // Import the hook directly
+
+// Enhanced permission types for more granular control
+type PermissionType = "view" | "read" | "write" | "delete" | "admin"
+
+// Define permission sets for different user types
+type PermissionSet = {
+  requiredPermissions: PermissionType[]
+  requiredRoles?: string[]
+  anyPermission?: boolean // If true, user needs ANY of the permissions, not ALL
+}
 
 type MenuItem = {
   title: string
   href?: string
   icon: React.ReactNode
-  requiredRole?: string[] // Roles that can access this item
-  adminOnly?: boolean // If true, only admins can see this
+  permissions?: PermissionSet
+  adminOnly?: boolean // Legacy support
   submenu?: {
     title: string
     href: string
     icon: React.ReactNode
-    requiredRole?: string[] // Roles that can access this subitem
-    adminOnly?: boolean // If true, only admins can see this
+    permissions?: PermissionSet
+    adminOnly?: boolean // Legacy support
+    inheritPermissions?: boolean // If true, inherits permissions from parent
   }[]
 }
 
-// Define all menu items in the application
+// Define all menu items in the application with enhanced permissions
 const allMenuItems: MenuItem[] = [
   {
     title: "Dashboard",
     href: "/dashboard",
     icon: <LayoutDashboard className="h-5 w-5" />,
+    permissions: {
+      requiredPermissions: ["view"],
+      anyPermission: true,
+    },
   },
   {
     title: "Organization",
     icon: <Building2 className="h-5 w-5" />,
+    permissions: {
+      requiredPermissions: ["view", "read"],
+      anyPermission: true,
+    },
     submenu: [
       {
         title: "Companies",
         href: "/organization/companies",
         icon: <Building className="h-4 w-4" />,
+        permissions: {
+          requiredPermissions: ["view", "read"],
+          anyPermission: true,
+        },
       },
       {
         title: "Branches",
         href: "/organization/branches",
         icon: <GitBranch className="h-4 w-4" />,
+        permissions: {
+          requiredPermissions: ["view", "read"],
+          anyPermission: true,
+        },
       },
       {
         title: "Vendors",
         href: "/organization/vendors",
         icon: <Truck className="h-4 w-4" />,
+        permissions: {
+          requiredPermissions: ["view", "read"],
+          anyPermission: true,
+        },
       },
       {
         title: "Suppliers",
         href: "/organization/suppliers",
         icon: <Package className="h-4 w-4" />,
+        permissions: {
+          requiredPermissions: ["view", "read"],
+          anyPermission: true,
+        },
       },
       {
         title: "Clients",
         href: "/organization/clients",
         icon: <Users className="h-4 w-4" />,
+        permissions: {
+          requiredPermissions: ["view", "read"],
+          anyPermission: true,
+        },
       },
       {
         title: "Roles",
         href: "/organization/roles",
         icon: <Shield className="h-4 w-4" />,
-        adminOnly: true,
+        permissions: {
+          requiredPermissions: ["admin"],
+          requiredRoles: ["admin", "system_admin"],
+        },
       },
       {
         title: "User Accounts",
         href: "/organization/user-accounts",
         icon: <UserCog className="h-4 w-4" />,
-        adminOnly: true,
+        permissions: {
+          requiredPermissions: ["admin"],
+          requiredRoles: ["admin", "system_admin"],
+        },
       },
       {
         title: "Account Creation",
         href: "/organization/account-creation",
         icon: <UserPlus className="h-4 w-4" />,
-        adminOnly: true,
+        permissions: {
+          requiredPermissions: ["admin"],
+          requiredRoles: ["admin", "system_admin"],
+        },
       },
     ],
   },
   {
     title: "People",
     icon: <Users className="h-5 w-5" />,
+    permissions: {
+      requiredPermissions: ["view", "read"],
+      anyPermission: true,
+    },
     submenu: [
       {
         title: "Dashboard",
         href: "/people/dashboard",
         icon: <LayoutDashboard className="h-4 w-4" />,
+        inheritPermissions: true,
       },
       {
         title: "Employees",
         href: "/people/employees",
         icon: <Users className="h-4 w-4" />,
+        permissions: {
+          requiredPermissions: ["view", "read"],
+          anyPermission: true,
+        },
       },
       {
         title: "Departments",
         href: "/people/departments",
         icon: <Building className="h-4 w-4" />,
+        permissions: {
+          requiredPermissions: ["view", "read"],
+          anyPermission: true,
+        },
       },
       {
         title: "Designations",
         href: "/people/designations",
         icon: <Briefcase className="h-4 w-4" />,
+        permissions: {
+          requiredPermissions: ["view", "read"],
+          anyPermission: true,
+        },
       },
     ],
   },
   {
     title: "Sales",
     icon: <DollarSign className="h-5 w-5" />,
+    permissions: {
+      requiredPermissions: ["view", "read"],
+      anyPermission: true,
+      requiredRoles: ["admin", "sales_manager", "sales_rep"],
+    },
     submenu: [
       {
         title: "Dashboard",
         href: "/sales",
         icon: <LayoutDashboard className="h-4 w-4" />,
+        inheritPermissions: true,
       },
       {
         title: "Create Lead",
         href: "/sales/create-lead",
         icon: <UserPlus className="h-4 w-4" />,
+        permissions: {
+          requiredPermissions: ["write"],
+          requiredRoles: ["admin", "sales_manager", "sales_rep"],
+        },
       },
       {
         title: "My Leads",
         href: "/sales/my-leads",
         icon: <Briefcase className="h-4 w-4" />,
+        permissions: {
+          requiredPermissions: ["view", "read"],
+          anyPermission: true,
+          requiredRoles: ["admin", "sales_manager", "sales_rep"],
+        },
       },
       {
         title: "Manage Lead",
         href: "/sales/manage-lead",
         icon: <Settings className="h-4 w-4" />,
+        permissions: {
+          requiredPermissions: ["write"],
+          requiredRoles: ["admin", "sales_manager"],
+        },
       },
       {
         title: "Unassigned Lead",
         href: "/sales/unassigned-lead",
         icon: <Briefcase className="h-4 w-4" />,
+        permissions: {
+          requiredPermissions: ["read", "write"],
+          requiredRoles: ["admin", "sales_manager"],
+        },
       },
       {
         title: "Lead Sources",
         href: "/sales/lead-sources",
         icon: <Truck className="h-4 w-4" />,
+        permissions: {
+          requiredPermissions: ["read"],
+          requiredRoles: ["admin", "sales_manager", "sales_rep"],
+        },
       },
       {
         title: "Follow Up",
         href: "/sales/follow-up",
         icon: <Calendar className="h-4 w-4" />,
+        permissions: {
+          requiredPermissions: ["read", "write"],
+          anyPermission: true,
+          requiredRoles: ["admin", "sales_manager", "sales_rep"],
+        },
       },
       {
         title: "Quotation",
         href: "/sales/quotation",
         icon: <FileText className="h-4 w-4" />,
+        permissions: {
+          requiredPermissions: ["read", "write"],
+          anyPermission: true,
+          requiredRoles: ["admin", "sales_manager", "sales_rep"],
+        },
       },
       {
         title: "Order Confirmation",
         href: "/sales/order-confirmation",
         icon: <CheckCircle className="h-4 w-4" />,
+        permissions: {
+          requiredPermissions: ["read", "write"],
+          requiredRoles: ["admin", "sales_manager"],
+        },
       },
       {
         title: "Rejected Leads",
         href: "/sales/rejected-leads",
         icon: <XCircle className="h-4 w-4" />,
+        permissions: {
+          requiredPermissions: ["read"],
+          requiredRoles: ["admin", "sales_manager"],
+        },
       },
     ],
   },
   {
     title: "Reports",
     icon: <BarChart className="h-5 w-5" />,
+    permissions: {
+      requiredPermissions: ["read"],
+      requiredRoles: ["admin", "sales_manager", "reports_viewer"],
+    },
     submenu: [
       {
         title: "Lead Sources",
         href: "/reports/lead-sources",
         icon: <PieChart className="h-4 w-4" />,
+        inheritPermissions: true,
       },
       {
         title: "Sales Performance",
         href: "/reports/sales-performance",
         icon: <TrendingUp className="h-4 w-4" />,
+        permissions: {
+          requiredPermissions: ["read"],
+          requiredRoles: ["admin", "sales_manager"],
+        },
       },
       {
         title: "Employee Performance",
         href: "/reports/employee-performance",
         icon: <Users className="h-4 w-4" />,
+        permissions: {
+          requiredPermissions: ["read"],
+          requiredRoles: ["admin", "hr_manager", "sales_manager"],
+        },
       },
       {
         title: "Conversion Funnel",
         href: "/reports/conversion-funnel",
         icon: <GitBranch className="h-4 w-4" />,
+        inheritPermissions: true,
       },
       {
         title: "Team Performance",
         href: "/reports/team-performance",
         icon: <Users className="h-4 w-4" />,
+        permissions: {
+          requiredPermissions: ["read"],
+          requiredRoles: ["admin", "sales_manager"],
+        },
       },
       {
         title: "Trend Analysis",
         href: "/reports/trends",
         icon: <TrendingUp className="h-4 w-4" />,
+        inheritPermissions: true,
       },
       {
         title: "Custom Reports",
         href: "/reports/custom",
         icon: <Settings className="h-4 w-4" />,
+        permissions: {
+          requiredPermissions: ["read", "write"],
+          requiredRoles: ["admin", "sales_manager"],
+        },
       },
     ],
   },
   {
     title: "Event Coordination",
     icon: <Calendar className="h-5 w-5" />,
+    permissions: {
+      requiredPermissions: ["view", "read"],
+      anyPermission: true,
+      requiredRoles: ["admin", "event_coordinator", "event_manager"],
+    },
     submenu: [
       {
         title: "Events Dashboard",
         href: "/event-coordination/dashboard",
         icon: <LayoutDashboard className="h-4 w-4" />,
+        inheritPermissions: true,
       },
       {
         title: "Event Calendar",
         href: "/event-coordination/calendar",
         icon: <Calendar className="h-4 w-4" />,
+        inheritPermissions: true,
       },
       {
         title: "Events",
         href: "/events",
         icon: <Calendar className="h-4 w-4" />,
+        inheritPermissions: true,
       },
       {
         title: "Event Types",
         href: "/event-coordination/event-types",
         icon: <List className="h-4 w-4" />,
+        permissions: {
+          requiredPermissions: ["read", "write"],
+          requiredRoles: ["admin", "event_manager"],
+        },
       },
       {
         title: "Venues",
         href: "/event-coordination/venues",
         icon: <MapPin className="h-4 w-4" />,
+        permissions: {
+          requiredPermissions: ["read", "write"],
+          anyPermission: true,
+          requiredRoles: ["admin", "event_coordinator", "event_manager"],
+        },
       },
       {
         title: "Staff Assignment",
         href: "/event-coordination/staff-assignment",
         icon: <Users className="h-4 w-4" />,
+        permissions: {
+          requiredPermissions: ["read", "write"],
+          requiredRoles: ["admin", "event_manager"],
+        },
       },
     ],
   },
   {
     title: "Audit",
     icon: <ClipboardList className="h-5 w-5" />,
+    permissions: {
+      requiredPermissions: ["read", "admin"],
+      anyPermission: true,
+      requiredRoles: ["admin", "system_admin", "compliance_officer"],
+    },
     submenu: [
       {
         title: "Activity Logs",
         href: "/audit/activity-logs",
         icon: <List className="h-4 w-4" />,
+        inheritPermissions: true,
       },
       {
         title: "Employee Audit",
         href: "/audit/employee",
         icon: <UserCheck className="h-4 w-4" />,
+        permissions: {
+          requiredPermissions: ["read", "admin"],
+          anyPermission: true,
+          requiredRoles: ["admin", "system_admin", "hr_manager"],
+        },
       },
     ],
   },
   {
     title: "Admin",
     icon: <Settings className="h-5 w-5" />,
-    adminOnly: true, // Only admins can see this menu
+    permissions: {
+      requiredPermissions: ["admin"],
+      requiredRoles: ["admin", "system_admin"],
+    },
     submenu: [
       {
         title: "Menu & Role Permissions",
         href: "/admin/menu-permissions",
         icon: <Lock className="h-4 w-4" />,
-        adminOnly: true,
+        inheritPermissions: true,
       },
       // All other Admin menu items have been removed as requested
     ],
   },
 ]
 
-// Create a custom hook to safely use role information
-function useSafeRole() {
-  // Try to get role information, but don't throw if it's not available
-  let useRole
-  try {
-    // Dynamically import the useRole hook
-    ;({ useRole } = require("@/contexts/role-context"))
-  } catch (error) {
-    // If the module or hook doesn't exist, return a default function
-    console.warn("Role context module not available, using default role settings")
-    useRole = () => ({
-      currentRole: { id: "admin", name: "Administrator", isAdmin: true },
-      isAdmin: true,
-      filteredMenu: {},
-      availableRoles: [],
-      setCurrentRole: () => {},
+// Helper function to check if a user has the required permissions
+function hasRequiredPermissions(
+  userPermissions: Record<string, Permission>,
+  requiredPermissionSet: PermissionSet,
+  isAdmin: boolean,
+  userRoleId: string,
+): boolean {
+  // Admin override - admins can access everything
+  if (isAdmin) return true
+
+  // Check role-specific permissions
+  if (requiredPermissionSet.requiredRoles && !requiredPermissionSet.requiredRoles.includes(userRoleId)) {
+    return false
+  }
+
+  // If no specific permissions are required, allow access
+  if (!requiredPermissionSet.requiredPermissions || requiredPermissionSet.requiredPermissions.length === 0) {
+    return true
+  }
+
+  // For "admin" permission, only admins can access (already checked above)
+  if (requiredPermissionSet.requiredPermissions.includes("admin") && !isAdmin) {
+    return false
+  }
+
+  // Check if user has ANY of the required permissions (when anyPermission is true)
+  if (requiredPermissionSet.anyPermission) {
+    return requiredPermissionSet.requiredPermissions.some((permission) => {
+      if (permission === "admin") return isAdmin
+
+      // Check if user has this permission for any module
+      return Object.values(userPermissions).some(
+        (modulePermission) =>
+          (permission === "view" && modulePermission.view) ||
+          (permission === "read" && modulePermission.read) ||
+          (permission === "write" && modulePermission.write) ||
+          (permission === "delete" && modulePermission.delete),
+      )
     })
   }
 
-  try {
-    // Try to use the hook
-    return useRole()
-  } catch (error) {
-    // If the hook throws (e.g., no provider), return default values
-    console.warn("Role provider not available, using default role settings")
-    return {
-      currentRole: { id: "admin", name: "Administrator", isAdmin: true },
-      isAdmin: true,
-      filteredMenu: {},
-      availableRoles: [],
-      setCurrentRole: () => {},
-    }
-  }
+  // Check if user has ALL of the required permissions
+  return requiredPermissionSet.requiredPermissions.every((permission) => {
+    if (permission === "admin") return isAdmin
+
+    // Check if user has this permission for any module
+    return Object.values(userPermissions).some(
+      (modulePermission) =>
+        (permission === "view" && modulePermission.view) ||
+        (permission === "read" && modulePermission.read) ||
+        (permission === "write" && modulePermission.write) ||
+        (permission === "delete" && modulePermission.delete),
+    )
+  })
 }
 
 export function SimpleSidebar() {
@@ -339,32 +533,46 @@ export function SimpleSidebar() {
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({})
 
   // Use our safe role hook
-  const { isAdmin, currentRole } = useSafeRole()
+  const { isAdmin, currentRole } = useRole()
   const currentRoleId = currentRole?.id || "admin"
 
-  // Filter menu items based on user role
+  // Get user permissions from the role
+  const userPermissions = currentRole?.permissions || {}
+
+  // Filter menu items based on user role and permissions
   const filteredMenuItems = useMemo(() => {
     return allMenuItems.filter((item) => {
-    console.log("item", item);
-      // If the item is admin-only and user is not admin, hide it
+      // Legacy support for adminOnly
       if (item.adminOnly && !isAdmin) {
         return false
       }
 
-      // If the item has a required role and user doesn't have it, hide it
-      if (item.requiredRole && !item.requiredRole.includes(currentRoleId)) {
+      // Check permissions
+      if (item.permissions && !hasRequiredPermissions(userPermissions, item.permissions, isAdmin, currentRoleId)) {
         return false
       }
 
       // If the item has submenu items, filter those too
       if (item.submenu) {
         const filteredSubmenu = item.submenu.filter((subItem) => {
+          // Legacy support for adminOnly
           if (subItem.adminOnly && !isAdmin) {
             return false
           }
-          if (subItem.requiredRole && !subItem.requiredRole.includes(currentRoleId)) {
+
+          // Handle permission inheritance
+          if (subItem.inheritPermissions && item.permissions) {
+            return hasRequiredPermissions(userPermissions, item.permissions, isAdmin, currentRoleId)
+          }
+
+          // Check specific permissions
+          if (
+            subItem.permissions &&
+            !hasRequiredPermissions(userPermissions, subItem.permissions, isAdmin, currentRoleId)
+          ) {
             return false
           }
+
           return true
         })
 
@@ -379,9 +587,7 @@ export function SimpleSidebar() {
 
       return true
     })
-  }, [currentRoleId, isAdmin])
-
-   console.log("filteredMenuItems", filteredMenuItems);
+  }, [currentRoleId, isAdmin, userPermissions])
 
   // Auto-expand the menu that contains the current path
   useEffect(() => {
@@ -469,7 +675,34 @@ export function SimpleSidebar() {
         </div>
       </div>
 
-      {/* Role Switcher at the bottom of the sidebar - only show if role context is available */}
+      {/* Permission Legend */}
+      <div className="px-4 py-2 border-t border-border">
+        <div className="text-xs text-muted-foreground mb-2">Permission Legend:</div>
+        <div className="flex flex-wrap gap-2 text-xs">
+          <div className="flex items-center">
+            <Eye className="h-3 w-3 mr-1" />
+            <span>View</span>
+          </div>
+          <div className="flex items-center">
+            <FileText className="h-3 w-3 mr-1" />
+            <span>Read</span>
+          </div>
+          <div className="flex items-center">
+            <Edit className="h-3 w-3 mr-1" />
+            <span>Write</span>
+          </div>
+          <div className="flex items-center">
+            <Trash className="h-3 w-3 mr-1" />
+            <span>Delete</span>
+          </div>
+          <div className="flex items-center">
+            <Shield className="h-3 w-3 mr-1" />
+            <span>Admin</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Role Switcher at the bottom of the sidebar */}
       <SidebarRoleSwitcher />
     </div>
   )
