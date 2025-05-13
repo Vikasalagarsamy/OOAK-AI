@@ -1,9 +1,8 @@
-import { createClient as supabaseCreateClient } from "@supabase/supabase-js"
+import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "@/types/supabase"
-import { createClient } from "@supabase/supabase-js"
 
 // Define types for better type safety
-type SupabaseClient = ReturnType<typeof supabaseCreateClient>
+type SupabaseClient = ReturnType<typeof createSupabaseClient>
 
 // Global variables to store client instances
 let browserClient: SupabaseClient | null = null
@@ -46,7 +45,7 @@ export function getSupabaseBrowser(): SupabaseClient {
     console.log("Creating browser Supabase client with URL:", supabaseUrl)
 
     // Use the imported supabaseCreateClient directly
-    browserClient = supabaseCreateClient(supabaseUrl, supabaseAnonKey, {
+    browserClient = createSupabaseClient(supabaseUrl, supabaseAnonKey, {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
@@ -69,7 +68,7 @@ export function getSupabaseServer(): SupabaseClient {
       console.log("Creating server Supabase client with URL:", supabaseUrl)
 
       // Use the imported supabaseCreateClient directly
-      return supabaseCreateClient(supabaseUrl, supabaseServiceKey, {
+      return createSupabaseClient(supabaseUrl, supabaseServiceKey, {
         auth: {
           persistSession: false,
           autoRefreshToken: false,
@@ -92,7 +91,7 @@ export function createBasicClient(): SupabaseClient {
     console.log("Creating basic Supabase client with URL:", supabaseUrl)
 
     // Create a simple client without auth overrides
-    return supabaseCreateClient(supabaseUrl, supabaseAnonKey, {
+    return createSupabaseClient(supabaseUrl, supabaseAnonKey, {
       auth: {
         persistSession: false,
         autoRefreshToken: false,
@@ -104,11 +103,41 @@ export function createBasicClient(): SupabaseClient {
   }
 }
 
-// Export a default client for backward compatibility
+// Create a mock client that won't throw errors
+function createMockClient() {
+  return {
+    from: () => ({
+      select: () => ({
+        order: () => ({
+          limit: () => ({
+            then: () => Promise.resolve({ data: [], error: null }),
+          }),
+        }),
+      }),
+      insert: () => Promise.resolve({ data: null, error: new Error("Mock client - no connection") }),
+      update: () => Promise.resolve({ data: null, error: new Error("Mock client - no connection") }),
+      delete: () => Promise.resolve({ data: null, error: new Error("Mock client - no connection") }),
+    }),
+    channel: () => ({
+      on: () => ({
+        subscribe: (callback: () => void) => {
+          if (callback) callback()
+          return {
+            unsubscribe: () => {},
+          }
+        },
+      }),
+    }),
+    // Add other methods as needed
+  } as unknown as SupabaseClient
+}
+
+// Export a singleton instance
 export const supabase = typeof window === "undefined" ? getSupabaseServer() : getSupabaseBrowser()
 
-// Legacy function for backward compatibility
-export function createClientFunction() {
+// IMPORTANT: Export createClient for backward compatibility
+// This is the function used by dashboard-service.ts and other services
+export function createClient() {
   // For server-side use a basic client without auth overrides to avoid JWT issues
   if (typeof window === "undefined") {
     return createBasicClient()
@@ -118,8 +147,11 @@ export function createClientFunction() {
   return getSupabaseBrowser()
 }
 
+// Also export the original createClient from supabase for maximum compatibility
+export const originalCreateClient = createSupabaseClient
+
 // Create a singleton Supabase client for client-side usage
-let supabaseClient: ReturnType<typeof createClient<Database>> | null = null
+let supabaseClient: ReturnType<typeof createSupabaseClient<Database>> | null = null
 
 export const getSupabaseClient = () => {
   if (supabaseClient) return supabaseClient
@@ -131,6 +163,6 @@ export const getSupabaseClient = () => {
     throw new Error("Missing Supabase environment variables")
   }
 
-  supabaseClient = createClient<Database>(supabaseUrl, supabaseAnonKey)
+  supabaseClient = createSupabaseClient<Database>(supabaseUrl, supabaseAnonKey)
   return supabaseClient
 }

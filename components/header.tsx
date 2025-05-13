@@ -1,8 +1,6 @@
 "use client"
-
-import { useState } from "react"
 import Link from "next/link"
-import { Bell, LogOut, Settings, User, Moon, Shield } from "lucide-react"
+import { LogOut, Settings, User, Moon, Shield } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,22 +11,14 @@ import {
 import { Button } from "./ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar"
 import { MobileNavigation } from "./mobile-navigation"
-import { Badge } from "./ui/badge"
 import { useTheme } from "next-themes"
 import { useCurrentUser } from "@/hooks/use-current-user"
 import { Skeleton } from "./ui/skeleton"
+import { NotificationsDropdown } from "./notifications/notifications-dropdown"
 
 export function Header() {
-  const [hasNotifications, setHasNotifications] = useState(true)
-  const [notificationCount, setNotificationCount] = useState(3)
   const { setTheme } = useTheme()
   const { user, loading } = useCurrentUser()
-
-  const viewNotifications = () => {
-    setHasNotifications(false)
-    setNotificationCount(0)
-    // In a real app, you would mark notifications as read in the database
-  }
 
   // Generate avatar initials from user data
   const getInitials = () => {
@@ -73,17 +63,7 @@ export function Header() {
             <Moon className="h-5 w-5" />
           </Button>
 
-          <Button variant="ghost" size="icon" className="relative h-9 w-9" aria-label="Notifications">
-            <Bell className="h-5 w-5" />
-            {hasNotifications && (
-              <Badge
-                variant="destructive"
-                className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
-              >
-                {notificationCount}
-              </Badge>
-            )}
-          </Button>
+          <NotificationsDropdown />
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -105,13 +85,10 @@ export function Header() {
                   <div className="flex items-center">
                     <p className="text-sm font-medium">{getDisplayName()}</p>
                     {user?.isAdmin && (
-                      <Badge
-                        variant="outline"
-                        className="ml-2 bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
-                      >
+                      <div className="ml-2 bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 px-1.5 py-0.5 rounded-sm text-xs flex items-center">
                         <Shield className="h-3 w-3 mr-1" />
                         Admin
-                      </Badge>
+                      </div>
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground">{user?.email || ""}</p>
