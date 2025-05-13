@@ -4,8 +4,8 @@ import Link from "next/link"
 
 export default function SalesPage() {
   return (
-    <div className="container mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-6">Sales Management</h1>
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold">Sales Management</h1>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <Link href="/sales/create-lead">
@@ -32,14 +32,14 @@ export default function SalesPage() {
           </Card>
         </Link>
 
-        <Link href="/sales/manage-lead">
+        <Link href="/sales/my-leads">
           <Card className="h-full hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-lg">Manage Lead</CardTitle>
+              <CardTitle className="text-lg">My Leads</CardTitle>
               <DollarSign className="h-5 w-5 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <CardDescription>Manage and track your sales leads through the pipeline</CardDescription>
+              <CardDescription>Manage and track your assigned leads</CardDescription>
             </CardContent>
           </Card>
         </Link>
@@ -88,6 +88,18 @@ export default function SalesPage() {
             </CardHeader>
             <CardContent>
               <CardDescription>View and analyze rejected leads for insights</CardDescription>
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Link href="/sales/lead-sources">
+          <Card className="h-full hover:shadow-md transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-lg">Lead Sources</CardTitle>
+              <ClipboardList className="h-5 w-5 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <CardDescription>Manage and track lead sources</CardDescription>
             </CardContent>
           </Card>
         </Link>

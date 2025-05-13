@@ -37,6 +37,7 @@ type MenuItem = {
   title: string
   href?: string
   icon: React.ReactNode
+  section?: string // Added to identify which section this menu belongs to
   submenu?: {
     title: string
     href: string
@@ -54,6 +55,7 @@ const menuItems: MenuItem[] = [
   {
     title: "Organization",
     icon: <Building2 className="h-5 w-5" />,
+    section: "organization",
     submenu: [
       {
         title: "Companies",
@@ -108,6 +110,7 @@ const menuItems: MenuItem[] = [
   {
     title: "People",
     icon: <Users className="h-5 w-5" />,
+    section: "people",
     submenu: [
       {
         title: "Dashboard",
@@ -138,6 +141,7 @@ const menuItems: MenuItem[] = [
   {
     title: "Sales",
     icon: <DollarSign className="h-5 w-5" />,
+    section: "sales",
     submenu: [
       {
         title: "Dashboard",
@@ -198,6 +202,7 @@ const menuItems: MenuItem[] = [
   {
     title: "Reports",
     icon: <BarChart className="h-5 w-5" />,
+    section: "reports",
     submenu: [
       {
         title: "Lead Source Analysis",
@@ -234,6 +239,7 @@ const menuItems: MenuItem[] = [
   {
     title: "Event Coordination",
     icon: <Calendar className="h-5 w-5" />,
+    section: "events",
     submenu: [
       {
         title: "Events Dashboard",
@@ -276,6 +282,7 @@ const menuItems: MenuItem[] = [
   {
     title: "Audit",
     icon: <FileSearch className="h-5 w-5" />,
+    section: "audit",
     submenu: [
       {
         title: "Activity Logs",
@@ -294,6 +301,7 @@ const menuItems: MenuItem[] = [
   {
     title: "Admin",
     icon: <Shield className="h-5 w-5" />,
+    section: "admin",
     submenu: [
       {
         title: "Menu & Role Permissions",
@@ -315,8 +323,14 @@ export function SidebarNavigation() {
   const pathname = usePathname()
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({})
 
-  // Check if the current path is within the organization section
-  const isOrganizationSection = pathname.startsWith("/organization")
+  // Function to determine which section the current path belongs to
+  const getCurrentSection = (path: string): string | null => {
+    const segment = path.split("/")[1]
+    return segment || null
+  }
+
+  // Get current section
+  const currentSection = getCurrentSection(pathname)
 
   // Function to toggle menu open/closed state
   const toggleMenu = (title: string) => {
@@ -324,6 +338,18 @@ export function SidebarNavigation() {
       ...prev,
       [title]: !prev[title],
     }))
+  }
+
+  // Check if a menu should be expanded
+  const shouldExpandMenu = (item: MenuItem): boolean => {
+    // If the menu is manually toggled open
+    if (openMenus[item.title]) return true
+
+    // If we're in a section that matches this menu's section
+    if (item.section && currentSection === item.section) return true
+
+    // Otherwise, keep it closed
+    return false
   }
 
   // Auto-expand menus based on current path
@@ -343,19 +369,16 @@ export function SidebarNavigation() {
       }
     })
 
-    // Always expand Organization menu when in organization section
-    if (isOrganizationSection) {
-      updatedOpenMenus["Organization"] = true
-    }
-
-    // Always expand People menu when in people section
-    const isPeopleSection = pathname.startsWith("/people")
-    if (isPeopleSection) {
-      updatedOpenMenus["People"] = true
+    // Always expand the menu for the current section
+    if (currentSection) {
+      const sectionMenu = menuItems.find((item) => item.section === currentSection)
+      if (sectionMenu) {
+        updatedOpenMenus[sectionMenu.title] = true
+      }
     }
 
     setOpenMenus(updatedOpenMenus)
-  }, [pathname])
+  }, [pathname, currentSection])
 
   return (
     <div className="h-screen w-64 bg-background border-r flex flex-col">
@@ -372,27 +395,20 @@ export function SidebarNavigation() {
                     onClick={() => toggleMenu(item.title)}
                     className={cn(
                       "w-full flex items-center justify-between p-2 rounded-md text-sm font-medium hover:bg-muted",
-                      (openMenus[item.title] ||
-                        (item.title === "Organization" && isOrganizationSection) ||
-                        (item.title === "People" && pathname.startsWith("/people"))) &&
-                        "bg-muted/50",
+                      shouldExpandMenu(item) && "bg-muted/50",
                     )}
                   >
                     <span className="flex items-center">
                       {item.icon}
                       <span className="ml-2">{item.title}</span>
                     </span>
-                    {openMenus[item.title] ||
-                    (item.title === "Organization" && isOrganizationSection) ||
-                    (item.title === "People" && pathname.startsWith("/people")) ? (
+                    {shouldExpandMenu(item) ? (
                       <ChevronDown className="h-4 w-4" />
                     ) : (
                       <ChevronRight className="h-4 w-4" />
                     )}
                   </button>
-                  {(openMenus[item.title] ||
-                    (item.title === "Organization" && isOrganizationSection) ||
-                    (item.title === "People" && pathname.startsWith("/people"))) && (
+                  {shouldExpandMenu(item) && (
                     <div className="ml-4 mt-1 space-y-1 pl-2 border-l">
                       {item.submenu.map((subItem) => (
                         <Link

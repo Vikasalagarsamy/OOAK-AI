@@ -11,6 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DateRangePicker } from "@/components/date-range-picker"
 import { format } from "date-fns"
 import { Download, Filter, RefreshCw, Search } from "lucide-react"
+import { AuditHeader } from "@/components/audit/audit-header"
+import { AuditSubmenu } from "@/components/audit/audit-submenu"
 
 interface AuditLog {
   id: number
@@ -202,163 +204,167 @@ export default function AuditLogPage() {
   }
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Audit Logs</h1>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={fetchAuditLogs} disabled={loading}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
-          <Button variant="outline" onClick={handleExport} disabled={loading || auditLogs.length === 0}>
-            <Download className="h-4 w-4 mr-2" />
-            Export CSV
-          </Button>
-        </div>
-      </div>
+    <>
+      <AuditHeader title="Audit Logs" description="Track and view system activity across the application" />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Filters</CardTitle>
-          <CardDescription>Filter audit logs by various criteria</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Entity Type</label>
-              <Select value={entityType} onValueChange={setEntityType}>
-                <SelectTrigger>
-                  <SelectValue placeholder="All entity types" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All entity types</SelectItem>
-                  {entityTypes.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {type}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+      <AuditSubmenu />
+
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Filters</CardTitle>
+            <CardDescription>Filter audit logs by various criteria</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Entity Type</label>
+                <Select value={entityType} onValueChange={setEntityType}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All entity types" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All entity types</SelectItem>
+                    {entityTypes.map((type) => (
+                      <SelectItem key={type} value={type}>
+                        {type}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Entity ID</label>
+                <Input placeholder="Enter entity ID" value={entityId} onChange={(e) => setEntityId(e.target.value)} />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Action</label>
+                <Select value={action} onValueChange={setAction}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All actions" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All actions</SelectItem>
+                    {actions.map((act) => (
+                      <SelectItem key={act} value={act}>
+                        {act}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">User ID</label>
+                <Input placeholder="Enter user ID" value={userId} onChange={(e) => setUserId(e.target.value)} />
+              </div>
+
+              <div className="space-y-2 col-span-1 md:col-span-2">
+                <label className="text-sm font-medium">Date Range</label>
+                <DateRangePicker value={dateRange} onChange={setDateRange} />
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Entity ID</label>
-              <Input placeholder="Enter entity ID" value={entityId} onChange={(e) => setEntityId(e.target.value)} />
+            <div className="mt-4 flex justify-end">
+              <Button onClick={fetchAuditLogs} disabled={loading}>
+                <Filter className="h-4 w-4 mr-2" />
+                Apply Filters
+              </Button>
             </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Action</label>
-              <Select value={action} onValueChange={setAction}>
-                <SelectTrigger>
-                  <SelectValue placeholder="All actions" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All actions</SelectItem>
-                  {actions.map((act) => (
-                    <SelectItem key={act} value={act}>
-                      {act}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">User ID</label>
-              <Input placeholder="Enter user ID" value={userId} onChange={(e) => setUserId(e.target.value)} />
-            </div>
-
-            <div className="space-y-2 col-span-1 md:col-span-2">
-              <label className="text-sm font-medium">Date Range</label>
-              <DateRangePicker value={dateRange} onChange={setDateRange} />
-            </div>
-          </div>
-
-          <div className="mt-4 flex justify-end">
-            <Button onClick={fetchAuditLogs} disabled={loading}>
-              <Filter className="h-4 w-4 mr-2" />
-              Apply Filters
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {error && (
-        <Card className="border-red-200 bg-red-50">
-          <CardContent className="pt-6">
-            <p className="text-red-600">{error}</p>
           </CardContent>
         </Card>
-      )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Audit Log Results</CardTitle>
-          <CardDescription>
-            {auditLogs.length
-              ? `Showing ${auditLogs.length} audit log entries`
-              : "No audit logs found matching your criteria"}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="flex justify-center items-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+        {error && (
+          <Card className="border-red-200 bg-red-50">
+            <CardContent className="pt-6">
+              <p className="text-red-600">{error}</p>
+            </CardContent>
+          </Card>
+        )}
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle>Audit Log Results</CardTitle>
+              <CardDescription>
+                {auditLogs.length
+                  ? `Showing ${auditLogs.length} audit log entries`
+                  : "No audit logs found matching your criteria"}
+              </CardDescription>
             </div>
-          ) : auditLogs.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">
-              <Search className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-              <p>No audit logs found matching your criteria</p>
-              <p className="text-sm mt-2">Try adjusting your filters or refreshing the data</p>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={fetchAuditLogs} disabled={loading}>
+                <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
+              <Button variant="outline" onClick={handleExport} disabled={loading || auditLogs.length === 0}>
+                <Download className="h-4 w-4 mr-2" />
+                Export CSV
+              </Button>
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Timestamp</TableHead>
-                    <TableHead>Entity Type</TableHead>
-                    <TableHead>Entity ID</TableHead>
-                    <TableHead>Action</TableHead>
-                    <TableHead>User ID</TableHead>
-                    <TableHead>Changes</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {auditLogs.map((log) => (
-                    <TableRow key={log.id}>
-                      <TableCell className="whitespace-nowrap">{formatTimestamp(log.timestamp)}</TableCell>
-                      <TableCell className="font-medium">{log.entity_type}</TableCell>
-                      <TableCell>{log.entity_id}</TableCell>
-                      <TableCell>
-                        <span
-                          className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            log.action === "create"
-                              ? "bg-green-100 text-green-800"
-                              : log.action === "update"
-                                ? "bg-blue-100 text-blue-800"
-                                : log.action === "delete"
-                                  ? "bg-red-100 text-red-800"
-                                  : "bg-gray-100 text-gray-800"
-                          }`}
-                        >
-                          {log.action}
-                        </span>
-                      </TableCell>
-                      <TableCell>{log.user_id}</TableCell>
-                      <TableCell className="max-w-md">
-                        <div className="text-xs overflow-auto max-h-32">
-                          {renderChanges(log.old_values, log.new_values)}
-                        </div>
-                      </TableCell>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="flex justify-center items-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+              </div>
+            ) : auditLogs.length === 0 ? (
+              <div className="text-center py-12 text-gray-500">
+                <Search className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                <p>No audit logs found matching your criteria</p>
+                <p className="text-sm mt-2">Try adjusting your filters or refreshing the data</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Timestamp</TableHead>
+                      <TableHead>Entity Type</TableHead>
+                      <TableHead>Entity ID</TableHead>
+                      <TableHead>Action</TableHead>
+                      <TableHead>User ID</TableHead>
+                      <TableHead>Changes</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+                  </TableHeader>
+                  <TableBody>
+                    {auditLogs.map((log) => (
+                      <TableRow key={log.id}>
+                        <TableCell className="whitespace-nowrap">{formatTimestamp(log.timestamp)}</TableCell>
+                        <TableCell className="font-medium">{log.entity_type}</TableCell>
+                        <TableCell>{log.entity_id}</TableCell>
+                        <TableCell>
+                          <span
+                            className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              log.action === "create"
+                                ? "bg-green-100 text-green-800"
+                                : log.action === "update"
+                                  ? "bg-blue-100 text-blue-800"
+                                  : log.action === "delete"
+                                    ? "bg-red-100 text-red-800"
+                                    : "bg-gray-100 text-gray-800"
+                            }`}
+                          >
+                            {log.action}
+                          </span>
+                        </TableCell>
+                        <TableCell>{log.user_id}</TableCell>
+                        <TableCell className="max-w-md">
+                          <div className="text-xs overflow-auto max-h-32">
+                            {renderChanges(log.old_values, log.new_values)}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </>
   )
 }

@@ -61,7 +61,7 @@ export default function PeoplePage() {
 
   if (loading) {
     return (
-      <div className="container mx-auto py-6 space-y-6">
+      <div className="container mx-auto space-y-6">
         <div className="flex flex-col gap-2">
           <h1 className="text-3xl font-bold tracking-tight">People Management</h1>
           <p className="text-muted-foreground">Loading permissions...</p>
@@ -71,12 +71,13 @@ export default function PeoplePage() {
   }
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto space-y-6">
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl font-bold tracking-tight">People Management</h1>
         <p className="text-muted-foreground">Manage your organization's employees, departments, and designations.</p>
       </div>
 
+      {/* The PeopleSubmenu component is kept for legacy purposes but can be optional now */}
       <PeopleSubmenu />
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">

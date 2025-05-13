@@ -2,6 +2,8 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { GitBranch, PieChart, Settings, TrendingUp, Users } from "lucide-react"
+import { ReportsHeader } from "@/components/reports/reports-header"
+import { ReportsSubmenu } from "@/components/reports/reports-submenu"
 
 export const metadata: Metadata = {
   title: "Reports Dashboard",
@@ -44,6 +46,10 @@ const reportCards = [
 export default function ReportsPage() {
   return (
     <div className="space-y-6">
+      <ReportsHeader title="Reports Dashboard" description="Access analytical reports and data insights" />
+
+      <ReportsSubmenu />
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {reportCards.map((card, index) => (
           <Link key={index} href={card.href} className="block">

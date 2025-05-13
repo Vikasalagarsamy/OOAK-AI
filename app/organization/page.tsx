@@ -1,75 +1,113 @@
+import { OrganizationHeader } from "@/components/organization-header"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
-import { Building2, GitBranch, Users, Truck, ShoppingBag } from "lucide-react"
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
+import { Building, Building2, Briefcase, Users, UserCog } from "lucide-react"
 
 export default function OrganizationPage() {
   return (
-    <main className="container mx-auto py-8 px-4">
-      <div className="max-w-6xl mx-auto mb-8">
-        <h1 className="text-3xl font-bold mb-2">Organization Management</h1>
-        <p className="text-muted-foreground">
-          Manage your organization structure including companies, branches, vendors, suppliers, and clients.
-        </p>
-      </div>
+    <div>
+      <OrganizationHeader
+        title="Organization Management"
+        description="Manage your organization structure, companies, branches, and more."
+      />
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 max-w-6xl mx-auto mt-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <Link href="/organization/companies">
-          <div className="flex flex-col items-center justify-center p-8 border rounded-lg hover:bg-accent hover:text-accent-foreground transition-colors">
-            <Building2 className="h-12 w-12 mb-4" />
-            <h2 className="text-xl font-semibold mb-2">Companies</h2>
-            <p className="text-center text-muted-foreground">Manage your companies and their details</p>
-          </div>
+          <Card className="h-full hover:bg-muted/50 transition-colors cursor-pointer">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-lg">Companies</CardTitle>
+              <Building className="h-5 w-5 text-primary" />
+            </CardHeader>
+            <CardContent>
+              <CardDescription>Manage organization companies and their details</CardDescription>
+            </CardContent>
+          </Card>
         </Link>
 
         <Link href="/organization/branches">
-          <div className="flex flex-col items-center justify-center p-8 border rounded-lg hover:bg-accent hover:text-accent-foreground transition-colors">
-            <GitBranch className="h-12 w-12 mb-4" />
-            <h2 className="text-xl font-semibold mb-2">Branches</h2>
-            <p className="text-center text-muted-foreground">Manage branches across all companies</p>
-          </div>
+          <Card className="h-full hover:bg-muted/50 transition-colors cursor-pointer">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-lg">Branches</CardTitle>
+              <Building2 className="h-5 w-5 text-primary" />
+            </CardHeader>
+            <CardContent>
+              <CardDescription>Manage branch locations across your organization</CardDescription>
+            </CardContent>
+          </Card>
         </Link>
 
-        <Link href="/organization/roles">
-          <div className="flex flex-col items-center justify-center p-8 border rounded-lg hover:bg-accent hover:text-accent-foreground transition-colors">
-            <Users className="h-12 w-12 mb-4" />
-            <h2 className="text-xl font-semibold mb-2">User Roles</h2>
-            <p className="text-center text-muted-foreground">Manage user roles and permissions</p>
-          </div>
-        </Link>
-
-        <Link href="/organization/vendors">
-          <div className="flex flex-col items-center justify-center p-8 border rounded-lg hover:bg-accent hover:text-accent-foreground transition-colors">
-            <ShoppingBag className="h-12 w-12 mb-4" />
-            <h2 className="text-xl font-semibold mb-2">Vendors</h2>
-            <p className="text-center text-muted-foreground">Manage vendors and their information</p>
-          </div>
+        <Link href="/organization/clients">
+          <Card className="h-full hover:bg-muted/50 transition-colors cursor-pointer">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-lg">Clients</CardTitle>
+              <Briefcase className="h-5 w-5 text-primary" />
+            </CardHeader>
+            <CardContent>
+              <CardDescription>Manage client information and relationships</CardDescription>
+            </CardContent>
+          </Card>
         </Link>
 
         <Link href="/organization/suppliers">
-          <div className="flex flex-col items-center justify-center p-8 border rounded-lg hover:bg-accent hover:text-accent-foreground transition-colors">
-            <Truck className="h-12 w-12 mb-4" />
-            <h2 className="text-xl font-semibold mb-2">Suppliers</h2>
-            <p className="text-center text-muted-foreground">Manage suppliers and their information</p>
-          </div>
+          <Card className="h-full hover:bg-muted/50 transition-colors cursor-pointer">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-lg">Suppliers</CardTitle>
+              <Briefcase className="h-5 w-5 text-primary" />
+            </CardHeader>
+            <CardContent>
+              <CardDescription>Manage supplier information and relationships</CardDescription>
+            </CardContent>
+          </Card>
         </Link>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Clients</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">Manage Clients</div>
-            <p className="text-xs text-muted-foreground">Manage client information and categorization</p>
-          </CardContent>
-          <CardFooter>
-            <Button asChild className="w-full">
-              <Link href="/organization/clients">View Clients</Link>
-            </Button>
-          </CardFooter>
-        </Card>
+        <Link href="/organization/vendors">
+          <Card className="h-full hover:bg-muted/50 transition-colors cursor-pointer">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-lg">Vendors</CardTitle>
+              <Briefcase className="h-5 w-5 text-primary" />
+            </CardHeader>
+            <CardContent>
+              <CardDescription>Manage vendor information and relationships</CardDescription>
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Link href="/organization/roles">
+          <Card className="h-full hover:bg-muted/50 transition-colors cursor-pointer">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-lg">Roles</CardTitle>
+              <UserCog className="h-5 w-5 text-primary" />
+            </CardHeader>
+            <CardContent>
+              <CardDescription>Manage user roles and permissions</CardDescription>
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Link href="/organization/user-accounts">
+          <Card className="h-full hover:bg-muted/50 transition-colors cursor-pointer">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-lg">User Accounts</CardTitle>
+              <Users className="h-5 w-5 text-primary" />
+            </CardHeader>
+            <CardContent>
+              <CardDescription>Manage user accounts and access</CardDescription>
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Link href="/organization/account-creation">
+          <Card className="h-full hover:bg-muted/50 transition-colors cursor-pointer">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-lg">Account Creation</CardTitle>
+              <UserCog className="h-5 w-5 text-primary" />
+            </CardHeader>
+            <CardContent>
+              <CardDescription>Create user accounts for employees</CardDescription>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
-    </main>
+    </div>
   )
 }

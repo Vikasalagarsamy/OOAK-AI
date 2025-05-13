@@ -1,23 +1,22 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { PhoneCall } from "lucide-react"
+import { SalesHeader } from "@/components/sales/sales-header"
+import { SalesSubmenu } from "@/components/sales/sales-submenu"
+import { FollowUpStats } from "@/components/follow-ups/follow-up-stats"
 
 export default function FollowUpPage() {
   return (
-    <div className="container mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-6">Follow Up</h1>
+    <div>
+      <SalesHeader title="Follow Up Management" description="Schedule and track follow-ups with potential clients" />
 
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <PhoneCall className="h-5 w-5" />
-            <CardTitle>Follow Up Management</CardTitle>
-          </div>
-          <CardDescription>Schedule and track follow-ups with potential clients</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-muted-foreground">Follow-up calendar and tracking will be implemented here.</p>
-        </CardContent>
-      </Card>
+      <SalesSubmenu />
+
+      <FollowUpStats />
+
+      {/* Rest of the follow-up page content */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <h2 className="text-xl font-semibold mb-4">Upcoming Follow-ups</h2>
+        {/* Follow-up list component would go here */}
+        <p className="text-muted-foreground">Your upcoming follow-ups will appear here.</p>
+      </div>
     </div>
   )
 }
