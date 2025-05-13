@@ -83,6 +83,10 @@ export const menuStructure: Record<string, MenuItem> = {
         label: "My Leads",
         href: "/sales/my-leads",
       },
+      "manage-lead": {
+        label: "Manage Leads",
+        href: "/sales/manage-lead",
+      },
       "unassigned-lead": {
         label: "Unassigned Leads",
         href: "/sales/unassigned-lead",
