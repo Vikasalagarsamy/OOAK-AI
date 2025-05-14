@@ -57,22 +57,20 @@ export function SalesSubmenu() {
   const pathname = usePathname()
 
   return (
-    <div className="bg-muted/40 p-4 rounded-lg mb-6">
-      <div className="flex flex-wrap gap-2">
-        {menuItems.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={cn(
-              "flex items-center px-3 py-2 text-sm rounded-md hover:bg-muted transition-colors",
-              pathname === item.href && "bg-muted font-medium",
-            )}
-          >
-            {item.icon}
-            <span className="ml-2">{item.title}</span>
-          </Link>
-        ))}
-      </div>
+    <div className="flex flex-wrap gap-2">
+      {menuItems.map((item) => (
+        <Link
+          key={item.href}
+          href={item.href}
+          className={cn(
+            "flex items-center px-3 py-2 text-sm rounded-md hover:bg-muted transition-colors",
+            pathname === item.href && "bg-muted font-medium",
+          )}
+        >
+          {item.icon}
+          <span className="ml-2">{item.title}</span>
+        </Link>
+      ))}
     </div>
   )
 }
