@@ -3,17 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import {
-  DollarSign,
-  UserPlus,
-  ClipboardList,
-  PhoneCall,
-  FileText,
-  CheckSquare,
-  XSquare,
-  GitBranch,
-  ListChecks,
-} from "lucide-react"
+import { DollarSign, UserPlus, ClipboardList, PhoneCall, FileText, CheckSquare, XSquare, GitBranch } from "lucide-react"
 
 const menuItems = [
   {
@@ -30,11 +20,6 @@ const menuItems = [
     title: "My Leads",
     href: "/sales/my-leads",
     icon: <ClipboardList className="h-4 w-4" />,
-  },
-  {
-    title: "Manage Leads",
-    href: "/sales/manage-lead",
-    icon: <ListChecks className="h-4 w-4" />,
   },
   {
     title: "Unassigned Leads",
