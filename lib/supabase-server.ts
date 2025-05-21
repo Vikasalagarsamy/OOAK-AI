@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 
+// Create a Supabase client for server-side operations
 export function createClient() {
   const cookieStore = cookies()
 
@@ -20,3 +21,6 @@ export function createClient() {
 
   return client
 }
+
+// Export a singleton instance as 'supabase' to fix the missing export error
+export const supabase = createClient()

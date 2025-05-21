@@ -8,9 +8,10 @@ export const dynamic = "force-dynamic"
 export const revalidate = 60 // Fallback revalidation if real-time updates fail
 
 export default async function DashboardPage() {
-  // Fetch initial data server-side
+  // Fetch initial data server-side with error handling
   const initialData = await getDashboardStats().catch((error) => {
     console.error("Error fetching initial dashboard data:", error)
+    // Return null to trigger the fallback data in RealTimeDashboard
     return null
   })
 

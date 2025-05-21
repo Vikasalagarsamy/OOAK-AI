@@ -22,21 +22,33 @@ export const metadata = {
     generator: 'v0.dev'
 }
 
-// Initialize database tables during server startup
+// Initialize database tables during server startup, but don't block rendering
 // This is a top-level await which will run before any requests are handled
-initializeDatabase()
-  .then((result) => {
-    if (result && result.success) {
-      console.log("Database initialized successfully:", result.message)
-    } else if (result) {
-      console.error("Database initialization issues:", result.message, JSON.stringify(result.details))
-    } else {
-      console.error("Database initialization failed with unknown error")
-    }
-  })
-  .catch((error) => {
-    console.error("Error initializing database:", error)
-  })
+try {
+  initializeDatabase()
+    .then((result) => {
+      if (result && result.success) {
+        console.log("Database initialization completed:", result.message)
+        // Log details at debug level
+        if (process.env.NODE_ENV !== "production") {
+          console.log("Database initialization details:", JSON.stringify(result.details))
+        }
+      } else if (result) {
+        console.warn("Database initialization issues:", result.message)
+        // Log details at debug level
+        if (process.env.NODE_ENV !== "production") {
+          console.warn("Database initialization details:", JSON.stringify(result.details))
+        }
+      }
+    })
+    .catch((error) => {
+      console.error("Error during database initialization:", error)
+      // Application will continue despite the error
+    })
+} catch (error) {
+  console.error("Critical error during database initialization setup:", error)
+  // Application will continue despite the error
+}
 
 export default function RootLayout({
   children,

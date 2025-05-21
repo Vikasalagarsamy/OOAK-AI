@@ -88,22 +88,42 @@ export function MenuPermissionsManager() {
         table_name: "menu_items_tracking",
       })
 
-      if (tableError || !tableExists) {
+      if (tableError) {
+        console.error("Error checking if tracking table exists:", tableError)
+        // Continue anyway as we'll try to create it in updateMenuTracking
+      }
+
+      if (!tableExists) {
         // Create and initialize the tracking table
-        await updateMenuTracking()
-        toast({
-          title: "Menu Tracking Initialized",
-          description: "Menu tracking has been set up for the first time.",
+        const success = await updateMenuTracking()
+        if (success) {
+          toast({
+            title: "Menu Tracking Initialized",
+            description: "Menu tracking has been set up for the first time.",
+          })
+        } else {
+          // Even if it fails, we'll still mark as initialized so the UI doesn't keep trying
+          console.warn("Menu tracking initialization failed, but proceeding anyway")
+        }
+      } else {
+        // Table exists, but we should still check for tracking updates
+        // This is optional and can help recover from bad states
+        await updateMenuTracking().catch((err) => {
+          console.warn("Failed to update menu tracking on init:", err)
         })
       }
 
       setTrackingInitialized(true)
     } catch (error: any) {
       console.error("Error initializing menu tracking:", error)
+
+      // Even if it fails, we'll still mark as initialized so the UI continues working
+      setTrackingInitialized(true)
+
       toast({
         title: "Warning",
-        description: "Could not initialize menu tracking. Change detection may not work correctly.",
-        variant: "destructive",
+        description: "Could not initialize menu tracking. Change detection may be limited.",
+        variant: "warning",
       })
     }
   }
@@ -117,13 +137,19 @@ export function MenuPermissionsManager() {
         return { added: [], removed: [], modified: [] }
       }
 
-      const changes = await detectMenuChanges()
+      const changes = await detectMenuChanges().catch((err) => {
+        console.error("Error detecting menu changes:", err)
+        return { added: [], removed: [], modified: [] }
+      })
+
       setMenuChanges(changes)
 
       // If there are changes, update the menu items with status indicators
       if (changes.added.length > 0 || changes.modified.length > 0 || changes.removed.length > 0) {
         if (selectedRole) {
-          await loadMenuItemsAndPermissions(true)
+          await loadMenuItemsAndPermissions(true).catch((err) => {
+            console.error("Error loading menu items after detecting changes:", err)
+          })
         }
       }
 

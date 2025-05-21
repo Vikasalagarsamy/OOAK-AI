@@ -102,11 +102,13 @@ export async function getDashboardStats() {
         const departmentCounts = await Promise.all(
           departments.map(async (dept) => {
             try {
+              // Use a more resilient approach with error handling
               const { count, error } = await supabase
                 .from("employee_departments")
                 .select("*", { count: "exact", head: true })
                 .eq("department_id", dept.id)
 
+              // If there's an error, log it but don't throw - return 0 count instead
               if (error) {
                 console.error(`Error counting employees for department ${dept.name}:`, error)
                 return { department: dept.name, count: 0 }
@@ -117,14 +119,19 @@ export async function getDashboardStats() {
                 count: count || 0,
               }
             } catch (error) {
+              // Catch any unexpected errors and return a default count
               console.error(`Failed to fetch count for department ${dept.name}:`, error)
               return { department: dept.name, count: 0 }
             }
           }),
-        )
+        ).catch((error) => {
+          // If Promise.all fails, log the error and return default data
+          console.error("Error in Promise.all for department counts:", error)
+          return defaultEmployeesByDepartment
+        })
 
-        // Only update if we have results
-        if (departmentCounts.length > 0) {
+        // Only update if we have results and no errors occurred
+        if (departmentCounts && departmentCounts.length > 0) {
           employeesByDepartment = departmentCounts
         }
       }
@@ -159,11 +166,13 @@ export async function getDashboardStats() {
         const branchCounts = await Promise.all(
           companies.map(async (company) => {
             try {
+              // Use a more resilient approach with error handling
               const { count, error } = await supabase
                 .from("branches")
                 .select("*", { count: "exact", head: true })
                 .eq("company_id", company.id)
 
+              // If there's an error, log it but don't throw - return 0 count instead
               if (error) {
                 console.error(`Error counting branches for company ${company.name}:`, error)
                 return { company: company.name, count: 0 }
@@ -174,14 +183,19 @@ export async function getDashboardStats() {
                 count: count || 0,
               }
             } catch (error) {
+              // Catch any unexpected errors and return a default count
               console.error(`Failed to fetch branch count for company ${company.name}:`, error)
               return { company: company.name, count: 0 }
             }
           }),
-        )
+        ).catch((error) => {
+          // If Promise.all fails, log the error and return default data
+          console.error("Error in Promise.all for branch counts:", error)
+          return defaultBranchesByCompany
+        })
 
-        // Only update if we have results
-        if (branchCounts.length > 0) {
+        // Only update if we have results and no errors occurred
+        if (branchCounts && branchCounts.length > 0) {
           branchesByCompany = branchCounts
         }
       }
@@ -205,7 +219,10 @@ export async function getDashboardStats() {
     // Get recent activities
     let recentActivities = []
     try {
-      recentActivities = await getRecentActivities(10)
+      recentActivities = await getRecentActivities(10).catch((error) => {
+        console.error("Error fetching recent activities:", error)
+        return generateMockActivities()
+      })
     } catch (error) {
       console.error("Error fetching recent activities:", error)
       // Use default activities on error

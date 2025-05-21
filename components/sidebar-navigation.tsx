@@ -307,6 +307,11 @@ const menuItems: MenuItem[] = [
         icon: <Settings className="h-4 w-4" />,
         description: "Configure system settings",
       },
+      {
+        title: "Bug Management",
+        href: "/admin/bugs",
+        icon: <AlertCircle className="h-4 w-4" />,
+      },
     ],
   },
 ]

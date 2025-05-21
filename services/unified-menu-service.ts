@@ -422,7 +422,20 @@ export async function detectMenuChanges(): Promise<{
   try {
     const supabase = createClient()
 
-    // Get current menu items from the database - removed last_updated column
+    // Check if the tracking table exists first
+    const { data: tableExists, error: tableError } = await supabase.rpc("check_if_table_exists", {
+      table_name: "menu_items_tracking",
+    })
+
+    if (tableError || !tableExists) {
+      console.log("Menu tracking table doesn't exist yet, creating it first")
+      // Create the tracking table first before proceeding
+      await updateMenuTracking()
+      // Return empty changes since this is the first time setup
+      return { added: [], removed: [], modified: [] }
+    }
+
+    // Get current menu items from the database
     const { data: currentItems, error: currentError } = await supabase
       .from("menu_items")
       .select("id, parent_id, name, path, icon, is_visible, sort_order")
@@ -433,15 +446,16 @@ export async function detectMenuChanges(): Promise<{
       return { added: [], removed: [], modified: [] }
     }
 
-    // Get the last known state of menu items (from a tracking table)
+    // Get the last known state of menu items (from the tracking table)
     const { data: previousItems, error: previousError } = await supabase
       .from("menu_items_tracking")
       .select("menu_item_id, last_known_state")
       .order("menu_item_id")
 
     if (previousError) {
-      // If the tracking table doesn't exist yet, we'll create it later
-      console.log("Menu tracking table may not exist yet:", previousError)
+      console.log("Error fetching previous menu items state:", previousError)
+      // If we can't get the previous state, update tracking and return empty changes
+      await updateMenuTracking()
       return { added: [], removed: [], modified: [] }
     }
 
@@ -547,15 +561,8 @@ export async function updateMenuTracking(): Promise<boolean> {
       }
     }
 
-    // Clear existing tracking data
-    const { error: clearError } = await supabase.from("menu_items_tracking").delete().neq("id", 0) // This will delete all rows
-
-    if (clearError) {
-      console.error("Error clearing menu tracking data:", clearError)
-      return false
-    }
-
-    // Insert current items into tracking table
+    // Use upsert instead of delete-then-insert to avoid race conditions
+    // This will either update existing records or insert new ones
     const trackingData = currentItems.map((item) => ({
       menu_item_id: item.id,
       last_known_state: JSON.stringify({
@@ -566,12 +573,17 @@ export async function updateMenuTracking(): Promise<boolean> {
         isVisible: item.is_visible,
         sortOrder: item.sort_order,
       }),
+      last_updated: new Date().toISOString(),
     }))
 
-    const { error: insertError } = await supabase.from("menu_items_tracking").insert(trackingData)
+    // Use upsert (insert with on conflict do update)
+    const { error: upsertError } = await supabase.from("menu_items_tracking").upsert(trackingData, {
+      onConflict: "menu_item_id",
+      ignoreDuplicates: false,
+    })
 
-    if (insertError) {
-      console.error("Error updating menu tracking data:", insertError)
+    if (upsertError) {
+      console.error("Error updating menu tracking data:", upsertError)
       return false
     }
 
