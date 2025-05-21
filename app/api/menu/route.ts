@@ -1,24 +1,22 @@
 import { NextResponse } from "next/server"
-import { getMenuForCurrentUser } from "@/services/unified-menu-service"
+import { createClient } from "@/lib/supabase-server"
 
 export async function GET() {
   try {
-    console.log("API route: /api/menu - Fetching menu for current user")
+    // Create the Supabase client inside the request handler
+    const supabase = createClient()
 
-    // Add stronger cache control headers to prevent caching
-    const headers = {
-      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
-      Pragma: "no-cache",
-      Expires: "0",
-      "Surrogate-Control": "no-store",
+    // Get all menu items
+    const { data, error } = await supabase.from("menu_items").select("*").order("sort_order", { ascending: true })
+
+    if (error) {
+      console.error("Error fetching menu items:", error)
+      return NextResponse.json({ error: "Failed to fetch menu items" }, { status: 500 })
     }
 
-    const menu = await getMenuForCurrentUser()
-    console.log(`API route: /api/menu - Returning ${menu.length} menu items`)
-
-    return NextResponse.json(menu, { headers })
+    return NextResponse.json(data)
   } catch (error) {
-    console.error("API route: /api/menu - Error:", error)
-    return NextResponse.json({ error: "Failed to fetch menu" }, { status: 500 })
+    console.error("Error in menu API:", error)
+    return NextResponse.json({ error: "An error occurred" }, { status: 500 })
   }
 }

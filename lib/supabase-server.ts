@@ -1,7 +1,8 @@
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
+import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 
-// Create a Supabase client for server-side operations
+// Create a Supabase client for server-side operations within request context
 export function createClient() {
   const cookieStore = cookies()
 
@@ -22,5 +23,9 @@ export function createClient() {
   return client
 }
 
-// Export a singleton instance as 'supabase' to fix the missing export error
-export const supabase = createClient()
+// Create a direct Supabase client without cookies for module-level imports
+// This doesn't use cookies() so it's safe to use at the module level
+export const supabase = createSupabaseClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || "",
+  process.env.SUPABASE_ANON_KEY || "",
+)
