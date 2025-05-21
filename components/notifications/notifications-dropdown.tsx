@@ -1,7 +1,7 @@
 "use client"
 
-import { Fragment } from "react"
-import { Bell } from "lucide-react"
+import { Fragment, useState } from "react"
+import { Bell, RefreshCw } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,49 +15,64 @@ import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { NotificationItem } from "./notification-item"
-import { useNotifications } from "@/hooks/use-notifications"
 import { cn } from "@/lib/utils"
-import {
-  useGlobalNotifications,
-  markAllNotificationsAsRead,
-  markNotificationAsRead,
-} from "../follow-ups/follow-up-notification-listener"
+
+// Sample notifications for testing
+const sampleNotifications = [
+  {
+    id: "sample-1",
+    title: "Overdue Follow-up: Client ABC",
+    description: "Overdue by 3 days - Phone Call",
+    type: "overdue",
+    link: "/follow-ups?id=123",
+    read: false,
+    createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    id: "sample-2",
+    title: "Upcoming Follow-up: Client XYZ",
+    description: "In 2 hours - Email",
+    type: "upcoming",
+    link: "/follow-ups?id=456",
+    read: false,
+    createdAt: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    id: "sample-3",
+    title: "New Lead Assigned",
+    description: "A new lead has been assigned to you",
+    type: "info",
+    link: "/sales/my-leads",
+    read: true,
+    createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+  },
+]
 
 export function NotificationsDropdown() {
-  const {
-    notifications: apiNotifications,
-    unreadCount: apiUnreadCount,
-    loading,
-    error,
-    markAsRead,
-    markAllAsRead,
-  } = useNotifications()
+  const [notifications, setNotifications] = useState(sampleNotifications)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  // Get follow-up notifications from global state
-  const followUpNotifications = useGlobalNotifications()
+  const unreadCount = notifications.filter((n) => !n.read).length
 
-  // Combine both types of notifications
-  const allNotifications = [...followUpNotifications, ...apiNotifications].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-  )
-
-  const unreadCount = allNotifications.filter((n) => !n.read).length
-
-  // Handle marking a notification as read
-  const handleMarkAsRead = (id: string) => {
-    // Check if it's a follow-up notification
-    const isFollowUp = followUpNotifications.some((n) => n.id === id)
-    if (isFollowUp) {
-      markNotificationAsRead(id)
-    } else {
-      markAsRead(id)
-    }
+  // Function to mark a notification as read
+  const markAsRead = (id: string) => {
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)))
   }
 
-  // Handle marking all notifications as read
-  const handleMarkAllAsRead = () => {
-    markAllNotificationsAsRead()
-    markAllAsRead()
+  // Function to mark all notifications as read
+  const markAllAsRead = () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
+  }
+
+  // Function to refresh notifications
+  const refreshNotifications = () => {
+    setLoading(true)
+    // Simulate API call
+    setTimeout(() => {
+      setNotifications(sampleNotifications)
+      setLoading(false)
+    }, 1000)
   }
 
   return (
@@ -83,20 +98,25 @@ export function NotificationsDropdown() {
       <DropdownMenuContent className="w-80 md:w-96" align="end">
         <DropdownMenuLabel className="flex justify-between items-center">
           <span>Notifications</span>
-          {unreadCount > 0 && (
-            <Button variant="ghost" size="sm" className="text-xs h-auto py-1" onClick={handleMarkAllAsRead}>
-              Mark all as read
+          <div className="flex items-center gap-2">
+            {unreadCount > 0 && (
+              <Button variant="ghost" size="sm" className="text-xs h-auto py-1" onClick={markAllAsRead}>
+                Mark all as read
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={refreshNotifications} disabled={loading}>
+              <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
             </Button>
-          )}
+          </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
           <ScrollArea className="h-[calc(100vh-200px)] max-h-80">
-            {loading && apiNotifications.length === 0 ? (
+            {loading ? (
               <div className="space-y-3 p-2">
-                {Array.from({ length: 5 }).map((_, i) => (
+                {Array.from({ length: 3 }).map((_, i) => (
                   <div key={i} className="flex gap-3">
-                    <Skeleton className="h-5 w-5 rounded-full" />
+                    <Skeleton className="h-8 w-8 rounded-full" />
                     <div className="space-y-2 flex-1">
                       <Skeleton className="h-4 w-3/4" />
                       <Skeleton className="h-3 w-full" />
@@ -104,27 +124,27 @@ export function NotificationsDropdown() {
                   </div>
                 ))}
               </div>
-            ) : error && apiNotifications.length === 0 ? (
+            ) : error ? (
               <div className="py-6 text-center">
                 <p className="text-sm text-muted-foreground">Failed to load notifications</p>
-                <Button variant="link" className="mt-2" onClick={() => {}}>
+                <Button variant="link" className="mt-2" onClick={refreshNotifications}>
                   Retry
                 </Button>
               </div>
-            ) : allNotifications.length === 0 ? (
-              <div className="p-4 text-center text-muted-foreground">No notifications available</div>
+            ) : notifications.length === 0 ? (
+              <div className="p-6 text-center">
+                <p className="text-sm text-muted-foreground">No notifications available</p>
+                <p className="text-xs text-muted-foreground mt-1">You'll see notifications here when they arrive</p>
+              </div>
             ) : (
               <div className="space-y-1 p-1">
-                {allNotifications.map((notification) => (
+                {notifications.map((notification) => (
                   <Fragment key={notification.id}>
-                    <NotificationItem
-                      notification={notification}
-                      onMarkAsRead={() => handleMarkAsRead(notification.id)}
-                    />
+                    <NotificationItem notification={notification} onMarkAsRead={markAsRead} />
                     <DropdownMenuSeparator
                       className={cn(
                         "my-1",
-                        allNotifications.indexOf(notification) === allNotifications.length - 1 ? "hidden" : "",
+                        notifications.indexOf(notification) === notifications.length - 1 ? "hidden" : "",
                       )}
                     />
                   </Fragment>
