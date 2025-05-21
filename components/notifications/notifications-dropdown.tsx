@@ -17,9 +17,48 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { NotificationItem } from "./notification-item"
 import { useNotifications } from "@/hooks/use-notifications"
 import { cn } from "@/lib/utils"
+import {
+  useGlobalNotifications,
+  markAllNotificationsAsRead,
+  markNotificationAsRead,
+} from "../follow-ups/follow-up-notification-listener"
 
 export function NotificationsDropdown() {
-  const { notifications, unreadCount, loading, error, markAsRead, markAllAsRead } = useNotifications()
+  const {
+    notifications: apiNotifications,
+    unreadCount: apiUnreadCount,
+    loading,
+    error,
+    markAsRead,
+    markAllAsRead,
+  } = useNotifications()
+
+  // Get follow-up notifications from global state
+  const followUpNotifications = useGlobalNotifications()
+
+  // Combine both types of notifications
+  const allNotifications = [...followUpNotifications, ...apiNotifications].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  )
+
+  const unreadCount = allNotifications.filter((n) => !n.read).length
+
+  // Handle marking a notification as read
+  const handleMarkAsRead = (id: string) => {
+    // Check if it's a follow-up notification
+    const isFollowUp = followUpNotifications.some((n) => n.id === id)
+    if (isFollowUp) {
+      markNotificationAsRead(id)
+    } else {
+      markAsRead(id)
+    }
+  }
+
+  // Handle marking all notifications as read
+  const handleMarkAllAsRead = () => {
+    markAllNotificationsAsRead()
+    markAllAsRead()
+  }
 
   return (
     <DropdownMenu>
@@ -45,7 +84,7 @@ export function NotificationsDropdown() {
         <DropdownMenuLabel className="flex justify-between items-center">
           <span>Notifications</span>
           {unreadCount > 0 && (
-            <Button variant="ghost" size="sm" className="text-xs h-auto py-1" onClick={() => markAllAsRead()}>
+            <Button variant="ghost" size="sm" className="text-xs h-auto py-1" onClick={handleMarkAllAsRead}>
               Mark all as read
             </Button>
           )}
@@ -53,7 +92,7 @@ export function NotificationsDropdown() {
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
           <ScrollArea className="h-[calc(100vh-200px)] max-h-80">
-            {loading ? (
+            {loading && apiNotifications.length === 0 ? (
               <div className="space-y-3 p-2">
                 {Array.from({ length: 5 }).map((_, i) => (
                   <div key={i} className="flex gap-3">
@@ -65,24 +104,27 @@ export function NotificationsDropdown() {
                   </div>
                 ))}
               </div>
-            ) : error ? (
+            ) : error && apiNotifications.length === 0 ? (
               <div className="py-6 text-center">
                 <p className="text-sm text-muted-foreground">Failed to load notifications</p>
                 <Button variant="link" className="mt-2" onClick={() => {}}>
                   Retry
                 </Button>
               </div>
-            ) : notifications.length === 0 ? (
+            ) : allNotifications.length === 0 ? (
               <div className="p-4 text-center text-muted-foreground">No notifications available</div>
             ) : (
               <div className="space-y-1 p-1">
-                {notifications.map((notification) => (
+                {allNotifications.map((notification) => (
                   <Fragment key={notification.id}>
-                    <NotificationItem notification={notification} onMarkAsRead={markAsRead} />
+                    <NotificationItem
+                      notification={notification}
+                      onMarkAsRead={() => handleMarkAsRead(notification.id)}
+                    />
                     <DropdownMenuSeparator
                       className={cn(
                         "my-1",
-                        notifications.indexOf(notification) === notifications.length - 1 ? "hidden" : "",
+                        allNotifications.indexOf(notification) === allNotifications.length - 1 ? "hidden" : "",
                       )}
                     />
                   </Fragment>

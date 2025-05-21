@@ -1,10 +1,6 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Calendar, AlertCircle } from "lucide-react"
-
-import { toast } from "@/components/ui/use-toast"
-import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
 
 // Type for notification data
@@ -30,6 +26,53 @@ interface OverdueNotification {
   summary?: string
   priority: string
   overdueDays: number
+}
+
+// Global state to store notifications
+export type NotificationItem = {
+  id: string
+  title: string
+  description: string
+  type: "upcoming" | "overdue"
+  link: string
+  read: boolean
+  createdAt: string
+}
+
+// Create a global store for notifications that can be accessed by the bell icon dropdown
+let globalNotifications: NotificationItem[] = []
+let notificationListeners: (() => void)[] = []
+
+export function addNotification(notification: NotificationItem) {
+  globalNotifications = [notification, ...globalNotifications]
+  notificationListeners.forEach((listener) => listener())
+}
+
+export function markNotificationAsRead(id: string) {
+  globalNotifications = globalNotifications.map((n) => (n.id === id ? { ...n, read: true } : n))
+  notificationListeners.forEach((listener) => listener())
+}
+
+export function markAllNotificationsAsRead() {
+  globalNotifications = globalNotifications.map((n) => ({ ...n, read: true }))
+  notificationListeners.forEach((listener) => listener())
+}
+
+export function useGlobalNotifications() {
+  const [notifications, setNotifications] = useState<NotificationItem[]>(globalNotifications)
+
+  useEffect(() => {
+    const updateNotifications = () => {
+      setNotifications([...globalNotifications])
+    }
+
+    notificationListeners.push(updateNotifications)
+    return () => {
+      notificationListeners = notificationListeners.filter((listener) => listener !== updateNotifications)
+    }
+  }, [])
+
+  return notifications
 }
 
 export function FollowUpNotificationListener() {
@@ -67,16 +110,16 @@ export function FollowUpNotificationListener() {
         // Process upcoming notifications
         if (data.upcoming && data.upcoming.length > 0) {
           data.upcoming.forEach((notification: Notification) => {
-            // Show in-app toast notification
-            toast({
+            // Add to global notifications
+            const notificationId = `upcoming-${notification.id}-${Date.now()}`
+            addNotification({
+              id: notificationId,
               title: `Upcoming Follow-up: ${notification.clientName}`,
               description: `${notification.timeUntil} - ${notification.contactMethod.replace(/_/g, " ")}`,
-              action: (
-                <Button variant="outline" size="sm" onClick={() => router.push(`/follow-ups?id=${notification.id}`)}>
-                  <Calendar className="mr-2 h-4 w-4" />
-                  View
-                </Button>
-              ),
+              type: "upcoming",
+              link: `/follow-ups?id=${notification.id}`,
+              read: false,
+              createdAt: new Date().toISOString(),
             })
 
             // Show browser notification if supported
@@ -90,33 +133,19 @@ export function FollowUpNotificationListener() {
         }
 
         // Process overdue notifications
-        if (data.overdue && data.overdue.length > 0 && data.overdue.length <= 3) {
+        if (data.overdue && data.overdue.length > 0) {
           data.overdue.forEach((notification: OverdueNotification) => {
-            // Show in-app toast notification for overdue
-            toast({
-              variant: "destructive",
+            // Add to global notifications
+            const notificationId = `overdue-${notification.id}-${Date.now()}`
+            addNotification({
+              id: notificationId,
               title: `Overdue Follow-up: ${notification.clientName}`,
               description: `Overdue by ${notification.overdueDays} day${notification.overdueDays !== 1 ? "s" : ""}`,
-              action: (
-                <Button variant="outline" size="sm" onClick={() => router.push(`/follow-ups?id=${notification.id}`)}>
-                  <AlertCircle className="mr-2 h-4 w-4" />
-                  View
-                </Button>
-              ),
+              type: "overdue",
+              link: `/follow-ups?id=${notification.id}`,
+              read: false,
+              createdAt: new Date().toISOString(),
             })
-          })
-        } else if (data.overdue && data.overdue.length > 3) {
-          // Show a summary toast for many overdue items
-          toast({
-            variant: "destructive",
-            title: `${data.overdue.length} Overdue Follow-ups`,
-            description: "You have multiple follow-ups that need attention",
-            action: (
-              <Button variant="outline" size="sm" onClick={() => router.push("/follow-ups?tab=overdue")}>
-                <AlertCircle className="mr-2 h-4 w-4" />
-                View All
-              </Button>
-            ),
           })
         }
       } catch (error) {
