@@ -41,7 +41,7 @@ export function MenuPermissionsManager() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
-  const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "success" | "error">("idle")
+  const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "default" | "destructive">("idle")
   const [menuChanges, setMenuChanges] = useState<{
     added: MenuItem[]
     removed: MenuItem[]
@@ -84,7 +84,7 @@ export function MenuPermissionsManager() {
   const initializeMenuTracking = async () => {
     try {
       // Check if tracking table exists and initialize it if needed
-      const { data: tableExists, error: tableError } = await supabase.rpc("check_if_table_exists", {
+      const { data: tableExists, error: tableError } = await supabase.rpc("check_table_exists", {
         table_name: "menu_items_tracking",
       })
 
@@ -98,8 +98,9 @@ export function MenuPermissionsManager() {
         const success = await updateMenuTracking()
         if (success) {
           toast({
-            title: "Menu Tracking Initialized",
+            title: "Success",
             description: "Menu tracking has been set up for the first time.",
+            variant: "default",
           })
         } else {
           // Even if it fails, we'll still mark as initialized so the UI doesn't keep trying
@@ -123,7 +124,7 @@ export function MenuPermissionsManager() {
       toast({
         title: "Warning",
         description: "Could not initialize menu tracking. Change detection may be limited.",
-        variant: "warning",
+        variant: "default",
       })
     }
   }
@@ -289,14 +290,15 @@ export function MenuPermissionsManager() {
       // Refresh data after sync
       await handleRefresh()
 
-      setSyncStatus("success")
+      setSyncStatus("default")
       toast({
         title: "Success",
-        description: "Menu structure has been synchronized",
+        description: "Menu items synchronized successfully.",
+        variant: "default",
       })
     } catch (error: any) {
       console.error("Error synchronizing menus:", error)
-      setSyncStatus("error")
+      setSyncStatus("destructive")
       toast({
         title: "Error",
         description: `Failed to synchronize menus: ${error.message || "Unknown error"}`,
@@ -438,14 +440,13 @@ export function MenuPermissionsManager() {
     if (!status) return null
 
     const variants = {
-      new: { variant: "success" as const, icon: <Plus className="h-3 w-3 mr-1" /> },
-      modified: { variant: "warning" as const, icon: <Pencil className="h-3 w-3 mr-1" /> },
-      removed: { variant: "destructive" as const, icon: <AlertCircle className="h-3 w-3 mr-1" /> },
-    }
+      new: "default",
+      modified: "secondary",
+      removed: "destructive",
+    } as const
 
     return (
-      <Badge variant={variants[status].variant} className="ml-2">
-        {variants[status].icon}
+      <Badge variant={variants[status]} className="ml-2">
         {status.charAt(0).toUpperCase() + status.slice(1)}
       </Badge>
     )
@@ -473,10 +474,7 @@ export function MenuPermissionsManager() {
         >
           <div className="flex items-center flex-1 gap-2">
             {item.icon && (
-              <MenuIcon
-                name={item.icon}
-                className={`h-4 w-4 ${isRemoved ? "text-red-400" : "text-muted-foreground"}`}
-              />
+              <MenuIcon name={item.icon} />
             )}
             <span className={`font-medium ${isRemoved ? "line-through text-red-500" : ""}`}>{item.name}</span>
             {item.path && <span className="text-xs text-muted-foreground">{item.path}</span>}
@@ -545,9 +543,9 @@ export function MenuPermissionsManager() {
           <AlertTitle>Error</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
-        <Button onClick={handleRefresh} disabled={refreshing}>
-          <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-          {refreshing ? "Refreshing..." : "Refresh Data"}
+        <Button variant="default" onClick={handleRefresh} disabled={refreshing}>
+          <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+          Refresh
         </Button>
       </div>
     )
@@ -564,18 +562,18 @@ export function MenuPermissionsManager() {
             </CardDescription>
           </div>
           <div className="flex gap-2">
-            <Button size="sm" variant="outline" onClick={handleSyncMenus} disabled={syncStatus === "syncing"}>
-              <RefreshCw className={`mr-2 h-4 w-4 ${syncStatus === "syncing" ? "animate-spin" : ""}`} />
-              {syncStatus === "syncing" ? "Synchronizing..." : "Sync Menu Structure"}
+            <Button variant="default" onClick={handleSyncMenus} disabled={saving}>
+              <RefreshCw className={`h-4 w-4 ${saving ? "animate-spin" : ""}`} />
+              Sync Menus
             </Button>
-            <Button size="sm" onClick={handleRefresh} disabled={refreshing}>
-              <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-              {refreshing ? "Refreshing..." : "Refresh"}
+            <Button variant="default" onClick={handleRefresh} disabled={refreshing}>
+              <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+              Refresh
             </Button>
           </div>
         </CardHeader>
         <CardContent>
-          {syncStatus === "success" && (
+          {syncStatus === "default" && (
             <Alert className="mb-4">
               <Info className="h-4 w-4" />
               <AlertTitle>Menu Synchronized</AlertTitle>
@@ -612,13 +610,13 @@ export function MenuPermissionsManager() {
                 <div className="text-sm">
                   {menuChanges.added.length > 0 && (
                     <div className="flex items-center gap-2">
-                      <Badge variant="success">New</Badge>
+                      <Badge variant="default">New</Badge>
                       <span>{menuChanges.added.length} new menu items</span>
                     </div>
                   )}
                   {menuChanges.modified.length > 0 && (
                     <div className="flex items-center gap-2">
-                      <Badge variant="warning">Modified</Badge>
+                      <Badge variant="secondary">Modified</Badge>
                       <span>{menuChanges.modified.length} modified menu items</span>
                     </div>
                   )}
@@ -631,7 +629,17 @@ export function MenuPermissionsManager() {
                 </div>
               </AlertDescription>
             </Alert>
-          ) : null}
+          ) : (
+            <Alert className="mb-4">
+              <Info className="h-4 w-4" />
+              <AlertTitle>No Changes Detected</AlertTitle>
+              <AlertDescription>
+                <div className="text-sm">
+                  No changes detected in menu items.
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
 
           {loading ? (
             <div className="space-y-4">
@@ -682,8 +690,8 @@ export function MenuPermissionsManager() {
                         <div className="space-y-2">{menuTree.map((item) => renderMenuItem(item))}</div>
 
                         <div className="flex justify-end mt-6">
-                          <Button onClick={savePermissions} disabled={saving}>
-                            {saving ? "Saving..." : "Save Permissions"}
+                          <Button variant="default" onClick={savePermissions} disabled={saving}>
+                            Save Changes
                           </Button>
                         </div>
                       </div>
