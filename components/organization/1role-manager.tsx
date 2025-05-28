@@ -227,63 +227,6 @@ export function RoleManager() {
     }
   }
 
-  // Add new functions for handling select all for each permission type
-  const handleSelectAllPermissions = async (roleId: number, sectionId: number, permission: "view" | "edit" | "delete", checked: boolean) => {
-    if (!selectedRole) return;
-
-    try {
-      // Create a new permissions object
-      const updatedPermissions = { ...selectedRole.permissions };
-      
-      // Find the current section and its children
-      const currentSection = dynamicMenuStructure.find(section => Number(section.id) === sectionId);
-      if (!currentSection) return;
-
-      // Update permissions for the current section
-      updatedPermissions[String(currentSection.id)] = {
-        ...updatedPermissions[String(currentSection.id)],
-        [permission]: checked
-      };
-
-      // Update permissions for all children of the current section
-      if (currentSection.children) {
-        currentSection.children.forEach(child => {
-          updatedPermissions[String(child.id)] = {
-            ...updatedPermissions[String(child.id)],
-            [permission]: checked
-          };
-        });
-      }
-
-      // Update the role in the database
-      const { error } = await supabase
-        .from("roles")
-        .update({ permissions: updatedPermissions })
-        .eq("id", roleId);
-
-      if (error) throw error;
-
-      // Update the local state
-      setRoles(roles.map(role => 
-        role.id === roleId 
-          ? { ...role, permissions: updatedPermissions }
-          : role
-      ));
-
-      toast({
-        title: "Success",
-        description: `All ${permission} permissions updated for this section`,
-      });
-    } catch (error: any) {
-      console.error(`Error updating permissions:`, error);
-      toast({
-        title: "Error",
-        description: `Failed to update permissions: ${error.message || "Unknown error"}`,
-        variant: "destructive",
-      });
-    }
-  };
-
   if (error) {
     return (
       <div className="space-y-6">
@@ -359,39 +302,9 @@ export function RoleManager() {
                       <TableHeader>
                         <TableRow>
                           <TableHead></TableHead>
-                          <TableHead className="w-[100px]">
-                            <div className="flex items-center justify-center gap-2 select-all-chk" style={{ float:'left', marginLeft: '0px' }}>
-                              <Checkbox
-                                checked={selectedRole && 
-                                  selectedRole.permissions[String(section.id)]?.view && 
-                                  section.children?.every(child => selectedRole.permissions[String(child.id)]?.view)}
-                                onCheckedChange={(checked) => handleSelectAllPermissions(selectedRole.id, Number(section.id), "view", checked === true)}
-                              />
-                              <span>View</span>
-                            </div>
-                          </TableHead>
-                          <TableHead className="w-[100px]">
-                            <div className="flex items-center justify-center gap-2 select-all-chk" style={{ float:'left', marginLeft: '0px' }}>
-                              <Checkbox
-                                checked={selectedRole && 
-                                  selectedRole.permissions[String(section.id)]?.edit && 
-                                  section.children?.every(child => selectedRole.permissions[String(child.id)]?.edit)}
-                                onCheckedChange={(checked) => handleSelectAllPermissions(selectedRole.id, Number(section.id), "edit", checked === true)}
-                              />
-                              <span>Edit</span>
-                            </div>
-                          </TableHead>
-                          <TableHead className="w-[100px]">
-                            <div className="flex items-center justify-center gap-2 select-all-chk" style={{ float:'left', marginLeft: '0px' }}>
-                              <Checkbox
-                                checked={selectedRole && 
-                                  selectedRole.permissions[String(section.id)]?.delete && 
-                                  section.children?.every(child => selectedRole.permissions[String(child.id)]?.delete)}
-                                onCheckedChange={(checked) => handleSelectAllPermissions(selectedRole.id, Number(section.id), "delete", checked === true)}
-                              />
-                              <span>Delete</span>
-                            </div>
-                          </TableHead>
+                          <TableHead className="w-[100px]">View</TableHead>
+                          <TableHead className="w-[100px]">Edit</TableHead>
+                          <TableHead className="w-[100px]">Delete</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
