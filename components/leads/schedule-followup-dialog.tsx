@@ -50,8 +50,8 @@ export function ScheduleFollowupDialog({ lead, open, onOpenChange, onFollowupSch
 
     if (!followupType) {
       toast({
-        title: "Follow-up type required",
-        description: "Please select a type for the follow-up",
+        title: "Contact method required",
+        description: "Please select a contact method for the follow-up",
         variant: "destructive",
       })
       return
@@ -168,17 +168,18 @@ export function ScheduleFollowupDialog({ lead, open, onOpenChange, onFollowupSch
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="followup-type">Follow-up Type</Label>
+            <Label htmlFor="followup-type">Contact Method</Label>
             <Select value={followupType} onValueChange={setFollowupType}>
               <SelectTrigger id="followup-type">
-                <SelectValue placeholder="Select type" />
+                <SelectValue placeholder="Select contact method" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="call">Phone Call</SelectItem>
+                <SelectItem value="phone">Phone Call</SelectItem>
                 <SelectItem value="email">Email</SelectItem>
-                <SelectItem value="meeting">Meeting</SelectItem>
-                <SelectItem value="site-visit">Site Visit</SelectItem>
-                <SelectItem value="demo">Product Demo</SelectItem>
+                <SelectItem value="in_person">In Person Meeting</SelectItem>
+                <SelectItem value="video_call">Video Call</SelectItem>
+                <SelectItem value="text_message">Text Message</SelectItem>
+                <SelectItem value="social_media">Social Media</SelectItem>
                 <SelectItem value="other">Other</SelectItem>
               </SelectContent>
             </Select>

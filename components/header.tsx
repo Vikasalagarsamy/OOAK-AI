@@ -14,7 +14,7 @@ import { MobileNavigation } from "./mobile-navigation"
 import { useTheme } from "next-themes"
 import { useCurrentUser } from "@/hooks/use-current-user"
 import { Skeleton } from "./ui/skeleton"
-import { NotificationsDropdown } from "./notifications/notifications-dropdown"
+import { RealtimeNotifications } from "./realtime-notifications"
 
 export function Header() {
   const { theme, setTheme } = useTheme()
@@ -53,7 +53,9 @@ export function Header() {
         <div className="flex items-center gap-2 md:gap-4">
           <MobileNavigation />
           <Link href="/" className="flex items-center gap-2">
-            <span className="font-bold text-xl">ONE OF A KIND PORTAL</span>
+            <span className="font-bold text-xl">
+              {user?.username ? `${user.username.toUpperCase()}'S WORKSPACE` : 'WORKSPACE'}
+            </span>
           </Link>
         </div>
 
@@ -69,7 +71,7 @@ export function Header() {
             {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
           </Button>
 
-          <NotificationsDropdown />
+          <RealtimeNotifications />
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

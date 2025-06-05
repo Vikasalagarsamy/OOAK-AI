@@ -1,4 +1,4 @@
-import { verifyLeadFollowupsTable } from "@/utils/table-verification"
+import { verifyLeadFollowupsTable, verifyDeliverableMasterTable } from "@/utils/table-verification"
 
 /**
  * Initializes database tables required by the application
@@ -28,6 +28,24 @@ export async function initializeDatabase(): Promise<{
       results.lead_followups = {
         exists: true, // Assume it exists to not block startup
         message: "Error verifying lead_followups table, but continuing application startup",
+        error: error instanceof Error ? error.message : "Unknown error",
+      }
+    }
+
+    // Verify deliverable_master table with error handling
+    try {
+      const result = await verifyDeliverableMasterTable()
+      results.deliverable_master = {
+        exists: result.exists,
+        message: result.message,
+        error: result.error,
+      }
+    } catch (error) {
+      console.error("Error verifying deliverable_master table:", error)
+      // Don't block app startup on verification failure
+      results.deliverable_master = {
+        exists: true, // Assume it exists to not block startup
+        message: "Error verifying deliverable_master table, but continuing application startup",
         error: error instanceof Error ? error.message : "Unknown error",
       }
     }

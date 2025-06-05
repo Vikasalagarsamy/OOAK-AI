@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server"
 import type { Employee } from "@/types/employee"
+import { triggerLeadAssignmentTasks } from '@/actions/lead-task-integration-hooks'
 
 // Replace the getEmployeesForLeadAssignment function with this fixed version
 export async function getEmployeesForLeadAssignment(
@@ -202,7 +203,7 @@ export async function assignLeadToEmployee(
     // Get the lead details first
     const { data: lead, error: leadError } = await supabase
       .from("leads")
-      .select("id, company_id, branch_id, status")
+      .select("*")
       .eq("id", leadId)
       .single()
 
@@ -262,6 +263,32 @@ export async function assignLeadToEmployee(
     if (updateError) {
       console.error("Error assigning lead:", updateError)
       return { success: false, message: `Failed to assign lead: ${updateError.message}` }
+    }
+
+    // 🤖 TRIGGER AI TASK GENERATION
+    try {
+      const updatedLeadData = {
+        ...lead,
+        assigned_to: employeeId,
+        status: "ASSIGNED",
+        updated_at: new Date().toISOString()
+      }
+      
+      console.log('🚀 Triggering AI task generation for lead assignment...')
+      const aiResult = await triggerLeadAssignmentTasks(
+        leadId,
+        updatedLeadData,
+        `${employee.first_name} ${employee.last_name} Assignment`
+      )
+      
+      if (aiResult.success && aiResult.tasksGenerated > 0) {
+        console.log(`✅ AI generated ${aiResult.tasksGenerated} task(s) for lead ${leadId}`)
+      } else {
+        console.log(`ℹ️ No AI tasks generated for lead ${leadId}: ${aiResult.message}`)
+      }
+    } catch (aiError) {
+      console.error('⚠️ AI task generation failed (continuing with assignment):', aiError)
+      // Don't fail the entire assignment if AI task generation fails
     }
 
     // Log the assignment in the activity log if the table exists

@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔄 Followup to Task Migration Control Panel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    animation: {
+                        'pulse-slow': 'pulse 3s ease-in-out infinite',
+                        'bounce-subtle': 'bounce 2s ease-in-out infinite',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gradient-to-br from-blue-50 via-white to-purple-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="text-center mb-12">
+            <h1 class="text-4xl font-bold text-gray-800 mb-4">
+                🔄 Followup to Task Migration
+            </h1>
+            <p class="text-xl text-gray-600 mb-6">
+                Transform your business from reactive followups to intelligent task management
+            </p>
+            <div class="bg-gradient-to-r from-blue-100 to-purple-100 rounded-lg p-6 mx-auto max-w-4xl">
+                <h2 class="text-2xl font-semibold text-gray-700 mb-3">🎯 Migration Benefits</h2>
+                <div class="grid md:grid-cols-3 gap-4 text-left">
+                    <div class="bg-white rounded-lg p-4 shadow-sm">
+                        <div class="text-2xl mb-2">💰</div>
+                        <h3 class="font-semibold text-gray-700">Revenue Protection</h3>
+                        <p class="text-sm text-gray-600">Track potential revenue impact of every task</p>
+                    </div>
+                    <div class="bg-white rounded-lg p-4 shadow-sm">
+                        <div class="text-2xl mb-2">🤖</div>
+                        <h3 class="font-semibold text-gray-700">AI Automation</h3>
+                        <p class="text-sm text-gray-600">Intelligent task generation and assignment</p>
+                    </div>
+                    <div class="bg-white rounded-lg p-4 shadow-sm">
+                        <div class="text-2xl mb-2">📈</div>
+                        <h3 class="font-semibold text-gray-700">Performance Tracking</h3>
+                        <p class="text-sm text-gray-600">Complete visibility into team productivity</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Migration Status -->
+        <div class="bg-white rounded-xl shadow-lg p-8 mb-8">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6">📊 Migration Status</h2>
+            <div id="migration-status" class="text-center py-8">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+                <p class="text-gray-600">Loading migration status...</p>
+            </div>
+        </div>
+
+        <!-- Migration Options -->
+        <div class="grid md:grid-cols-3 gap-6 mb-8">
+            <!-- Full Migration -->
+            <div class="bg-white rounded-xl shadow-lg p-6">
+                <div class="text-center mb-4">
+                    <div class="text-4xl mb-3">🔄</div>
+                    <h3 class="text-xl font-bold text-gray-800">Full Migration</h3>
+                    <p class="text-gray-600 text-sm">Convert all existing followups to intelligent tasks</p>
+                </div>
+                <button onclick="runMigration('full_migration')" 
+                        class="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg transition duration-200">
+                    Start Full Migration
+                </button>
+            </div>
+
+            <!-- Enhanced Tasks -->
+            <div class="bg-white rounded-xl shadow-lg p-6">
+                <div class="text-center mb-4">
+                    <div class="text-4xl mb-3">🤖</div>
+                    <h3 class="text-xl font-bold text-gray-800">Enhanced Tasks</h3>
+                    <p class="text-gray-600 text-sm">Generate AI-powered tasks from current business data</p>
+                </div>
+                <button onclick="runMigration('enhanced_tasks')" 
+                        class="w-full bg-purple-500 hover:bg-purple-600 text-white font-semibold py-3 px-4 rounded-lg transition duration-200">
+                    Generate Enhanced Tasks
+                </button>
+            </div>
+
+            <!-- Migration Report -->
+            <div class="bg-white rounded-xl shadow-lg p-6">
+                <div class="text-center mb-4">
+                    <div class="text-4xl mb-3">📋</div>
+                    <h3 class="text-xl font-bold text-gray-800">Migration Report</h3>
+                    <p class="text-gray-600 text-sm">Get comprehensive analysis and recommendations</p>
+                </div>
+                <button onclick="runMigration('migration_report')" 
+                        class="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-3 px-4 rounded-lg transition duration-200">
+                    Generate Report
+                </button>
+            </div>
+        </div>
+
+        <!-- Migration Results -->
+        <div id="migration-results" class="hidden bg-white rounded-xl shadow-lg p-8 mb-8">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6">📊 Migration Results</h2>
+            <div id="results-content"></div>
+        </div>
+
+        <!-- Business Rules Configuration -->
+        <div class="bg-white rounded-xl shadow-lg p-8 mb-8">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6">⚙️ Business Rules Configuration</h2>
+            <div id="business-rules" class="text-center py-8">
+                <p class="text-gray-600">Loading business rules...</p>
+            </div>
+        </div>
+
+        <!-- Next Steps -->
+        <div class="bg-gradient-to-r from-green-100 to-blue-100 rounded-xl p-8 text-center">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">🚀 Next Steps After Migration</h2>
+            <div class="grid md:grid-cols-2 gap-6 text-left">
+                <div class="bg-white rounded-lg p-6 shadow-sm">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-3">📱 Access Your Dashboards</h3>
+                    <p class="text-gray-600 mb-4">Start using your new task-driven workflow</p>
+                    <div class="space-y-2">
+                        <a href="/tasks/dashboard" class="block bg-blue-500 text-white text-center py-2 px-4 rounded-lg hover:bg-blue-600 transition">
+                            Employee Task Dashboard
+                        </a>
+                        <a href="/admin/task-management" class="block bg-purple-500 text-white text-center py-2 px-4 rounded-lg hover:bg-purple-600 transition">
+                            Admin Control Center
+                        </a>
+                    </div>
+                </div>
+                <div class="bg-white rounded-lg p-6 shadow-sm">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-3">🔧 System Configuration</h3>
+                    <p class="text-gray-600 mb-4">Customize your task management system</p>
+                    <div class="space-y-2">
+                        <button onclick="configureNotifications()" class="block w-full bg-yellow-500 text-white text-center py-2 px-4 rounded-lg hover:bg-yellow-600 transition">
+                            Configure Notifications
+                        </button>
+                        <button onclick="setupEscalation()" class="block w-full bg-red-500 text-white text-center py-2 px-4 rounded-lg hover:bg-red-600 transition">
+                            Setup Escalation Rules
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let migrationData = null;
+        
+        // Load migration status on page load
+        window.addEventListener('load', function() {
+            loadMigrationStatus();
+        });
+        
+        async function loadMigrationStatus() {
+            try {
+                const response = await fetch('/api/ai-tasks/migrate-followups');
+                const data = await response.json();
+                
+                migrationData = data;
+                displayMigrationStatus(data);
+                
+                if (data.available_business_rules) {
+                    displayBusinessRules(data.available_business_rules);
+                }
+            } catch (error) {
+                console.error('Failed to load migration status:', error);
+                document.getElementById('migration-status').innerHTML = `
+                    <div class="text-red-600">
+                        <div class="text-2xl mb-2">❌</div>
+                        <p>Failed to load migration status</p>
+                        <p class="text-sm mt-2">${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+        
+        function displayMigrationStatus(data) {
+            const statusElement = document.getElementById('migration-status');
+            
+            if (data.success) {
+                statusElement.innerHTML = `
+                    <div class="grid md:grid-cols-3 gap-6">
+                        <div class="text-center">
+                            <div class="text-3xl text-green-500 mb-2">✅</div>
+                            <h3 class="font-semibold text-gray-700">System Ready</h3>
+                            <p class="text-sm text-gray-600">Migration system is operational</p>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-3xl text-blue-500 mb-2">🤖</div>
+                            <h3 class="font-semibold text-gray-700">AI Powered</h3>
+                            <p class="text-sm text-gray-600">Intelligent task generation enabled</p>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-3xl text-purple-500 mb-2">📊</div>
+                            <h3 class="font-semibold text-gray-700">Analytics Ready</h3>
+                            <p class="text-sm text-gray-600">Performance tracking available</p>
+                        </div>
+                    </div>
+                    <div class="mt-6 p-4 bg-gray-50 rounded-lg">
+                        <h4 class="font-semibold text-gray-700 mb-2">📈 Current Summary</h4>
+                        <pre class="text-sm text-gray-600 whitespace-pre-wrap">${data.summary || 'Summary loading...'}</pre>
+                    </div>
+                `;
+            } else {
+                statusElement.innerHTML = `
+                    <div class="text-red-600">
+                        <div class="text-2xl mb-2">❌</div>
+                        <p>Migration system error</p>
+                        <p class="text-sm mt-2">${data.error}</p>
+                    </div>
+                `;
+            }
+        }
+        
+        function displayBusinessRules(rules) {
+            const rulesElement = document.getElementById('business-rules');
+            
+            rulesElement.innerHTML = `
+                <div class="text-left">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-4">Available Business Rules</h3>
+                    <div class="grid md:grid-cols-2 gap-4">
+                        ${rules.map(rule => `
+                            <div class="border border-gray-200 rounded-lg p-4">
+                                <div class="flex items-center justify-between mb-2">
+                                    <h4 class="font-semibold text-gray-700">${rule.name}</h4>
+                                    <span class="px-2 py-1 text-xs rounded-full ${rule.enabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}">
+                                        ${rule.enabled ? 'Enabled' : 'Disabled'}
+                                    </span>
+                                </div>
+                                <p class="text-sm text-gray-600 mb-2">${rule.description}</p>
+                                <span class="inline-block px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
+                                    Priority: ${rule.priority}
+                                </span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+        
+        async function runMigration(type) {
+            const resultsElement = document.getElementById('migration-results');
+            const resultsContent = document.getElementById('results-content');
+            
+            // Show loading state
+            resultsElement.classList.remove('hidden');
+            resultsContent.innerHTML = `
+                <div class="text-center py-8">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+                    <p class="text-gray-600">Running ${type.replace('_', ' ')}...</p>
+                </div>
+            `;
+            
+            try {
+                const response = await fetch('/api/ai-tasks/migrate-followups', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ type })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayMigrationResults(data, type);
+                } else {
+                    resultsContent.innerHTML = `
+                        <div class="text-red-600 text-center py-8">
+                            <div class="text-2xl mb-2">❌</div>
+                            <p class="font-semibold">Migration Failed</p>
+                            <p class="text-sm mt-2">${data.error}</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Migration failed:', error);
+                resultsContent.innerHTML = `
+                    <div class="text-red-600 text-center py-8">
+                        <div class="text-2xl mb-2">❌</div>
+                        <p class="font-semibold">Migration Error</p>
+                        <p class="text-sm mt-2">${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+        
+        function displayMigrationResults(data, type) {
+            const resultsContent = document.getElementById('results-content');
+            
+            if (type === 'migration_report') {
+                resultsContent.innerHTML = `
+                    <div class="space-y-6">
+                        <div class="text-center">
+                            <div class="text-4xl text-green-500 mb-2">📋</div>
+                            <h3 class="text-xl font-bold text-gray-800">Migration Report Generated</h3>
+                        </div>
+                        <div class="bg-gray-50 rounded-lg p-6">
+                            <pre class="text-sm text-gray-700 whitespace-pre-wrap overflow-x-auto">${data.report}</pre>
+                        </div>
+                    </div>
+                `;
+            } else {
+                const result = data.result;
+                resultsContent.innerHTML = `
+                    <div class="space-y-6">
+                        <div class="text-center">
+                            <div class="text-4xl text-green-500 mb-2">✅</div>
+                            <h3 class="text-xl font-bold text-gray-800">${data.message}</h3>
+                        </div>
+                        
+                        <div class="grid md:grid-cols-4 gap-4">
+                            <div class="bg-blue-50 rounded-lg p-4 text-center">
+                                <div class="text-2xl font-bold text-blue-600">${result.tasksGenerated || result.tasksCreated || 0}</div>
+                                <div class="text-sm text-blue-600">Tasks Created</div>
+                            </div>
+                            <div class="bg-green-50 rounded-lg p-4 text-center">
+                                <div class="text-2xl font-bold text-green-600">₹${(result.totalEstimatedValue || 0).toLocaleString()}</div>
+                                <div class="text-sm text-green-600">Revenue Impact</div>
+                            </div>
+                            <div class="bg-red-50 rounded-lg p-4 text-center">
+                                <div class="text-2xl font-bold text-red-600">${result.criticalTasks || 0}</div>
+                                <div class="text-sm text-red-600">Critical Tasks</div>
+                            </div>
+                            <div class="bg-purple-50 rounded-lg p-4 text-center">
+                                <div class="text-2xl font-bold text-purple-600">${result.followupsAnalyzed || result.quotationTasks || 0}</div>
+                                <div class="text-sm text-purple-600">Items Analyzed</div>
+                            </div>
+                        </div>
+                        
+                        ${result.businessInsights && result.businessInsights.length > 0 ? `
+                            <div class="bg-yellow-50 rounded-lg p-6">
+                                <h4 class="font-semibold text-gray-700 mb-3">🔍 Business Insights</h4>
+                                <ul class="space-y-2">
+                                    ${result.businessInsights.map(insight => `
+                                        <li class="text-sm text-gray-700 flex items-start">
+                                            <span class="text-yellow-500 mr-2">•</span>
+                                            ${insight}
+                                        </li>
+                                    `).join('')}
+                                </ul>
+                            </div>
+                        ` : ''}
+                        
+                        ${result.newTasks && result.newTasks.length > 0 ? `
+                            <div class="bg-blue-50 rounded-lg p-6">
+                                <h4 class="font-semibold text-gray-700 mb-3">📋 Sample Generated Tasks</h4>
+                                <div class="space-y-3">
+                                    ${result.newTasks.slice(0, 3).map(task => `
+                                        <div class="bg-white rounded-lg p-4 border border-blue-200">
+                                            <div class="flex items-center justify-between mb-2">
+                                                <h5 class="font-semibold text-gray-800">${task.title}</h5>
+                                                <span class="px-2 py-1 text-xs rounded-full ${getPriorityColor(task.priority)}">
+                                                    ${task.priority.toUpperCase()}
+                                                </span>
+                                            </div>
+                                            <p class="text-sm text-gray-600 mb-2">${task.description}</p>
+                                            <div class="text-xs text-gray-500">
+                                                Assigned to: ${task.assigned_to} | Value: ₹${task.estimated_value.toLocaleString()}
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }
+        }
+        
+        function getPriorityColor(priority) {
+            switch (priority) {
+                case 'urgent': return 'bg-red-100 text-red-800';
+                case 'high': return 'bg-orange-100 text-orange-800';
+                case 'medium': return 'bg-yellow-100 text-yellow-800';
+                case 'low': return 'bg-green-100 text-green-800';
+                default: return 'bg-gray-100 text-gray-800';
+            }
+        }
+        
+        function configureNotifications() {
+            alert('🔔 Notification configuration feature coming soon! Your intelligent task system will automatically handle notifications.');
+        }
+        
+        function setupEscalation() {
+            alert('⚡ Escalation rules are already built into the AI task system! Overdue tasks automatically escalate to management.');
+        }
+    </script>
+</body>
+</html> 

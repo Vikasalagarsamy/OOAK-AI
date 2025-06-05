@@ -38,7 +38,7 @@ const menuItems = [
   },
   {
     title: "Quotation",
-    href: "/sales/quotation",
+    href: "/sales/quotations",
     icon: <FileText className="h-4 w-4" />,
   },
   {

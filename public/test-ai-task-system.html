@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🤖 AI Task Management System - Live Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.15);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #4f46e5, #7c3aed);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            font-weight: 800;
+        }
+
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 20px;
+            padding: 30px;
+        }
+
+        .card {
+            background: #f8fafc;
+            border-radius: 15px;
+            padding: 25px;
+            border: 2px solid #e2e8f0;
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px rgba(0,0,0,0.1);
+            border-color: #4f46e5;
+        }
+
+        .card h3 {
+            color: #1e293b;
+            margin-bottom: 15px;
+            font-size: 1.3rem;
+            font-weight: 700;
+        }
+
+        .demo-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #4f46e5, #7c3aed);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(79, 70, 229, 0.3);
+        }
+
+        .btn.secondary {
+            background: linear-gradient(135deg, #10b981, #059669);
+        }
+
+        .btn.warning {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+        }
+
+        .results {
+            background: #1e293b;
+            color: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin: 20px 30px;
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #4f46e5;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .status {
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin: 5px 0;
+        }
+
+        .status.success {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .status.warning {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .status.error {
+            background: #fecaca;
+            color: #991b1b;
+        }
+
+        .task-item {
+            background: #f1f5f9;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 10px 0;
+            border-left: 4px solid #4f46e5;
+        }
+
+        .task-priority {
+            font-weight: bold;
+            text-transform: uppercase;
+            font-size: 0.8rem;
+        }
+
+        .priority-urgent { color: #dc2626; }
+        .priority-high { color: #ea580c; }
+        .priority-medium { color: #ca8a04; }
+        .priority-low { color: #16a34a; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 AI Task Management System</h1>
+            <p>Automated Task Creation • Smart Assignments • Revenue Protection</p>
+        </div>
+
+        <div class="dashboard">
+            <div class="card">
+                <h3>🎯 Auto-Generate Tasks</h3>
+                <p>AI analyzes business data and automatically creates intelligent tasks</p>
+                <div class="demo-buttons">
+                    <button class="btn" onclick="generateTasks()">Generate Tasks</button>
+                    <button class="btn secondary" onclick="getTaskPerformance()">View Performance</button>
+                </div>
+                <div id="task-status"></div>
+            </div>
+
+            <div class="card">
+                <h3>📊 Business Intelligence</h3>
+                <p>Enhanced AI chat with task management integration</p>
+                <div class="demo-buttons">
+                    <button class="btn" onclick="askAI('What tasks do I need to complete today?')">Today's Tasks</button>
+                    <button class="btn secondary" onclick="askAI('Generate tasks for quotation follow-ups')">Quotation Tasks</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>⚡ Task Updates</h3>
+                <p>Update task status and track completion</p>
+                <div class="demo-buttons">
+                    <button class="btn warning" onclick="getEmployeeTasks()">My Tasks</button>
+                    <button class="btn secondary" onclick="testTaskUpdate()">Update Task</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="results" id="results">
+🚀 AI Task Management System Ready!
+
+Features Available:
+✅ Automated task creation based on business rules
+✅ Smart team member assignment
+✅ Priority calculation and scheduling  
+✅ Revenue impact tracking
+✅ Intelligent reminders and notifications
+✅ Performance analytics and insights
+
+Click any button above to test the system...
+        </div>
+    </div>
+
+    <script>
+        // Dynamically get the current host and port
+        const API_BASE = `${window.location.protocol}//${window.location.host}/api`;
+        
+        function log(message, type = 'info') {
+            const results = document.getElementById('results');
+            const timestamp = new Date().toLocaleTimeString();
+            const icon = type === 'success' ? '✅' : type === 'error' ? '❌' : type === 'warning' ? '⚠️' : 'ℹ️';
+            
+            results.textContent += `\n[${timestamp}] ${icon} ${message}`;
+            results.scrollTop = results.scrollHeight;
+        }
+
+        function showLoading(element) {
+            element.innerHTML = '<div class="loading"></div> Processing...';
+        }
+
+        async function generateTasks() {
+            const statusEl = document.getElementById('task-status');
+            showLoading(statusEl);
+            
+            log('🤖 Starting AI task generation...', 'info');
+            
+            try {
+                const response = await fetch(`${API_BASE}/ai-tasks/generate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    log(`🎯 SUCCESS: Generated ${data.tasksCreated} intelligent tasks`, 'success');
+                    
+                    if (data.tasks && data.tasks.length > 0) {
+                        log('📋 Generated Tasks:', 'info');
+                        data.tasks.forEach(task => {
+                            log(`  • ${task.title} (${task.priority}) - Due: ${new Date(task.due_date).toLocaleDateString()}`, 'info');
+                            log(`    📈 Impact: ${task.business_impact} | 🤖 Reasoning: ${task.ai_reasoning}`, 'info');
+                        });
+                    }
+                    
+                    statusEl.innerHTML = `<div class="status success">✅ ${data.tasksCreated} tasks created</div>`;
+                } else {
+                    log(`❌ Task generation failed: ${data.error}`, 'error');
+                    statusEl.innerHTML = `<div class="status error">❌ Generation failed</div>`;
+                }
+            } catch (error) {
+                log(`❌ Network error: ${error.message}`, 'error');
+                statusEl.innerHTML = `<div class="status error">❌ Network error</div>`;
+            }
+        }
+
+        async function getTaskPerformance() {
+            log('📊 Fetching task performance analytics...', 'info');
+            
+            try {
+                const response = await fetch(`${API_BASE}/ai-tasks/generate`);
+                const data = await response.json();
+                
+                if (data.success && data.performance_analytics) {
+                    log('📈 TASK PERFORMANCE ANALYTICS:', 'success');
+                    data.performance_analytics.forEach(perf => {
+                        log(`  👤 ${perf.employee_name}:`, 'info');
+                        log(`     📝 Total Tasks: ${perf.total_tasks}`, 'info');
+                        log(`     ✅ Completed: ${perf.completed_tasks} (${(perf.completion_rate * 100).toFixed(1)}%)`, 'info');
+                        log(`     ⏰ Overdue: ${perf.overdue_tasks}`, 'info');
+                        log(`     💰 Revenue Impact: ₹${perf.revenue_impact.toLocaleString()}`, 'info');
+                    });
+                } else {
+                    log('📊 No performance data available yet', 'warning');
+                }
+            } catch (error) {
+                log(`❌ Performance fetch error: ${error.message}`, 'error');
+            }
+        }
+
+        async function askAI(message) {
+            log(`🤖 Asking AI: "${message}"`, 'info');
+            
+            try {
+                const response = await fetch(`${API_BASE}/ai-chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message })
+                });
+                
+                const data = await response.json();
+                
+                if (data.message) {
+                    log('🤖 AI RESPONSE:', 'success');
+                    log(data.message, 'info');
+                    
+                    if (data.taskCreation && data.taskCreation.tasksCreated > 0) {
+                        log(`🎯 BONUS: AI automatically created ${data.taskCreation.tasksCreated} new tasks!`, 'success');
+                    }
+                    
+                    if (data.businessData?.taskManagement) {
+                        const tm = data.businessData.taskManagement;
+                        log(`📊 CURRENT TASK STATUS:`, 'info');
+                        log(`   Active: ${tm.totalActiveTasks} | Completed: ${tm.completedTasks} | Overdue: ${tm.overdueTasks}`, 'info');
+                        log(`   Completion Rate: ${(tm.taskCompletionRate * 100).toFixed(1)}%`, 'info');
+                    }
+                } else {
+                    log(`❌ AI chat error: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                log(`❌ AI chat network error: ${error.message}`, 'error');
+            }
+        }
+
+        async function getEmployeeTasks() {
+            log('📋 Fetching employee tasks (simulated for Employee ID 1)...', 'info');
+            
+            try {
+                const response = await fetch(`${API_BASE}/ai-tasks/generate?employeeId=1`);
+                const data = await response.json();
+                
+                if (data.success && data.tasks) {
+                    log(`📝 TASKS FOR EMPLOYEE:`, 'success');
+                    
+                    if (data.tasks.length === 0) {
+                        log('   No tasks assigned yet', 'warning');
+                        log('   💡 Try generating tasks first!', 'info');
+                    } else {
+                        data.tasks.forEach(task => {
+                            const priorityClass = `priority-${task.priority}`;
+                            log(`   🎯 ${task.title}`, 'info');
+                            log(`      Priority: ${task.priority.toUpperCase()} | Status: ${task.status}`, 'info');
+                            log(`      Due: ${new Date(task.due_date).toLocaleDateString()}`, 'info');
+                            log(`      Client: ${task.client_name || 'N/A'} | Value: ₹${(task.estimated_value || 0).toLocaleString()}`, 'info');
+                        });
+                    }
+                } else {
+                    log('📋 No employee tasks found', 'warning');
+                }
+            } catch (error) {
+                log(`❌ Employee tasks error: ${error.message}`, 'error');
+            }
+        }
+
+        async function testTaskUpdate() {
+            log('🔄 Testing task update functionality...', 'info');
+            log('💡 This would normally update a specific task status', 'warning');
+            log('📝 Example: Update task ABC123 to "completed" with notes', 'info');
+            
+            // Simulated task update
+            const fakeTaskId = 'demo-task-' + Date.now();
+            log(`🎯 Simulating update for task: ${fakeTaskId}`, 'info');
+            log('✅ Task marked as completed!', 'success');
+            log('📊 Performance metrics updated', 'info');
+            log('🔔 Team notifications sent', 'info');
+        }
+
+        // Auto-test on page load
+        setTimeout(() => {
+            log('🎉 Ready to test AI Task Management System!', 'success');
+            log(`🔗 API Base URL: ${API_BASE}`, 'info');
+            log('💡 Click "Generate Tasks" to create intelligent tasks automatically', 'info');
+            log('🤖 Ask AI questions about your tasks and business', 'info');
+            
+            // Test API connectivity
+            testAPIConnection();
+        }, 1000);
+        
+        async function testAPIConnection() {
+            try {
+                log('🔍 Testing API connection...', 'info');
+                const response = await fetch(`${API_BASE}/ai-chat/test`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    log('✅ API connection successful!', 'success');
+                    log(`🔧 LLM Status: ${data.results?.environment?.status || 'Unknown'}`, 'info');
+                } else {
+                    log('⚠️ API connected but with issues', 'warning');
+                }
+            } catch (error) {
+                log(`❌ API connection failed: ${error.message}`, 'error');
+                log('💡 Make sure the Next.js server is running', 'warning');
+            }
+        }
+    </script>
+</body>
+</html> 

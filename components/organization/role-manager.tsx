@@ -6,16 +6,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Checkbox } from "@/components/ui/checkbox"
+import { Switch } from "@/components/ui/switch"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { AlertCircle, Plus, RefreshCw, Trash2 } from "lucide-react"
+import { AlertCircle, Plus, RefreshCw, Trash2, Shield, Users, ChevronDown, ChevronRight } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { cn } from "@/lib/utils"
-import { menuItems } from "@/components/dynamic-menu/menu-items"
-import type { MenuItem } from "@/types/menu"
+import { Badge } from "@/components/ui/badge"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { extractMenuStructure, type PermissionMenuItem } from "@/lib/menu-extractor"
 
 interface Role {
   id: number
@@ -28,24 +27,17 @@ interface Role {
   }>
 }
 
-// Helper to flatten menuItems into a structure suitable for permissions UI
-function flattenMenu(items: MenuItem[]): MenuItem[] {
-  return items.map((item: MenuItem) => ({
-    ...item,
-    children: item.children ? flattenMenu(item.children) : [],
-  }))
-}
-
-const dynamicMenuStructure = flattenMenu(menuItems)
+// Get the comprehensive menu structure from our current navigation
+const comprehensiveMenuStructure = extractMenuStructure()
 
 export function RoleManager() {
   const [roles, setRoles] = useState<Role[]>([])
   const [selectedRoleId, setSelectedRoleId] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [refreshing, setRefreshing] = useState(false)
   const [newRole, setNewRole] = useState({ name: "", description: "" })
   const [isAddingRole, setIsAddingRole] = useState(false)
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['dashboard', 'organization', 'sales']))
 
   const supabase = createClient()
 
@@ -85,7 +77,7 @@ export function RoleManager() {
   const initializePermissions = () => {
     const permissions: Record<string, { view: boolean; edit: boolean; delete: boolean }> = {}
     
-    const addPermissions = (items: MenuItem[]) => {
+    const addPermissions = (items: PermissionMenuItem[]) => {
       items.forEach(item => {
         permissions[item.id] = { view: false, edit: false, delete: false }
         if (item.children) {
@@ -94,7 +86,7 @@ export function RoleManager() {
       })
     }
 
-    addPermissions(dynamicMenuStructure)
+    addPermissions(comprehensiveMenuStructure)
     return permissions
   }
 
@@ -111,17 +103,6 @@ export function RoleManager() {
   }, [roles, selectedRoleId])
 
   const selectedRole = roles.find((role) => role.id === selectedRoleId)
-
-  // Handle refresh
-  const handleRefresh = async () => {
-    setRefreshing(true)
-    await loadRoles()
-    setRefreshing(false)
-    toast({
-      title: "Refreshed",
-      description: "Roles have been refreshed",
-    })
-  }
 
   // Handle adding new role
   const handleAddRole = async () => {
@@ -163,18 +144,34 @@ export function RoleManager() {
     }
   }
 
-  // Handle permission change
-  const handlePermissionChange = async (roleId: number, menuId: string, permission: "view" | "edit" | "delete", checked: boolean) => {
+  // Handle section access toggle (grants/revokes full access to section and all children)
+  const handleSectionToggle = async (roleId: number, sectionId: string, hasAccess: boolean) => {
     try {
+      const section = comprehensiveMenuStructure.find(s => s.id === sectionId)
+      if (!section) return
+
       const updatedRoles = roles.map(role => {
         if (role.id === roleId) {
-          const updatedPermissions = {
-            ...role.permissions,
-            [menuId]: {
-              ...role.permissions[menuId],
-              [permission]: checked,
-            },
+          const updatedPermissions = { ...role.permissions }
+          
+          // Update the section itself
+          updatedPermissions[section.id] = {
+            view: hasAccess,
+            edit: hasAccess,
+            delete: hasAccess,
           }
+          
+          // Update all children
+          if (section.children) {
+            section.children.forEach(child => {
+              updatedPermissions[child.id] = {
+                view: hasAccess,
+                edit: hasAccess,
+                delete: hasAccess,
+              }
+            })
+          }
+          
           return { ...role, permissions: updatedPermissions }
         }
         return role
@@ -190,7 +187,7 @@ export function RoleManager() {
       setRoles(updatedRoles)
       toast({
         title: "Success",
-        description: "Permissions updated successfully",
+        description: `${hasAccess ? 'Granted' : 'Revoked'} access to ${section.name}`,
       })
     } catch (error: any) {
       console.error("Error updating permissions:", error)
@@ -202,7 +199,43 @@ export function RoleManager() {
     }
   }
 
-  // Handle role deletion
+  // Handle sub-item access toggle
+  const handleSubItemToggle = async (roleId: number, itemId: string, hasAccess: boolean) => {
+    try {
+      const updatedRoles = roles.map(role => {
+        if (role.id === roleId) {
+          const updatedPermissions = { ...role.permissions }
+          
+          updatedPermissions[itemId] = {
+            view: hasAccess,
+            edit: hasAccess,
+            delete: hasAccess,
+          }
+          
+          return { ...role, permissions: updatedPermissions }
+        }
+        return role
+      })
+
+      const { error } = await supabase
+        .from("roles")
+        .update({ permissions: updatedRoles.find(r => r.id === roleId)?.permissions })
+        .eq("id", roleId)
+
+      if (error) throw error
+
+      setRoles(updatedRoles)
+    } catch (error: any) {
+      console.error("Error updating permissions:", error)
+      toast({
+        title: "Error",
+        description: `Failed to update permissions: ${error.message || "Unknown error"}`,
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Handle delete role
   const handleDeleteRole = async (roleId: number) => {
     try {
       const { error } = await supabase
@@ -213,6 +246,9 @@ export function RoleManager() {
       if (error) throw error
 
       setRoles(roles.filter(role => role.id !== roleId))
+      if (selectedRoleId === roleId) {
+        setSelectedRoleId(roles.length > 1 ? roles.find(r => r.id !== roleId)?.id || null : null)
+      }
       toast({
         title: "Success",
         description: "Role deleted successfully",
@@ -227,267 +263,253 @@ export function RoleManager() {
     }
   }
 
-  // Add new functions for handling select all for each permission type
-  const handleSelectAllPermissions = async (roleId: number, sectionId: number, permission: "view" | "edit" | "delete", checked: boolean) => {
-    if (!selectedRole) return;
+  // Check if section has any access
+  const sectionHasAccess = (role: Role, section: PermissionMenuItem) => {
+    const sectionAccess = role.permissions[section.id]
+    const childrenAccess = section.children?.some(child => 
+      role.permissions[child.id]?.view || role.permissions[child.id]?.edit || role.permissions[child.id]?.delete
+    )
+    return (sectionAccess?.view || sectionAccess?.edit || sectionAccess?.delete) || childrenAccess
+  }
 
-    try {
-      // Create a new permissions object
-      const updatedPermissions = { ...selectedRole.permissions };
-      
-      // Find the current section and its children
-      const currentSection = dynamicMenuStructure.find(section => Number(section.id) === sectionId);
-      if (!currentSection) return;
+  // Check if section has full access
+  const sectionHasFullAccess = (role: Role, section: PermissionMenuItem) => {
+    const sectionAccess = role.permissions[section.id]
+    const allChildrenHaveAccess = section.children?.every(child => 
+      role.permissions[child.id]?.view && role.permissions[child.id]?.edit && role.permissions[child.id]?.delete
+    )
+    return (sectionAccess?.view && sectionAccess?.edit && sectionAccess?.delete) && 
+           (section.children ? allChildrenHaveAccess : true)
+  }
 
-      // Update permissions for the current section
-      updatedPermissions[String(currentSection.id)] = {
-        ...updatedPermissions[String(currentSection.id)],
-        [permission]: checked
-      };
+  // Check if sub-item has access
+  const subItemHasAccess = (role: Role, itemId: string) => {
+    const access = role.permissions[itemId]
+    return access?.view || access?.edit || access?.delete
+  }
 
-      // Update permissions for all children of the current section
-      if (currentSection.children) {
-        currentSection.children.forEach(child => {
-          updatedPermissions[String(child.id)] = {
-            ...updatedPermissions[String(child.id)],
-            [permission]: checked
-          };
-        });
-      }
-
-      // Update the role in the database
-      const { error } = await supabase
-        .from("roles")
-        .update({ permissions: updatedPermissions })
-        .eq("id", roleId);
-
-      if (error) throw error;
-
-      // Update the local state
-      setRoles(roles.map(role => 
-        role.id === roleId 
-          ? { ...role, permissions: updatedPermissions }
-          : role
-      ));
-
-      toast({
-        title: "Success",
-        description: `All ${permission} permissions updated for this section`,
-      });
-    } catch (error: any) {
-      console.error(`Error updating permissions:`, error);
-      toast({
-        title: "Error",
-        description: `Failed to update permissions: ${error.message || "Unknown error"}`,
-        variant: "destructive",
-      });
+  // Toggle section expansion
+  const toggleSection = (sectionId: string) => {
+    const newExpanded = new Set(expandedSections)
+    if (newExpanded.has(sectionId)) {
+      newExpanded.delete(sectionId)
+    } else {
+      newExpanded.add(sectionId)
     }
-  };
+    setExpandedSections(newExpanded)
+  }
 
-  if (error) {
+  if (loading) {
     return (
-      <div className="space-y-6">
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Error</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-        <Button variant="default" onClick={handleRefresh} disabled={refreshing}>
-          <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-          Refresh
-        </Button>
+      <div className="flex items-center justify-center p-12">
+        <RefreshCw className="h-8 w-8 animate-spin mr-3" />
+        <span className="text-lg">Loading roles...</span>
       </div>
     )
   }
 
+  if (error) {
+    return (
+      <Alert variant="destructive" className="max-w-2xl">
+        <AlertCircle className="h-4 w-4" />
+        <AlertTitle>Error Loading Roles</AlertTitle>
+        <AlertDescription>{error}</AlertDescription>
+        <Button onClick={loadRoles} className="mt-3">
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Try Again
+        </Button>
+      </Alert>
+    )
+  }
+
   return (
-    <div className="flex gap-6">
-      {/* Sidebar with roles */}
-      <aside className="w-64 border-r bg-muted/50 p-4 flex flex-col">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">Roles</h2>
-          <Button size="icon" variant="outline" onClick={() => setIsAddingRole(true)}>
-            <Plus className="h-5 w-5" />
-          </Button>
-        </div>
-        <ScrollArea className="flex-1">
-          <ul className="space-y-2">
-            {roles
-              .filter(role => role.name && role.name.trim() !== "")
-              .map((role) => (
-                <li key={role.id}>
-                  <Button
-                    variant={selectedRoleId === role.id ? "default" : "ghost"}
-                    className="w-full justify-start"
+    <div className="flex gap-8">
+      {/* Roles Sidebar */}
+      <div className="w-80">
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-lg">User Roles</CardTitle>
+                <CardDescription>Select a role to manage permissions</CardDescription>
+              </div>
+              <Button size="sm" onClick={() => setIsAddingRole(true)}>
+                <Plus className="h-4 w-4 mr-1" />
+                Add Role
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <ScrollArea className="h-96">
+              <div className="p-4 space-y-2">
+                {roles.map((role) => (
+                  <div
+                    key={role.id}
+                    className={`p-3 rounded-lg border cursor-pointer transition-colors ${
+                      selectedRoleId === role.id
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'hover:bg-muted border-border'
+                    }`}
                     onClick={() => setSelectedRoleId(role.id)}
                   >
-                    {role.name}
-                  </Button>
-                </li>
-              ))}
-          </ul>
-        </ScrollArea>
-      </aside>
-      {/* Main content: permissions for selected role */}
-      <main className="flex-1">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle>{selectedRole?.name || "Select a Role"}</CardTitle>
-              <CardDescription>{selectedRole?.description}</CardDescription>
-            </div>
-            {selectedRole && (
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => handleDeleteRole(selectedRole.id)}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            )}
-          </CardHeader>
-          <CardContent>
-            {selectedRole ? (
-              <div className="space-y-6">
-                {dynamicMenuStructure.map((section: MenuItem) => (
-                  <div key={section.id} className="mb-6">
-                    <div className="flex items-center gap-2 mb-2">
-                      {/* You can add icons here if you have them mapped */}
-                      <span className="font-semibold text-base">{section.name}</span>
+                    <div className="flex items-center gap-2">
+                      <Shield className="h-4 w-4" />
+                      <div className="flex-1">
+                        <p className="font-medium">{role.name}</p>
+                        {role.description && (
+                          <p className={`text-sm ${selectedRoleId === role.id ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}>
+                            {role.description}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead></TableHead>
-                          <TableHead className="w-[100px]">
-                            <div className="flex items-center justify-center gap-2 select-all-chk" style={{ float:'left', marginLeft: '0px' }}>
-                              <Checkbox
-                                checked={selectedRole && 
-                                  selectedRole.permissions[String(section.id)]?.view && 
-                                  section.children?.every(child => selectedRole.permissions[String(child.id)]?.view)}
-                                onCheckedChange={(checked) => handleSelectAllPermissions(selectedRole.id, Number(section.id), "view", checked === true)}
-                              />
-                              <span>View</span>
-                            </div>
-                          </TableHead>
-                          <TableHead className="w-[100px]">
-                            <div className="flex items-center justify-center gap-2 select-all-chk" style={{ float:'left', marginLeft: '0px' }}>
-                              <Checkbox
-                                checked={selectedRole && 
-                                  selectedRole.permissions[String(section.id)]?.edit && 
-                                  section.children?.every(child => selectedRole.permissions[String(child.id)]?.edit)}
-                                onCheckedChange={(checked) => handleSelectAllPermissions(selectedRole.id, Number(section.id), "edit", checked === true)}
-                              />
-                              <span>Edit</span>
-                            </div>
-                          </TableHead>
-                          <TableHead className="w-[100px]">
-                            <div className="flex items-center justify-center gap-2 select-all-chk" style={{ float:'left', marginLeft: '0px' }}>
-                              <Checkbox
-                                checked={selectedRole && 
-                                  selectedRole.permissions[String(section.id)]?.delete && 
-                                  section.children?.every(child => selectedRole.permissions[String(child.id)]?.delete)}
-                                onCheckedChange={(checked) => handleSelectAllPermissions(selectedRole.id, Number(section.id), "delete", checked === true)}
-                              />
-                              <span>Delete</span>
-                            </div>
-                          </TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        <TableRow key={section.id}>
-                          <TableCell className="font-medium">{section.name}</TableCell>
-                          <TableCell>
-                            <Checkbox
-                              checked={selectedRole.permissions[String(section.id)]?.view}
-                              onCheckedChange={(checked) =>
-                                handlePermissionChange(selectedRole.id, String(section.id), "view", checked === true)
-                              }
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Checkbox
-                              checked={selectedRole.permissions[String(section.id)]?.edit}
-                              onCheckedChange={(checked) =>
-                                handlePermissionChange(selectedRole.id, String(section.id), "edit", checked === true)
-                              }
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Checkbox
-                              checked={selectedRole.permissions[String(section.id)]?.delete}
-                              onCheckedChange={(checked) =>
-                                handlePermissionChange(selectedRole.id, String(section.id), "delete", checked === true)
-                              }
-                            />
-                          </TableCell>
-                        </TableRow>
-                        {section.children?.map((child: MenuItem) => (
-                          <TableRow key={child.id}>
-                            <TableCell className="pl-8">{child.name}</TableCell>
-                            <TableCell>
-                              <Checkbox
-                                checked={selectedRole.permissions[String(child.id)]?.view}
-                                onCheckedChange={(checked) =>
-                                  handlePermissionChange(selectedRole.id, String(child.id), "view", checked === true)
-                                }
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <Checkbox
-                                checked={selectedRole.permissions[String(child.id)]?.edit}
-                                onCheckedChange={(checked) =>
-                                  handlePermissionChange(selectedRole.id, String(child.id), "edit", checked === true)
-                                }
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <Checkbox
-                                checked={selectedRole.permissions[String(child.id)]?.delete}
-                                onCheckedChange={(checked) =>
-                                  handlePermissionChange(selectedRole.id, String(child.id), "delete", checked === true)
-                                }
-                              />
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
                   </div>
                 ))}
               </div>
-            ) : (
-              <div className="text-muted-foreground">Select a role to view and edit permissions.</div>
-            )}
+            </ScrollArea>
           </CardContent>
         </Card>
-      </main>
-      {/* Add Role Dialog (unchanged) */}
+      </div>
+
+      {/* Permissions Panel */}
+      <div className="flex-1">
+        {selectedRole ? (
+          <Card>
+            <CardHeader className="pb-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-xl">{selectedRole.name} Permissions</CardTitle>
+                  <CardDescription>
+                    Manage what this role can access in the application
+                  </CardDescription>
+                </div>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => handleDeleteRole(selectedRole.id)}
+                >
+                  <Trash2 className="h-4 w-4 mr-1" />
+                  Delete Role
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {comprehensiveMenuStructure.map((section) => {
+                  const hasAccess = sectionHasAccess(selectedRole, section)
+                  const hasFullAccess = sectionHasFullAccess(selectedRole, section)
+                  const isExpanded = expandedSections.has(section.id)
+
+                  return (
+                    <div key={section.id} className="border rounded-lg p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => toggleSection(section.id)}
+                            className="h-6 w-6 p-0"
+                          >
+                            {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                          </Button>
+                          <div>
+                            <h3 className="font-semibold text-base">{section.name}</h3>
+                            <p className="text-sm text-muted-foreground">{section.description}</p>
+                          </div>
+                          {section.children && (
+                            <Badge variant="secondary" className="ml-2">
+                              {section.children.length} pages
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {hasAccess && !hasFullAccess && (
+                            <Badge variant="outline" className="text-orange-600 border-orange-200">
+                              Partial Access
+                            </Badge>
+                          )}
+                          <div className="flex items-center gap-2">
+                            <Label htmlFor={`section-${section.id}`} className="text-sm font-medium">
+                              Full Access
+                            </Label>
+                            <Switch
+                              id={`section-${section.id}`}
+                              checked={hasFullAccess}
+                              onCheckedChange={(checked) => 
+                                handleSectionToggle(selectedRole.id, section.id, checked)
+                              }
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {isExpanded && section.children && (
+                        <div className="mt-4 ml-6 space-y-2 border-l-2 border-muted pl-4">
+                          {section.children.map((child) => {
+                            const childHasAccess = subItemHasAccess(selectedRole, child.id)
+                            
+                            return (
+                              <div key={child.id} className="flex items-center justify-between py-2">
+                                <div>
+                                  <p className="font-medium text-sm">{child.name}</p>
+                                  <p className="text-xs text-muted-foreground">{child.description}</p>
+                                </div>
+                                <Switch
+                                  checked={childHasAccess}
+                                  onCheckedChange={(checked) => 
+                                    handleSubItemToggle(selectedRole.id, child.id, checked)
+                                  }
+                                />
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardContent className="flex items-center justify-center py-12">
+              <div className="text-center">
+                <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                <h3 className="text-lg font-medium mb-2">Select a Role</h3>
+                <p className="text-muted-foreground">Choose a role from the sidebar to manage its permissions</p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {/* Add Role Dialog */}
       <Dialog open={isAddingRole} onOpenChange={setIsAddingRole}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add New Role</DialogTitle>
+            <DialogTitle>Create New Role</DialogTitle>
             <DialogDescription>
-              Create a new role with a name and description
+              Add a new user role and configure its permissions
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
+          <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Role Name</Label>
+              <Label htmlFor="role-name">Role Name</Label>
               <Input
-                id="name"
+                id="role-name"
                 value={newRole.name}
                 onChange={(e) => setNewRole({ ...newRole, name: e.target.value })}
-                placeholder="Enter role name"
+                placeholder="e.g., Sales Manager, Accountant, etc."
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
+              <Label htmlFor="role-description">Description</Label>
               <Input
-                id="description"
+                id="role-description"
                 value={newRole.description}
                 onChange={(e) => setNewRole({ ...newRole, description: e.target.value })}
-                placeholder="Enter role description"
+                placeholder="Brief description of this role's purpose"
               />
             </div>
           </div>
@@ -495,7 +517,7 @@ export function RoleManager() {
             <Button variant="outline" onClick={() => setIsAddingRole(false)}>
               Cancel
             </Button>
-            <Button onClick={handleAddRole}>Add Role</Button>
+            <Button onClick={handleAddRole}>Create Role</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

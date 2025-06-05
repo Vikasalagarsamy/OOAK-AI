@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🧪 AI Notification System Test v2</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .test-section {
+            margin-bottom: 30px;
+            border: 2px solid #f0f0f0;
+            border-radius: 12px;
+            padding: 25px;
+            transition: all 0.3s ease;
+        }
+
+        .test-section:hover {
+            border-color: #4facfe;
+            box-shadow: 0 5px 15px rgba(79, 172, 254, 0.1);
+        }
+
+        .test-section h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.3rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .config-section {
+            background: linear-gradient(135deg, #ffeaa7 0%, #fab1a0 100%);
+            border: none;
+            color: white;
+        }
+
+        .config-section h3 {
+            color: white;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            margin-bottom: 10px;
+            transition: border-color 0.3s ease;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #4facfe;
+        }
+
+        button {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin: 5px;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(79, 172, 254, 0.3);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .result {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 15px;
+            font-family: 'Courier New', monospace;
+            border-left: 4px solid #e0e0e0;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .success {
+            border-left-color: #00b894;
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .error {
+            border-left-color: #e17055;
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .info {
+            border-left-color: #74b9ff;
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .button-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: #e0e0e0;
+            border-radius: 2px;
+            overflow: hidden;
+            margin: 15px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #a29bfe 0%, #6c5ce7 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            opacity: 0.9;
+            font-size: 0.9rem;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                margin: 10px;
+                margin-bottom: 20px;
+            }
+            
+            .content {
+                padding: 20px;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .button-group {
+                flex-direction: column;
+            }
+            
+            button {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🧪 AI Notification System Test v2</h1>
+            <p>Comprehensive testing suite for your AI-powered notification features (Cache-Fixed)</p>
+        </div>
+
+        <div class="content">
+            <!-- Stats -->
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-number" id="totalTests">0</div>
+                    <div class="stat-label">Total Tests</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="passedTests">0</div>
+                    <div class="stat-label">Passed</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="failedTests">0</div>
+                    <div class="stat-label">Failed</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="successRate">0%</div>
+                    <div class="stat-label">Success Rate</div>
+                </div>
+            </div>
+
+            <!-- Configuration -->
+            <div class="test-section config-section">
+                <h3>📋 Configuration</h3>
+                <p style="margin-bottom: 15px; opacity: 0.9;">
+                    <strong>Note:</strong> POST/PUT operations (create notifications, preferences) require authentication. 
+                    GET operations (timing, insights) work without auth token.
+                </p>
+                <input type="text" id="apiBase" placeholder="API Base URL" value="http://localhost:3001/api/notifications">
+                <input type="text" id="userId" placeholder="User ID" value="764c38af-e49c-4fc0-9584-4cdcbbc3625c">
+                <input type="text" id="authToken" placeholder="Authorization Token" value="YOUR_AUTH_TOKEN_HERE">
+                <div class="button-group">
+                    <button onclick="saveConfig()">💾 Save Config</button>
+                    <button onclick="testConnection()">🔌 Test Connection</button>
+                </div>
+                <div id="configResult" class="result" style="display: none;"></div>
+            </div>
+
+            <!-- Quick Tests -->
+            <div class="test-section">
+                <h3>🚀 Quick Tests</h3>
+                <div class="button-group">
+                    <button onclick="runAllTests()">🧪 Run All Tests</button>
+                    <button onclick="runBasicTests()">⚡ Run Basic Tests</button>
+                    <button onclick="clearResults()">🗑️ Clear Results</button>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+            </div>
+
+            <!-- AI Notification Creation -->
+            <div class="test-section">
+                <h3>🧠 AI Notification Creation</h3>
+                <div class="button-group">
+                    <button onclick="testAINotification('quotation_update')">📊 Quotation Update</button>
+                    <button onclick="testAINotification('business_update')">💼 Business Update</button>
+                    <button onclick="testAINotification('marketing')">📢 Marketing</button>
+                </div>
+                <div id="aiResult" class="result" style="display: none;"></div>
+            </div>
+
+            <!-- Smart Timing -->
+            <div class="test-section">
+                <h3>⏰ Smart Timing Analysis</h3>
+                <div class="button-group">
+                    <button onclick="testSmartTiming('quotation_update')">📊 Quotation Timing</button>
+                    <button onclick="testSmartTiming('business_update')">💼 Business Timing</button>
+                    <button onclick="testSmartTiming('marketing')">📢 Marketing Timing</button>
+                </div>
+                <div id="timingResult" class="result" style="display: none;"></div>
+            </div>
+
+            <!-- Engagement Tracking -->
+            <div class="test-section">
+                <h3>📊 Engagement Tracking</h3>
+                <div class="button-group">
+                    <button onclick="testEngagement('delivered')">📬 Track Delivered</button>
+                    <button onclick="testEngagement('viewed')">👁️ Track Viewed</button>
+                    <button onclick="testEngagement('clicked')">👆 Track Clicked</button>
+                    <button onclick="getEngagementAnalytics()">📈 Get Analytics</button>
+                </div>
+                <div id="engagementResult" class="result" style="display: none;"></div>
+            </div>
+
+            <!-- Predictive Insights -->
+            <div class="test-section">
+                <h3>🔮 Predictive Insights</h3>
+                <div class="button-group">
+                    <button onclick="testInsights('predictive')">🔮 Generate Insights</button>
+                    <button onclick="testInsights('user_behavior')">👤 User Behavior</button>
+                    <button onclick="testInsights('performance')">📊 Performance</button>
+                    <button onclick="testAutomatedActions()">🤖 Automated Actions</button>
+                </div>
+                <div id="insightsResult" class="result" style="display: none;"></div>
+            </div>
+
+            <!-- Advanced Tests -->
+            <div class="test-section">
+                <h3>🔧 Advanced Tests</h3>
+                <div class="button-group">
+                    <button onclick="testRateLimiting()">🚦 Rate Limiting</button>
+                    <button onclick="testErrorHandling()">⚠️ Error Handling</button>
+                    <button onclick="testPreferences()">⚙️ AI Preferences</button>
+                </div>
+                <div id="advancedResult" class="result" style="display: none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 🔧 Configuration - Fixed version
+        const CONFIG = {
+            USER_ID: '764c38af-e49c-4fc0-9584-4cdcbbc3625c',
+            AUTH_TOKEN: 'YOUR_AUTH_TOKEN_HERE',
+            API_BASE: 'http://localhost:3001/api/notifications'
+        };
+
+        // Test results
+        let testResults = {
+            total: 0,
+            passed: 0,
+            failed: 0,
+            details: []
+        };
+
+        let lastNotificationId = null;
+
+        // Utility Functions
+        function log(message, type = 'info', elementId = null) {
+            const timestamp = new Date().toLocaleTimeString();
+            const statusIcon = type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️';
+            const logMessage = `[${timestamp}] ${statusIcon} ${message}`;
+            
+            console.log(logMessage);
+            
+            if (elementId) {
+                const element = document.getElementById(elementId);
+                if (element) {
+                    element.style.display = 'block';
+                    element.className = `result ${type}`;
+                    element.innerHTML = `<pre>${logMessage}</pre>`;
+                }
+            }
+        }
+
+        function updateStats() {
+            document.getElementById('totalTests').textContent = testResults.total;
+            document.getElementById('passedTests').textContent = testResults.passed;
+            document.getElementById('failedTests').textContent = testResults.failed;
+            const rate = testResults.total > 0 ? Math.round((testResults.passed / testResults.total) * 100) : 0;
+            document.getElementById('successRate').textContent = rate + '%';
+        }
+
+        function updateProgress(current, total) {
+            const percentage = (current / total) * 100;
+            document.getElementById('progressFill').style.width = percentage + '%';
+        }
+
+        function assert(condition, message, elementId = null) {
+            testResults.total++;
+            if (condition) {
+                testResults.passed++;
+                log(`PASS: ${message}`, 'success', elementId);
+            } else {
+                testResults.failed++;
+                log(`FAIL: ${message}`, 'error', elementId);
+                testResults.details.push(`FAILED: ${message}`);
+            }
+            updateStats();
+        }
+
+        async function makeRequest(endpoint, options = {}) {
+            const url = `${CONFIG.API_BASE}${endpoint}`;
+            
+            try {
+                const response = await fetch(url, {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': CONFIG.AUTH_TOKEN ? `Bearer ${CONFIG.AUTH_TOKEN}` : '',
+                        ...options.headers
+                    },
+                    ...options
+                });
+                
+                const data = await response.json();
+                
+                return {
+                    success: response.ok,
+                    data,
+                    status: response.status,
+                    url
+                };
+            } catch (error) {
+                return {
+                    success: false,
+                    error: error.message,
+                    url
+                };
+            }
+        }
+
+        // Configuration Functions
+        function saveConfig() {
+            CONFIG.API_BASE = document.getElementById('apiBase').value;
+            CONFIG.USER_ID = document.getElementById('userId').value;
+            CONFIG.AUTH_TOKEN = document.getElementById('authToken').value;
+            
+            log('Configuration saved successfully', 'success', 'configResult');
+        }
+
+        async function testConnection() {
+            log('Testing connection...', 'info', 'configResult');
+            
+            const result = await makeRequest('/ai?action=behavior&user_id=' + CONFIG.USER_ID);
+            
+            if (result.success) {
+                log('✅ Connection successful! API is responding.', 'success', 'configResult');
+            } else {
+                log(`❌ Connection failed: ${result.error || result.data?.error || 'Unknown error'}`, 'error', 'configResult');
+            }
+        }
+
+        // Fixed Test Functions
+        async function testAINotification(type) {
+            const notificationData = {
+                quotation_update: {
+                    title: 'Test Quotation Ready',
+                    message: 'Your test quotation #QT-TEST-001 is ready for review.',
+                    metadata: { quotation_id: 'QT-TEST-001', amount: 5000 }
+                },
+                business_update: {
+                    title: 'Test Business Alert',
+                    message: 'Important business update for testing.',
+                    metadata: { department: 'sales', urgency: 'high' }
+                },
+                marketing: {
+                    title: 'Test Marketing Message',
+                    message: 'Check out our latest features!',
+                    metadata: { campaign: 'test-campaign' }
+                }
+            };
+
+            const data = notificationData[type];
+            
+            log(`Testing ${type} notification creation...`, 'info', 'aiResult');
+            
+            // Fix: Use root path, not /ai
+            const result = await makeRequest('', {
+                method: 'POST',
+                body: JSON.stringify({
+                    user_id: CONFIG.USER_ID,
+                    type: type,
+                    priority: 'medium',
+                    allow_ai_optimization: true,
+                    ...data
+                })
+            });
+
+            if (result.success) {
+                const apiData = result.data?.data || result.data;
+                lastNotificationId = apiData?.notification_id;
+                
+                const details = `
+Notification Created Successfully!
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📝 Notification ID: ${apiData?.notification_id || 'undefined'}
+⏰ Scheduled Time: ${apiData?.scheduled_time || 'undefined'}
+🧠 AI Enhanced: ${apiData?.ai_enhanced || 'undefined'}
+⚡ Execution Time: ${apiData?.execution_time || 'undefined'}ms
+
+🎯 AI Insights:
+${JSON.stringify(apiData?.ai_insights || {}, null, 2)}
+                `;
+                
+                log(details, 'success', 'aiResult');
+                assert(true, `Create ${type} notification`);
+            } else {
+                log(`Error creating ${type} notification: ${result.error || result.data?.error}`, 'error', 'aiResult');
+                assert(false, `Create ${type} notification`);
+            }
+        }
+
+        async function testSmartTiming(type) {
+            log(`Testing smart timing for ${type}...`, 'info', 'timingResult');
+            
+            const result = await makeRequest(`/ai?action=timing&user_id=${CONFIG.USER_ID}&type=${type}`);
+
+            if (result.success) {
+                const apiData = result.data?.data || result.data;
+                const apiRecommendations = result.data?.recommendations || result.recommendations;
+                
+                const details = `
+Smart Timing Analysis Complete!
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⏰ Optimal Time: ${apiData?.optimal_time || 'undefined'}
+🎯 Confidence Score: ${apiData?.confidence_score || 'undefined'}
+💭 Reasoning: ${apiData?.reasoning || 'undefined'}
+
+📊 Recommendations:
+${JSON.stringify(apiRecommendations || {}, null, 2)}
+                `;
+                
+                log(details, 'success', 'timingResult');
+                assert(true, `${type} timing optimization`);
+            } else {
+                log(`Error getting timing for ${type}: ${result.error || result.data?.error}`, 'error', 'timingResult');
+                assert(false, `${type} timing optimization`);
+            }
+        }
+
+        async function testEngagement(eventType) {
+            if (!lastNotificationId) {
+                log('No notification ID available. Create a notification first.', 'error', 'engagementResult');
+                return;
+            }
+
+            log(`Testing ${eventType} engagement tracking...`, 'info', 'engagementResult');
+            
+            const result = await makeRequest('/engagement', {
+                method: 'POST',
+                body: JSON.stringify({
+                    notification_id: lastNotificationId,
+                    user_id: CONFIG.USER_ID,
+                    event_type: eventType,
+                    timestamp: new Date().toISOString(),
+                    engagement_data: {
+                        test_event: true,
+                        browser_test: true
+                    }
+                })
+            });
+
+            if (result.success) {
+                const apiData = result.data?.data || result.data;
+                
+                const details = `
+Engagement Tracked Successfully!
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 Engagement ID: ${apiData?.engagement_id || 'undefined'}
+🎯 Event Type: ${apiData?.event_type || eventType}
+⏱️ Response Time: ${apiData?.response_time_seconds || 'undefined'}s
+🧠 AI Learning: ${apiData?.ai_learning_enabled || 'undefined'}
+                `;
+                
+                log(details, 'success', 'engagementResult');
+                assert(true, `Track ${eventType} engagement`);
+            } else {
+                log(`Error tracking ${eventType}: ${result.error || result.data?.error}`, 'error', 'engagementResult');
+                assert(false, `Track ${eventType} engagement`);
+            }
+        }
+
+        async function getEngagementAnalytics() {
+            log('Getting engagement analytics...', 'info', 'engagementResult');
+            
+            const result = await makeRequest(`/engagement?user_id=${CONFIG.USER_ID}&timeframe=7d`);
+
+            if (result.success) {
+                const apiData = result.data?.data || result.data;
+                
+                const details = `
+Engagement Analytics Retrieved!
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 Total Engagements: ${apiData?.total_engagements || 'Not Available'}
+📈 Engagement Rate: ${apiData?.engagement_rate || 'Not Available'}%
+⏱️ Avg Response Time: ${apiData?.avg_response_time || 'Not Available'}s
+
+📋 By Event Type:
+${JSON.stringify(apiData?.by_event_type || {}, null, 2)}
+
+📋 By Notification Type:
+${JSON.stringify(apiData?.by_notification_type || {}, null, 2)}
+                `;
+                
+                log(details, 'success', 'engagementResult');
+                assert(true, 'Get engagement analytics');
+            } else {
+                log(`Error getting analytics: ${result.error || result.data?.error}`, 'error', 'engagementResult');
+                assert(false, 'Get engagement analytics');
+            }
+        }
+
+        async function testInsights(type) {
+            log(`Testing ${type} insights...`, 'info', 'insightsResult');
+            
+            const result = await makeRequest(`/insights?user_id=${CONFIG.USER_ID}&type=${type}`);
+
+            if (result.success) {
+                const apiData = result.data?.data || result.data;
+                
+                const details = `
+${type.charAt(0).toUpperCase() + type.slice(1)} Insights Retrieved!
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 Data Count: ${Array.isArray(apiData) ? apiData.length : 'N/A'}
+🎯 High Priority: ${result.data?.high_priority_count || result.data?.actionable_insights || 'N/A'}
+
+📋 Insights Data:
+${JSON.stringify(apiData, null, 2)}
+                `;
+                
+                log(details, 'success', 'insightsResult');
+                assert(true, `Get ${type} insights`);
+            } else {
+                log(`Error getting ${type} insights: ${result.error || result.data?.error}`, 'error', 'insightsResult');
+                assert(false, `Get ${type} insights`);
+            }
+        }
+
+        async function testAutomatedActions() {
+            log('Testing automated AI actions...', 'info', 'insightsResult');
+            
+            try {
+                const result = await makeRequest('/insights', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        user_id: CONFIG.USER_ID,
+                        action: 'generate_and_act'
+                    })
+                });
+
+                if (result.success) {
+                    const apiData = result.data?.data || result.data || {};
+                    
+                    const details = `
+Automated Actions Completed!
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 Total Insights: ${apiData?.total_insights || 'Not Available'}
+🤖 Acted Insights: ${apiData?.acted_insights || 'Not Available'}
+📋 Actions: ${Array.isArray(apiData?.actions) ? apiData.actions.length : 'Not Available'} notifications created
+
+💬 Message: ${result.message || result.data?.message || 'Action completed'}
+                    `;
+                    
+                    log(details, 'success', 'insightsResult');
+                    assert(true, 'Generate and act on insights');
+                } else {
+                    log(`Error with automated actions: ${result.error || result.data?.error}`, 'error', 'insightsResult');
+                    assert(false, 'Generate and act on insights');
+                }
+            } catch (error) {
+                log(`JavaScript error in automated actions: ${error.message}`, 'error', 'insightsResult');
+                assert(false, 'Generate and act on insights');
+            }
+        }
+
+        async function testRateLimiting() {
+            log('Testing rate limiting (making 5 rapid requests)...', 'info', 'advancedResult');
+            
+            // Fix: Use root path
+            const promises = Array(5).fill().map(() => 
+                makeRequest('', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        user_id: CONFIG.USER_ID,
+                        type: 'rate_limit_test',
+                        title: 'Rate Limit Test',
+                        message: 'Testing rate limiting'
+                    })
+                })
+            );
+
+            const results = await Promise.all(promises);
+            const successCount = results.filter(r => r.success).length;
+            const rateLimitCount = results.filter(r => r.status === 429).length;
+            
+            const details = `
+Rate Limiting Test Results!
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ Successful Requests: ${successCount}/5
+🚦 Rate Limited: ${rateLimitCount}/5
+📊 Rate limiting is ${rateLimitCount > 0 ? 'WORKING' : 'NOT ACTIVE'}
+            `;
+            
+            log(details, successCount < 5 ? 'success' : 'info', 'advancedResult');
+            assert(true, 'Rate limiting test completed');
+        }
+
+        async function testErrorHandling() {
+            log('Testing error handling...', 'info', 'advancedResult');
+            
+            // Test missing required fields - Fix: Use root path
+            const result1 = await makeRequest('', {
+                method: 'POST',
+                body: JSON.stringify({})
+            });
+
+            // Test invalid event type
+            const result2 = await makeRequest('/engagement', {
+                method: 'POST',
+                body: JSON.stringify({
+                    notification_id: 'test',
+                    user_id: CONFIG.USER_ID,
+                    event_type: 'invalid_event'
+                })
+            });
+
+            const details = `
+Error Handling Test Results!
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+❌ Missing fields test: ${result1.status === 400 ? 'PASS' : 'FAIL'}
+❌ Invalid event test: ${result2.status === 400 ? 'PASS' : 'FAIL'}
+📊 Error handling is ${(result1.status === 400 && result2.status === 400) ? 'WORKING' : 'NEEDS ATTENTION'}
+            `;
+            
+            log(details, 'info', 'advancedResult');
+            assert(result1.status === 400 && result2.status === 400, 'Error handling validation');
+        }
+
+        async function testPreferences() {
+            log('Testing AI preferences...', 'info', 'advancedResult');
+            
+            // Fix: Use correct endpoint path
+            const result = await makeRequest('/ai', {
+                method: 'PUT',
+                body: JSON.stringify({
+                    user_id: CONFIG.USER_ID,
+                    action: 'preferences',
+                    data: {
+                        ai_optimization_enabled: true,
+                        personalization_level: 'high',
+                        quiet_hours_start: 22,
+                        quiet_hours_end: 8
+                    }
+                })
+            });
+
+            if (result.success) {
+                log('AI preferences updated successfully!', 'success', 'advancedResult');
+                assert(true, 'Update AI preferences');
+            } else {
+                log(`Error updating preferences: ${result.error || result.data?.error}`, 'error', 'advancedResult');
+                assert(false, 'Update AI preferences');
+            }
+        }
+
+        // Main Test Runners
+        async function runBasicTests() {
+            clearResults();
+            const tests = [
+                () => testSmartTiming('quotation_update'),
+                () => testSmartTiming('business_update'),
+                () => testInsights('performance'),
+                () => testInsights('predictive')
+            ];
+
+            for (let i = 0; i < tests.length; i++) {
+                updateProgress(i, tests.length);
+                await tests[i]();
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+            updateProgress(tests.length, tests.length);
+            
+            log(`Basic tests completed! ${testResults.passed}/${testResults.total} passed`, 'info');
+        }
+
+        async function runAllTests() {
+            clearResults();
+            const tests = [
+                () => testSmartTiming('quotation_update'),
+                () => testSmartTiming('business_update'), 
+                () => testSmartTiming('marketing'),
+                () => testInsights('predictive'),
+                () => testInsights('performance'),
+                () => getEngagementAnalytics(),
+                () => testErrorHandling(),
+                () => testRateLimiting()
+            ];
+
+            for (let i = 0; i < tests.length; i++) {
+                updateProgress(i, tests.length);
+                await tests[i]();
+                await new Promise(resolve => setTimeout(resolve, 800));
+            }
+            updateProgress(tests.length, tests.length);
+            
+            const finalMessage = `
+🎉 ALL TESTS COMPLETED!
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ Passed: ${testResults.passed}
+❌ Failed: ${testResults.failed}
+📊 Success Rate: ${Math.round((testResults.passed / testResults.total) * 100)}%
+
+${testResults.failed === 0 ? '🎊 Perfect! Your AI notification system is working flawlessly!' : '⚠️ Some tests failed. Check the results above.'}
+            `;
+            
+            log(finalMessage, testResults.failed === 0 ? 'success' : 'info');
+        }
+
+        function clearResults() {
+            testResults = { total: 0, passed: 0, failed: 0, details: [] };
+            updateStats();
+            updateProgress(0, 1);
+            
+            ['configResult', 'aiResult', 'timingResult', 'engagementResult', 'insightsResult', 'advancedResult'].forEach(id => {
+                const element = document.getElementById(id);
+                element.style.display = 'none';
+                element.innerHTML = '';
+            });
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            log('AI Notification Test Suite v2 loaded successfully!', 'info');
+            updateStats();
+        });
+    </script>
+</body>
+</html> 

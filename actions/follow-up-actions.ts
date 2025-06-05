@@ -2,52 +2,62 @@
 
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
-import type { FollowUpStatus, FollowUpWithLead } from "@/types/follow-up"
+import type { FollowUpStatus, FollowUpWithLead, FollowUpFilters, FollowUp, FollowUpFormData, FollowUpCompletionData, LeadStatus } from "@/types/follow-up"
+import { VALID_STATUS_TRANSITIONS, SUGGESTED_LEAD_STATUS_BY_OUTCOME } from "@/types/follow-up"
 import { getCurrentUser } from "@/lib/auth-utils"
 import { logActivity } from "@/services/activity-service"
-import { z } from "zod"
+import { VALID_FOLLOWUP_TYPES, FollowUpSchema, type FollowupType } from "@/lib/follow-up-constants"
+import { validateStatusTransition, getDateRanges, getSuggestedLeadStatuses } from "@/lib/follow-up-utils"
+import { updateLeadStatus } from "@/actions/lead-actions"
+import { getQuotationByLeadId, updateQuotationStatus } from "./quotations-actions"
 
-export const VALID_FOLLOWUP_TYPES = [
-  "email",
-  "phone",
-  "in_person",
-  "video_call",
-  "text_message",
-  "social_media",
-  "other",
-] as const
-
-export const FollowUpSchema = z.object({
-  lead_id: z.number(),
-  scheduled_at: z.string().datetime(),
-  followup_type: z.enum(VALID_FOLLOWUP_TYPES),
-  notes: z.string().optional(),
-  priority: z.enum(["low", "medium", "high", "urgent"]),
-  interaction_summary: z.string().optional(),
-})
-
-export type FollowUpFormData = z.infer<typeof FollowUpSchema>
-
-export type FollowupType = (typeof VALID_FOLLOWUP_TYPES)[number]
-
-export async function getFollowUps(filters?: {
-  status?: FollowUpStatus | FollowUpStatus[]
-  leadId?: number
-  startDate?: string
-  endDate?: string
-  priority?: string
-}): Promise<FollowUpWithLead[]> {
+export async function getFollowUps(filters?: FollowUpFilters): Promise<FollowUpWithLead[]> {
   const supabase = createClient()
 
   try {
     let query = supabase.from("lead_followups").select(`
       *,
-      lead:leads(lead_number, client_name)
+      lead:leads(lead_number, client_name, status)
     `)
 
-    // Apply filters
+    const dateRanges = getDateRanges()
+
+    // Apply smart filters first
+    if (filters?.smart) {
+      if (filters.smart.overdue) {
+        // Past scheduled follow-ups that aren't completed, cancelled, or missed
+        query = query
+          .lt("scheduled_at", dateRanges.now)
+          .in("status", ["scheduled", "in_progress"])
+      }
+      
+      if (filters.smart.today) {
+        // Follow-ups scheduled for today
+        query = query
+          .gte("scheduled_at", dateRanges.today)
+          .lt("scheduled_at", dateRanges.tomorrow)
+          .in("status", ["scheduled", "in_progress"])
+      }
+      
+      if (filters.smart.thisWeek) {
+        // Follow-ups scheduled for this week
+        query = query
+          .gte("scheduled_at", dateRanges.startOfWeek)
+          .lte("scheduled_at", dateRanges.endOfWeek)
+          .in("status", ["scheduled", "in_progress"])
+      }
+      
+      if (filters.smart.upcoming) {
+        // Future + current follow-ups that aren't done
+        query = query
+          .gte("scheduled_at", dateRanges.now)
+          .in("status", ["scheduled", "in_progress", "rescheduled"])
+      }
+    }
+
+    // Apply regular filters
     if (filters) {
-      if (filters.status) {
+      if (filters.status && !filters.smart) {
         if (Array.isArray(filters.status)) {
           query = query.in("status", filters.status)
         } else {
@@ -59,11 +69,11 @@ export async function getFollowUps(filters?: {
         query = query.eq("lead_id", filters.leadId)
       }
 
-      if (filters.startDate) {
+      if (filters.startDate && !filters.smart?.today && !filters.smart?.thisWeek) {
         query = query.gte("scheduled_at", filters.startDate)
       }
 
-      if (filters.endDate) {
+      if (filters.endDate && !filters.smart?.today && !filters.smart?.thisWeek) {
         query = query.lte("scheduled_at", filters.endDate)
       }
 
@@ -82,10 +92,10 @@ export async function getFollowUps(filters?: {
       throw new Error(`Failed to fetch follow-ups: ${error.message}`)
     }
 
-    return data || [] // Ensure we always return an array, even if data is null
+    return data || []
   } catch (error) {
     console.error("Error in getFollowUps:", error)
-    return [] // Return empty array on error
+    return []
   }
 }
 
@@ -97,7 +107,7 @@ export async function getFollowUpById(id: number): Promise<FollowUpWithLead | nu
       .from("lead_followups")
       .select(`
         *,
-        lead:leads(lead_number, client_name)
+        lead:leads(lead_number, client_name, status)
       `)
       .eq("id", id)
       .single()
@@ -125,16 +135,24 @@ export async function createFollowUp(
       return { success: false, message: "Authentication required" }
     }
 
-    // Validate the lead exists
+    // Validate the lead exists and check status
     const { data: lead, error: leadError } = await supabase
       .from("leads")
-      .select("id, lead_number, client_name")
+      .select("id, lead_number, client_name, status")
       .eq("id", formData.lead_id)
       .single()
 
     if (leadError || !lead) {
       console.error("Error validating lead:", leadError)
       return { success: false, message: "Invalid lead ID" }
+    }
+
+    // Prevent creating follow-ups for closed deals
+    if (lead.status === "WON") {
+      return { 
+        success: false, 
+        message: "Cannot create follow-ups for leads marked as 'Won' - deal is already closed" 
+      }
     }
 
     // Validate follow-up type
@@ -296,16 +314,24 @@ export async function scheduleLeadFollowup(data: {
       return { success: false, message: "Authentication required" }
     }
 
-    // Verify the lead exists
+    // Verify the lead exists and check status
     const { data: leadExists, error: leadCheckError } = await supabase
       .from("leads")
-      .select("id")
+      .select("id, status")
       .eq("id", data.leadId)
       .single()
 
     if (leadCheckError || !leadExists) {
       console.error("Lead does not exist:", leadCheckError)
       return { success: false, message: "The specified lead does not exist" }
+    }
+
+    // Prevent creating follow-ups for closed deals
+    if (leadExists.status === "WON") {
+      return { 
+        success: false, 
+        message: "Cannot create follow-ups for leads marked as 'Won' - deal is already closed" 
+      }
     }
 
     // Check if the contact_method column exists
@@ -321,8 +347,12 @@ export async function scheduleLeadFollowup(data: {
       priority: data.priority,
       interaction_summary: data.summary || "",
       status: "scheduled",
-      created_by: String(user.id),
       created_at: new Date().toISOString(),
+    }
+
+    // Only set created_by if the user ID looks like a UUID (not an integer)
+    if (user.id && typeof user.id === 'string' && user.id.includes('-')) {
+      followUpData.created_by = String(user.id)
     }
 
     // Set the appropriate column based on what exists in the database
@@ -389,6 +419,223 @@ export async function scheduleLeadFollowup(data: {
   }
 }
 
+/**
+ * Sync quotation status when lead status is updated to REJECTED or LOST
+ */
+export async function syncQuotationStatusForLead(
+  leadId: number, 
+  leadStatus: LeadStatus
+): Promise<{ success: boolean; message: string }> {
+  try {
+    // Only sync for terminal statuses
+    if (!['REJECTED', 'LOST'].includes(leadStatus)) {
+      return { success: true, message: 'No quotation sync needed for this status' }
+    }
+
+    console.log(`Lead ${leadId} marked as ${leadStatus}, checking for quotation to update...`)
+    
+    const quotationResult = await getQuotationByLeadId(leadId.toString())
+    if (!quotationResult.success || !quotationResult.quotation) {
+      console.log(`No quotation found for lead ${leadId}`)
+      return { success: true, message: 'No quotation found to sync' }
+    }
+
+    // Skip if quotation is already rejected
+    if (quotationResult.quotation.status === 'rejected') {
+      console.log(`Quotation ${quotationResult.quotation.quotation_number} already rejected`)
+      return { success: true, message: 'Quotation already in rejected status' }
+    }
+
+    console.log(`Found quotation ${quotationResult.quotation.quotation_number}, updating status to rejected...`)
+    
+    const quotationUpdateResult = await updateQuotationStatus(
+      quotationResult.quotation.id.toString(), 
+      'rejected'
+    )
+    
+    if (quotationUpdateResult.success) {
+      console.log(`✅ Quotation ${quotationResult.quotation.quotation_number} automatically marked as rejected`)
+      return { 
+        success: true, 
+        message: `Quotation ${quotationResult.quotation.quotation_number} automatically moved to rejected status` 
+      }
+    } else {
+      console.error(`❌ Failed to update quotation status:`, quotationUpdateResult.error)
+      return { 
+        success: false, 
+        message: `Failed to sync quotation status: ${quotationUpdateResult.error}` 
+      }
+    }
+    
+  } catch (error: any) {
+    console.error('Error syncing quotation status:', error)
+    return { 
+      success: false, 
+      message: `Error syncing quotation status: ${error.message}` 
+    }
+  }
+}
+
+/**
+ * Update follow-up with enhanced lead status tracking and quotation sync
+ */
+export async function updateFollowUpWithLeadStatus(
+  followUpId: number,
+  status: FollowUpStatus,
+  updates: {
+    completed_at?: string
+    outcome?: string
+    duration_minutes?: number
+    follow_up_required?: boolean
+    next_follow_up_date?: string
+    lead_status?: LeadStatus
+  }
+): Promise<{ success: boolean; message: string; nextFollowUpId?: number }> {
+  const supabase = createClient()
+
+  try {
+    console.log(`Updating follow-up ${followUpId} with status ${status} and updates:`, updates)
+
+    // Get the current follow-up to access lead information
+    const { data: currentFollowUp, error: fetchError } = await supabase
+      .from('lead_followups')
+      .select(`
+        *,
+        leads (
+          id,
+          lead_number,
+          client_name,
+          status
+        )
+      `)
+      .eq('id', followUpId)
+      .single()
+
+    if (fetchError || !currentFollowUp) {
+      console.error('Error fetching follow-up:', fetchError)
+      return { success: false, message: `Failed to fetch follow-up: ${fetchError?.message}` }
+    }
+
+    // Start a transaction by updating follow-up first
+    const { error: followUpError } = await supabase
+      .from('lead_followups')
+      .update({
+        status,
+        completed_at: updates.completed_at,
+        outcome: updates.outcome,
+        duration_minutes: updates.duration_minutes,
+        follow_up_required: updates.follow_up_required,
+        next_follow_up_date: updates.next_follow_up_date,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', followUpId)
+
+    if (followUpError) {
+      console.error('Error updating follow-up:', followUpError)
+      return { success: false, message: `Failed to update follow-up: ${followUpError.message}` }
+    }
+
+    let nextFollowUpId: number | undefined
+
+    // Update lead status if provided
+    if (updates.lead_status && currentFollowUp.leads?.id) {
+      console.log(`Updating lead ${currentFollowUp.leads.id} status to ${updates.lead_status}`)
+      
+      const { error: leadError } = await supabase
+        .from('leads')
+        .update({
+          status: updates.lead_status,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', currentFollowUp.leads.id)
+
+      if (leadError) {
+        console.error('Error updating lead status:', leadError)
+        return { success: false, message: `Failed to update lead status: ${leadError.message}` }
+      }
+
+      // 🎯 AUTOMATIC QUOTATION STATUS SYNC
+      // If lead is marked as REJECTED or LOST, update associated quotation
+      if (['REJECTED', 'LOST'].includes(updates.lead_status)) {
+        console.log(`Lead marked as ${updates.lead_status}, checking for quotation to update...`)
+        
+        const quotationResult = await getQuotationByLeadId(currentFollowUp.leads.id.toString())
+        if (quotationResult.success && quotationResult.quotation) {
+          console.log(`Found quotation ${quotationResult.quotation.quotation_number}, updating status to rejected...`)
+          
+          const quotationUpdateResult = await updateQuotationStatus(
+            quotationResult.quotation.id.toString(), 
+            'rejected'
+          )
+          
+          if (quotationUpdateResult.success) {
+            console.log(`✅ Quotation ${quotationResult.quotation.quotation_number} automatically marked as rejected`)
+          } else {
+            console.error(`❌ Failed to update quotation status:`, quotationUpdateResult.error)
+            // Don't fail the entire operation, just log the error
+          }
+        } else {
+          console.log(`No quotation found for lead ${currentFollowUp.leads.id}`)
+        }
+      }
+    }
+
+    // Create next follow-up if required
+    if (updates.follow_up_required && updates.next_follow_up_date && currentFollowUp.leads?.id) {
+      console.log('Creating next follow-up...')
+      
+      const nextFollowUpDate = new Date(updates.next_follow_up_date)
+      
+      const { data: nextFollowUp, error: nextFollowUpError } = await supabase
+        .from('lead_followups')
+        .insert({
+          lead_id: currentFollowUp.leads.id,
+          scheduled_at: nextFollowUpDate.toISOString(),
+          status: 'scheduled' as FollowUpStatus,
+          priority: 'medium',
+          contact_method: currentFollowUp.contact_method || 'phone',
+          followup_type: currentFollowUp.followup_type || 'phone',
+          notes: `Follow-up scheduled from completed follow-up #${followUpId}`,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .select()
+        .single()
+
+      if (nextFollowUpError) {
+        console.error('Error creating next follow-up:', nextFollowUpError)
+        return { success: false, message: `Follow-up updated but failed to create next follow-up: ${nextFollowUpError.message}` }
+      }
+
+      nextFollowUpId = nextFollowUp.id
+      console.log(`Next follow-up created with ID: ${nextFollowUpId}`)
+    }
+
+    // Revalidate relevant pages
+    revalidatePath('/sales/follow-up')
+    revalidatePath('/sales/leads')
+    revalidatePath('/sales/quotations') // Revalidate quotations page for status changes
+
+    let message = `Follow-up marked as ${status}`
+    if (updates.lead_status) {
+      message += ` and lead status updated to ${updates.lead_status}`
+    }
+    if (nextFollowUpId) {
+      message += `. Next follow-up scheduled.`
+    }
+    if (['REJECTED', 'LOST'].includes(updates.lead_status || '')) {
+      message += ` Associated quotation has been automatically moved to rejected status.`
+    }
+
+    console.log('Follow-up update completed successfully')
+    return { success: true, message, nextFollowUpId }
+
+  } catch (error: any) {
+    console.error('Error in updateFollowUpWithLeadStatus:', error)
+    return { success: false, message: `System error: ${error.message}` }
+  }
+}
+
 export async function updateFollowUpStatus(
   id: number,
   status: FollowUpStatus,
@@ -425,10 +672,23 @@ export async function updateFollowUpStatus(
       return { success: false, message: "Follow-up not found", error: fetchError }
     }
 
+    // Validate status transition
+    const currentStatus = followUp.status as FollowUpStatus
+    if (!validateStatusTransition(currentStatus, status)) {
+      return { 
+        success: false, 
+        message: `Invalid status transition from '${currentStatus}' to '${status}'` 
+      }
+    }
+
     const updateData: any = {
       status: String(status),
-      updated_by: currentUser.id ? String(currentUser.id) : null, // Explicit string conversion
       updated_at: new Date().toISOString(),
+    }
+
+    // Only set updated_by if the user ID looks like a UUID (not an integer)
+    if (currentUser.id && typeof currentUser.id === 'string' && currentUser.id.includes('-')) {
+      updateData.updated_by = String(currentUser.id)
     }
 
     // Add additional data if provided
@@ -437,7 +697,12 @@ export async function updateFollowUpStatus(
         updateData.completed_at = data.completed_at
           ? new Date(data.completed_at).toISOString()
           : new Date().toISOString()
-        updateData.completed_by = currentUser.id ? String(currentUser.id) : null // Explicit string conversion
+        
+        // Only set completed_by if the user ID looks like a UUID (not an integer)
+        if (currentUser.id && typeof currentUser.id === 'string' && currentUser.id.includes('-')) {
+          updateData.completed_by = String(currentUser.id)
+        }
+        
         updateData.outcome = data.outcome ? String(data.outcome) : null
         updateData.duration_minutes = data.duration_minutes ? Number(data.duration_minutes) : null
       }
@@ -463,18 +728,13 @@ export async function updateFollowUpStatus(
       }
     }
 
-    // Log activity
-    await logActivity({
-      actionType: "update",
-      entityType: "follow_up",
-      entityId: id.toString(),
-      entityName: `Follow-up for Lead ${followUp.lead.lead_number}`,
-      description: `Updated follow-up status from ${followUp.status} to ${status}`,
-      userName: `${currentUser.firstName} ${currentUser.lastName}`,
-    })
+    // Auto-create next follow-up if required
+    if (status === "completed" && data?.follow_up_required && data?.next_follow_up_date) {
+      await createNextFollowUp(followUp.lead_id, data.next_follow_up_date, followUp)
+    }
 
-    revalidatePath("/follow-ups")
-    revalidatePath(`/leads/${followUp.lead_id}`)
+    revalidatePath("/sales/follow-up")
+    revalidatePath(`/sales/lead/${followUp.lead_id}`)
 
     return { success: true, message: "Follow-up updated successfully" }
   } catch (error) {
@@ -684,4 +944,121 @@ export async function testFollowUpCreation(leadId: number, followupType = "phone
       error: error.message || String(error),
     }
   }
+}
+
+// Helper function to auto-create next follow-up
+async function createNextFollowUp(leadId: number, nextDate: string, previousFollowUp: any) {
+  const supabase = createClient()
+  
+  try {
+    const currentUser = await getCurrentUser()
+    if (!currentUser) return
+    
+    // Check lead status before creating next follow-up
+    const { data: lead, error: leadError } = await supabase
+      .from("leads")
+      .select("status")
+      .eq("id", leadId)
+      .single()
+
+    if (leadError || !lead) {
+      console.error("Error checking lead status for next follow-up:", leadError)
+      return
+    }
+
+    // Don't create follow-ups for closed deals
+    if (lead.status === "WON") {
+      console.log(`Skipping auto-follow-up creation for lead ${leadId} - deal is won`)
+      return
+    }
+    
+    const nextFollowUpData = {
+      lead_id: leadId,
+      contact_method: previousFollowUp.contact_method || 'phone',
+      scheduled_at: new Date(nextDate).toISOString(),
+      status: 'scheduled' as FollowUpStatus,
+      priority: previousFollowUp.priority || 'medium',
+      notes: `Auto-created follow-up from previous interaction`,
+      follow_up_required: false,
+      created_at: new Date().toISOString(),
+    }
+
+    // Only set created_by if the user ID looks like a UUID
+    if (currentUser.id && typeof currentUser.id === 'string' && currentUser.id.includes('-')) {
+      nextFollowUpData.created_by = String(currentUser.id)
+    }
+
+    const { error } = await supabase
+      .from("lead_followups")
+      .insert(nextFollowUpData)
+
+    if (error) {
+      console.error("Error creating next follow-up:", error)
+    }
+  } catch (error) {
+    console.error("Error in createNextFollowUp:", error)
+  }
+}
+
+// Automated status updates (for background jobs)
+export async function updateOverdueFollowUps(): Promise<{ updated: number; errors: string[] }> {
+  const supabase = createClient()
+  const now = new Date().toISOString()
+  const errors: string[] = []
+  let updated = 0
+
+  try {
+    // Get all overdue follow-ups that are still scheduled or in_progress
+    const { data: overdueFollowUps, error: fetchError } = await supabase
+      .from("lead_followups")
+      .select("id, status, scheduled_at")
+      .lt("scheduled_at", now)
+      .in("status", ["scheduled", "in_progress"])
+
+    if (fetchError) {
+      errors.push(`Failed to fetch overdue follow-ups: ${fetchError.message}`)
+      return { updated: 0, errors }
+    }
+
+    if (!overdueFollowUps || overdueFollowUps.length === 0) {
+      return { updated: 0, errors: [] }
+    }
+
+    // Update each overdue follow-up to "missed"
+    for (const followUp of overdueFollowUps) {
+      if (validateStatusTransition(followUp.status as FollowUpStatus, "missed")) {
+        const { error: updateError } = await supabase
+          .from("lead_followups")
+          .update({
+            status: "missed",
+            updated_at: now
+          })
+          .eq("id", followUp.id)
+
+        if (updateError) {
+          errors.push(`Failed to update follow-up ${followUp.id}: ${updateError.message}`)
+        } else {
+          updated++
+        }
+      }
+    }
+
+    return { updated, errors }
+  } catch (error) {
+    errors.push(`Unexpected error: ${error instanceof Error ? error.message : String(error)}`)
+    return { updated, errors }
+  }
+}
+
+// Get upcoming follow-ups for notifications
+export async function getNotificationFollowUps(hoursAhead: number = 24): Promise<FollowUpWithLead[]> {
+  const now = new Date()
+  const future = new Date(now.getTime() + (hoursAhead * 60 * 60 * 1000))
+
+  return getFollowUps({
+    smart: { upcoming: true },
+    startDate: now.toISOString(),
+    endDate: future.toISOString(),
+    status: ["scheduled", "in_progress"]
+  })
 }

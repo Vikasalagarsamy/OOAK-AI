@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import { getCurrentUser } from "@/lib/auth-utils"
 import { logActivity } from "@/services/activity-service"
+import { triggerLeadAssignmentTasks } from "@/actions/lead-task-integration-hooks"
 
 // Update the updateLeadStatus function to handle rejected leads
 export async function updateLeadStatus(
@@ -29,9 +30,7 @@ export async function updateLeadStatus(
         assigned_to, 
         status, 
         company_id,
-        companies(name),
-        branch_id,
-        branches(name)
+        branch_id
       `)
       .eq("id", leadId)
       .single()
@@ -91,9 +90,7 @@ export async function updateLeadStatus(
     // Log the activity regardless of status
     const activityDescription =
       status === "REJECTED"
-        ? `Lead rejected from ${lead.companies?.name || "company"}${
-            lead.branches?.name ? ` (${lead.branches.name})` : ""
-          }. Reason: ${notes || "No reason provided"}`
+        ? `Lead rejected. Reason: ${notes || "No reason provided"}`
         : `Lead status updated from ${lead.status} to ${status}`
 
     await logActivity({
@@ -102,7 +99,7 @@ export async function updateLeadStatus(
       entityId: leadId.toString(),
       entityName: lead.lead_number,
       description: activityDescription,
-      userName: `${currentUser.firstName} ${currentUser.lastName}`,
+      userName: currentUser.username || 'Unknown User',
     })
 
     // Revalidate paths
@@ -141,7 +138,7 @@ export async function reassignRejectedLead(
         client_name, 
         status, 
         company_id,
-        companies(name),
+        companies!leads_company_id_fkey(name),
         branch_id,
         branches(name),
         rejection_reason
@@ -271,6 +268,18 @@ export async function assignLead(
   try {
     console.log(`Assigning lead ${leadId} to employee ${employeeId}`)
 
+    // Get the lead data before updating for AI task generation
+    const { data: leadData, error: fetchError } = await supabase
+      .from("leads")
+      .select("*")
+      .eq("id", leadId)
+      .single()
+
+    if (fetchError) {
+      console.error("Error fetching lead data:", fetchError)
+      return { success: false, message: `Failed to fetch lead: ${fetchError.message}` }
+    }
+
     // Update the lead
     const { error } = await supabase
       .from("leads")
@@ -296,6 +305,32 @@ export async function assignLead(
       description: `Lead ${leadNumber} (${clientName}) assigned to ${employeeName}`,
       userName: currentUser ? `${currentUser.firstName} ${currentUser.lastName}` : "System",
     })
+
+    // 🤖 TRIGGER AI TASK GENERATION
+    try {
+      const updatedLeadData = {
+        ...leadData,
+        assigned_to: employeeId,
+        status: "ASSIGNED",
+        updated_at: new Date().toISOString()
+      }
+      
+      console.log('🚀 Triggering AI task generation for lead assignment...')
+      const aiResult = await triggerLeadAssignmentTasks(
+        leadId,
+        updatedLeadData,
+        currentUser ? `${currentUser.firstName} ${currentUser.lastName}` : "System"
+      )
+      
+      if (aiResult.success && aiResult.tasksGenerated > 0) {
+        console.log(`✅ AI generated ${aiResult.tasksGenerated} task(s) for lead ${leadNumber}`)
+      } else {
+        console.log(`ℹ️ No AI tasks generated for lead ${leadNumber}: ${aiResult.message}`)
+      }
+    } catch (aiError) {
+      console.error('⚠️ AI task generation failed (continuing with assignment):', aiError)
+      // Don't fail the entire assignment if AI task generation fails
+    }
 
     revalidatePath("/sales/unassigned-lead")
     revalidatePath("/sales/manage-lead")
@@ -372,6 +407,9 @@ export async function scheduleLeadFollowup(data: {
   notes?: string
   priority: string
   summary?: string
+  nextFollowUpDate?: string
+  followUpRequired?: boolean
+  durationMinutes?: number
 }): Promise<{ success: boolean; message?: string; data?: any }> {
   const supabase = createClient()
 
@@ -388,63 +426,36 @@ export async function scheduleLeadFollowup(data: {
       currentUserId: currentUser.id,
     })
 
-    // Check if the lead_followups table exists
-    const { data: tableExists, error: tableCheckError } = await supabase.from("lead_followups").select("id").limit(1)
-
-    if (tableCheckError) {
-      console.error("Error checking lead_followups table:", tableCheckError)
-      return {
-        success: false,
-        message: `Failed to access lead_followups table: ${tableCheckError.message}`,
-      }
-    }
-
-    // Check which column name to use (followup_type or contact_method)
-    let columnToUse = "followup_type"
-
-    try {
-      // Try to check if followup_type column exists
-      const { data: followupTypeExists, error: columnCheckError } = await supabase.rpc("column_exists", {
-        table_name: "lead_followups",
-        column_name: "followup_type",
-      })
-
-      if (columnCheckError || !followupTypeExists) {
-        // If followup_type doesn't exist, try contact_method
-        const { data: contactMethodExists } = await supabase.rpc("column_exists", {
-          table_name: "lead_followups",
-          column_name: "contact_method",
-        })
-
-        if (contactMethodExists) {
-          columnToUse = "contact_method"
-        }
-      }
-    } catch (error) {
-      console.error("Error checking column existence:", error)
-      // Continue with default column name
-    }
-
-    // Prepare the insert data
+    // Prepare the insert data with correct field names matching the database schema
     const insertData: any = {
       lead_id: data.leadId,
       scheduled_at: data.scheduledAt,
+      contact_method: data.followupType,
       notes: data.notes || null,
       priority: data.priority,
       interaction_summary: data.summary || null,
       status: "scheduled",
-      // Ensure created_by is stored as text since that's how it's defined in the database
       created_by: currentUser.id ? String(currentUser.id) : null,
+      follow_up_required: data.followUpRequired || false,
+      next_follow_up_date: data.nextFollowUpDate || null,
+      duration_minutes: data.durationMinutes || null,
+      created_at: new Date().toISOString(),
     }
-
-    // Set the correct column based on our check
-    insertData[columnToUse] = data.followupType
 
     // Insert the follow-up
     const { data: followup, error } = await supabase.from("lead_followups").insert(insertData).select()
 
     if (error) {
       console.error("Error inserting follow-up:", error)
+      
+      // Provide specific guidance for schema cache issues
+      if (error.message.includes("schema cache") || error.message.includes("followup_type")) {
+        return { 
+          success: false, 
+          message: `Schema cache issue detected. Please restart your Supabase project in the dashboard (Project Settings → General → Restart Project), then try again. Error: ${error.message}` 
+        }
+      }
+      
       return { success: false, message: `Failed to schedule follow-up: ${error.message}` }
     }
 

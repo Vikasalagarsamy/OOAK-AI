@@ -1,14 +1,15 @@
 import { createClient as createSupabaseClient } from "@supabase/supabase-js"
+import { Database } from "@/types/database.types"
 
 // Create a singleton Supabase client
-let supabaseInstance: ReturnType<typeof createSupabaseClient> | null = null
+let supabaseInstance: ReturnType<typeof createSupabaseClient<Database>> | null = null
 
 export function createClient() {
   if (!supabaseInstance) {
     const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ""
     const supabaseKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
 
-    supabaseInstance = createSupabaseClient(supabaseUrl, supabaseKey, {
+    supabaseInstance = createSupabaseClient<Database>(supabaseUrl, supabaseKey, {
       auth: {
         persistSession: false,
       },
@@ -19,7 +20,7 @@ export function createClient() {
 }
 
 // Define types for better type safety
-type SupabaseClient = ReturnType<typeof createSupabaseClient>
+type SupabaseClient = ReturnType<typeof createSupabaseClient<Database>>
 
 // Global variable to store the client instance
 let clientSingleton: SupabaseClient | null = null
@@ -101,21 +102,10 @@ function createMockClient() {
           }),
         }),
       }),
-      insert: () => Promise.resolve({ data: null, error: new Error("Mock client - no connection") }),
-      update: () => Promise.resolve({ data: null, error: new Error("Mock client - no connection") }),
-      delete: () => Promise.resolve({ data: null, error: new Error("Mock client - no connection") }),
     }),
-    channel: () => ({
-      on: () => ({
-        subscribe: (callback: () => void) => {
-          if (callback) callback()
-          return {
-            unsubscribe: () => {},
-          }
-        },
-      }),
-    }),
-    // Add other methods as needed
+    insert: () => Promise.resolve({ data: null, error: new Error("Mock client - no connection") }),
+    update: () => Promise.resolve({ data: null, error: new Error("Mock client - no connection") }),
+    delete: () => Promise.resolve({ data: null, error: new Error("Mock client - no connection") }),
   } as unknown as SupabaseClient
 }
 

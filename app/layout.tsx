@@ -1,15 +1,20 @@
 import type React from "react"
 import "./globals.css"
-import { Inter } from "next/font/google"
+import { Inter, Dancing_Script } from "next/font/google"
 import { Toaster } from "@/components/toaster"
 import { ThemeProvider } from "@/components/theme-provider"
 import { initializeDatabase } from "@/lib/init-database"
 import { FollowUpNotificationListener } from "@/components/follow-ups/follow-up-notification-listener"
 
 const inter = Inter({ subsets: ["latin"] })
+const dancingScript = Dancing_Script({ 
+  subsets: ["latin"], 
+  variable: "--font-dancing-script",
+  display: "swap"
+})
 
 export const metadata = {
-  title: "ONE OF A KIND PORTAL",
+  title: "WORKSPACE PORTAL",
   description: "Manage your company branches and employees efficiently",
   icons: {
     icon: [
@@ -57,9 +62,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body className={`${inter.className} ${dancingScript.variable}`}>
         <div className="fixed top-0 left-0 w-full bg-blue-700 text-white py-2 px-4 text-center font-bold z-50 shadow-md">
-          ONE OF A KIND PORTAL
+          WORKSPACE PORTAL
         </div>
         <div className="pt-10">
           {" "}

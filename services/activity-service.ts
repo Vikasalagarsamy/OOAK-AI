@@ -13,6 +13,7 @@ export type ActivityType =
   | "designation"
   | "role"
   | "lead"
+  | "follow_up"
 
 interface LogActivityProps {
   actionType: string

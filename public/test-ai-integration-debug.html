@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Integration Debug Test</title>
+    <style>
+        body { 
+            font-family: system-ui, -apple-system, sans-serif; 
+            margin: 40px; 
+            background: #f8f9fa;
+        }
+        .container { 
+            max-width: 800px; 
+            margin: 0 auto; 
+            background: white; 
+            padding: 30px; 
+            border-radius: 12px; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .header { 
+            text-align: center; 
+            margin-bottom: 30px; 
+        }
+        .test-button { 
+            background: #007bff; 
+            color: white; 
+            border: none; 
+            padding: 12px 24px; 
+            border-radius: 8px; 
+            cursor: pointer; 
+            margin: 10px; 
+            font-size: 16px;
+        }
+        .test-button:hover { 
+            background: #0056b3; 
+        }
+        .success { 
+            background: #d4edda; 
+            color: #155724; 
+            padding: 15px; 
+            border-radius: 8px; 
+            margin: 15px 0; 
+        }
+        .error { 
+            background: #f8d7da; 
+            color: #721c24; 
+            padding: 15px; 
+            border-radius: 8px; 
+            margin: 15px 0; 
+        }
+        .info { 
+            background: #d1ecf1; 
+            color: #0c5460; 
+            padding: 15px; 
+            border-radius: 8px; 
+            margin: 15px 0; 
+        }
+        .results { 
+            margin-top: 20px; 
+            padding: 20px; 
+            background: #f8f9fa; 
+            border-radius: 8px; 
+            white-space: pre-wrap; 
+            font-family: monospace; 
+        }
+        .step { 
+            margin: 10px 0; 
+            padding: 10px; 
+            border-left: 4px solid #007bff; 
+            background: #f8f9fa; 
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔬 AI Integration Debug Test</h1>
+            <p>Debug why AI tasks aren't being generated during lead assignment</p>
+        </div>
+
+        <div class="info">
+            <strong>🎯 Debug Goal:</strong> Find out why lead assignment triggers AI task creation hooks but no tasks appear in dashboard.
+        </div>
+
+        <div class="step">
+            <h3>Step 1: Test AI Task Integration Hook</h3>
+            <button class="test-button" onclick="testLeadAssignmentHook()">🧪 Test Lead Assignment Hook</button>
+            <div id="hookResult"></div>
+        </div>
+
+        <div class="step">
+            <h3>Step 2: Check Database Connection</h3>
+            <button class="test-button" onclick="checkDatabaseConnection()">🔍 Check Database</button>
+            <div id="dbResult"></div>
+        </div>
+
+        <div class="step">
+            <h3>Step 3: Verify AI Tasks Table</h3>
+            <button class="test-button" onclick="verifyAITasksTable()">📋 Verify AI Tasks</button>
+            <div id="tableResult"></div>
+        </div>
+
+        <div class="step">
+            <h3>Step 4: Manual Task Creation</h3>
+            <button class="test-button" onclick="createManualAITask()">➕ Create Manual AI Task</button>
+            <div id="manualResult"></div>
+        </div>
+
+        <div class="step">
+            <h3>Debug Console Output</h3>
+            <div id="debugConsole" class="results"></div>
+        </div>
+
+        <div class="info">
+            <strong>📝 Instructions:</strong><br>
+            1. Open browser console (F12 → Console)<br>
+            2. Click each test button in order<br>
+            3. Check console for detailed error messages<br>
+            4. Look for any database or API errors
+        </div>
+    </div>
+
+    <script>
+        // Debug console logger
+        function log(message, type = 'info') {
+            const console_div = document.getElementById('debugConsole');
+            const timestamp = new Date().toLocaleTimeString();
+            console_div.innerHTML += `[${timestamp}] ${type.toUpperCase()}: ${message}\n`;
+            
+            // Also log to browser console
+            if (type === 'error') {
+                console.error(message);
+            } else {
+                console.log(message);
+            }
+        }
+
+        // Test 1: Lead Assignment Hook
+        async function testLeadAssignmentHook() {
+            const resultDiv = document.getElementById('hookResult');
+            resultDiv.innerHTML = '<div class="info">🔄 Testing lead assignment hook...</div>';
+            
+            try {
+                log('Testing lead assignment hook with sample data');
+                
+                const testData = {
+                    leadId: 999999, // Test lead ID
+                    leadData: {
+                        id: 999999,
+                        lead_number: 'TEST-001',
+                        client_name: 'Debug Test Client',
+                        status: 'ASSIGNED',
+                        estimated_value: 50000,
+                        assigned_to: 1,
+                        company_id: 1,
+                        branch_id: 1,
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString()
+                    },
+                    triggeredBy: 'Debug Test'
+                };
+
+                const response = await fetch('/api/test-lead-assignment', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(testData)
+                });
+
+                const result = await response.json();
+                log(`Hook test result: ${JSON.stringify(result, null, 2)}`);
+
+                if (result.success) {
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            ✅ Hook executed successfully!<br>
+                            Tasks Generated: ${result.tasksGenerated}<br>
+                            Message: ${result.message}
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="error">
+                            ❌ Hook failed: ${result.message}<br>
+                            Error: ${result.error || 'Unknown error'}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                log(`Hook test error: ${error.message}`, 'error');
+                resultDiv.innerHTML = `<div class="error">❌ Hook test failed: ${error.message}</div>`;
+            }
+        }
+
+        // Test 2: Database Connection
+        async function checkDatabaseConnection() {
+            const resultDiv = document.getElementById('dbResult');
+            resultDiv.innerHTML = '<div class="info">🔄 Checking database connection...</div>';
+            
+            try {
+                log('Checking database schema and connection');
+                
+                const response = await fetch('/api/fix-database-schema', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ action: 'check' })
+                });
+
+                const result = await response.json();
+                log(`Database check result: ${JSON.stringify(result, null, 2)}`);
+
+                if (result.success) {
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            ✅ Database connection successful!<br>
+                            Details: ${JSON.stringify(result.checks || result.details)}
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="error">
+                            ❌ Database issue: ${result.message}<br>
+                            Error: ${result.error || 'Unknown error'}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                log(`Database check error: ${error.message}`, 'error');
+                resultDiv.innerHTML = `<div class="error">❌ Database check failed: ${error.message}</div>`;
+            }
+        }
+
+        // Test 3: Verify AI Tasks Table
+        async function verifyAITasksTable() {
+            const resultDiv = document.getElementById('tableResult');
+            resultDiv.innerHTML = '<div class="info">🔄 Verifying AI tasks table...</div>';
+            
+            try {
+                log('Verifying AI tasks table structure and data');
+                
+                // Try to fetch tasks from the API
+                const response = await fetch('/api/tasks', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+
+                if (response.ok) {
+                    const tasks = await response.json();
+                    log(`AI tasks found: ${JSON.stringify(tasks, null, 2)}`);
+                    
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            ✅ AI tasks table accessible!<br>
+                            Found ${tasks.length || 0} tasks<br>
+                            Sample: ${JSON.stringify(tasks.slice(0, 2), null, 2)}
+                        </div>
+                    `;
+                } else {
+                    const error = await response.text();
+                    log(`AI tasks API error: ${error}`, 'error');
+                    resultDiv.innerHTML = `<div class="error">❌ AI tasks API error: ${error}</div>`;
+                }
+            } catch (error) {
+                log(`AI tasks verification error: ${error.message}`, 'error');
+                resultDiv.innerHTML = `<div class="error">❌ AI tasks verification failed: ${error.message}</div>`;
+            }
+        }
+
+        // Test 4: Manual Task Creation
+        async function createManualAITask() {
+            const resultDiv = document.getElementById('manualResult');
+            resultDiv.innerHTML = '<div class="info">🔄 Creating manual AI task...</div>';
+            
+            try {
+                log('Creating manual AI task for testing');
+                
+                const manualTask = {
+                    task_number: `DEBUG-${Date.now()}`,
+                    title: 'Debug Test Task - Manual Creation',
+                    description: 'This is a manually created task to test the AI tasks system integration',
+                    priority: 'MEDIUM',
+                    status: 'PENDING',
+                    assigned_to: 1,
+                    created_by: 1,
+                    company_id: 1,
+                    branch_id: 1,
+                    category: 'DEBUG',
+                    lead_id: 999999,
+                    automation_source: 'manual_debug_test'
+                };
+
+                // Try to create task via API
+                const response = await fetch('/api/tasks', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(manualTask)
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    log(`Manual task created: ${JSON.stringify(result, null, 2)}`);
+                    
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            ✅ Manual AI task created successfully!<br>
+                            Task ID: ${result.id}<br>
+                            <a href="/tasks/dashboard" target="_blank">View in Dashboard</a>
+                        </div>
+                    `;
+                } else {
+                    const error = await response.text();
+                    log(`Manual task creation error: ${error}`, 'error');
+                    resultDiv.innerHTML = `<div class="error">❌ Manual task creation failed: ${error}</div>`;
+                }
+            } catch (error) {
+                log(`Manual task creation exception: ${error.message}`, 'error');
+                resultDiv.innerHTML = `<div class="error">❌ Manual task creation exception: ${error.message}</div>`;
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            log('AI Integration Debug Test loaded');
+            log('Open browser console (F12) for detailed debugging');
+        });
+    </script>
+</body>
+</html> 

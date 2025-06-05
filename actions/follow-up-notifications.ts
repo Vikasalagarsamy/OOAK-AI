@@ -1,6 +1,6 @@
 "use server"
 
-import { createClient } from "@/lib/supabase-server"
+import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import { getCurrentUser } from "@/lib/auth-utils"
 import { logActivity } from "@/services/activity-service"
@@ -39,18 +39,18 @@ export async function getUpcomingNotifications(minutesThreshold = 15) {
 
     return {
       success: true,
-      notifications: data.map((item) => ({
+      notifications: data?.map((item) => ({
         id: item.id,
         scheduledAt: item.scheduled_at,
         contactMethod: item.contact_method,
         leadId: item.lead_id,
-        leadNumber: item.lead?.lead_number,
-        clientName: item.lead?.client_name,
+        leadNumber: Array.isArray(item.lead) ? item.lead[0]?.lead_number : item.lead?.lead_number,
+        clientName: Array.isArray(item.lead) ? item.lead[0]?.client_name : item.lead?.client_name,
         summary: item.interaction_summary,
         priority: item.priority,
         createdBy: item.created_by,
         timeUntil: format(parseISO(item.scheduled_at), "h:mm a"),
-      })),
+      })) || [],
     }
   } catch (error) {
     console.error("Error in getUpcomingNotifications:", error)

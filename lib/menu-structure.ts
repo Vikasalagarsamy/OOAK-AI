@@ -96,8 +96,8 @@ export const menuStructure: Record<string, MenuItem> = {
         href: "/sales/follow-up",
       },
       quotation: {
-        label: "Quotation",
-        href: "/sales/quotation",
+        label: "Quotations",
+        href: "/sales/quotations",
       },
       "order-confirmation": {
         label: "Order Confirmation",

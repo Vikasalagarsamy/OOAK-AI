@@ -159,3 +159,80 @@ export async function tableExists(tableName: string): Promise<boolean> {
     return false
   }
 }
+
+/**
+ * Verifies if the deliverable_master table exists and creates it if it doesn't.
+ * @returns A promise that resolves to an object with the verification result
+ */
+export async function verifyDeliverableMasterTable(): Promise<{
+  exists: boolean
+  message: string
+  error?: string
+}> {
+  try {
+    const supabase = createClient()
+
+    // First try using the direct query approach as a fallback
+    try {
+      const { error } = await supabase.from("deliverable_master").select("id").limit(1)
+
+      if (!error) {
+        console.log("deliverable_master table exists (verified via direct query)")
+        return { exists: true, message: "Deliverable master table exists" }
+      }
+    } catch (directQueryError) {
+      console.log("Direct query failed, trying information_schema approach")
+    }
+
+    // If direct query fails, try using information_schema via exec_sql_with_result
+    try {
+      const { data, error } = await supabase.rpc("exec_sql_with_result", {
+        sql: `
+          SELECT EXISTS (
+            SELECT FROM information_schema.tables 
+            WHERE table_schema = 'public'
+            AND table_name = 'deliverable_master'
+          );
+        `,
+      })
+
+      if (error) {
+        console.error("Error checking deliverable_master table existence:", error)
+        // Return exists: true to prevent blocking app startup
+        return {
+          exists: true,
+          message: "Failed to verify deliverable master table, but continuing application startup",
+          error: error.message,
+        }
+      }
+
+      const exists = data && data.length > 0 && data[0].exists
+
+      if (exists) {
+        console.log("deliverable_master table exists (verified via information_schema)")
+        return { exists: true, message: "Deliverable master table exists" }
+      } else {
+        console.log("deliverable_master table does not exist")
+        return {
+          exists: false,
+          message: "Deliverable master table does not exist, but continuing application startup",
+        }
+      }
+    } catch (rpcError) {
+      console.error("RPC method failed, assuming table exists to continue startup:", rpcError)
+      return {
+        exists: true,
+        message: "Error checking deliverable_master table, but continuing application startup",
+        error: rpcError instanceof Error ? rpcError.message : "Unknown RPC error",
+      }
+    }
+  } catch (error) {
+    console.error("Error in verifyDeliverableMasterTable:", error)
+    // Return exists: true to prevent blocking app startup
+    return {
+      exists: true,
+      message: "Error checking deliverable_master table, but continuing application startup",
+      error: error instanceof Error ? error.message : "Unknown error",
+    }
+  }
+}

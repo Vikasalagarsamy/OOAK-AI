@@ -4,10 +4,12 @@ import { useState } from "react"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
 import { Menu, X } from "lucide-react"
-import { SimpleSidebar } from "./simple-sidebar"
+import { SidebarNavigation } from "./sidebar-navigation"
+import { useCurrentUser } from "@/hooks/use-current-user"
 
 export function MobileNavigation() {
   const [open, setOpen] = useState(false)
+  const { user } = useCurrentUser()
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -20,13 +22,15 @@ export function MobileNavigation() {
       <SheetContent side="left" className="p-0 w-[280px]">
         <div className="flex flex-col h-full">
           <div className="border-b p-4 flex items-center justify-between">
-            <h2 className="font-semibold">ONE OF A KIND PORTAL</h2>
+            <h2 className="font-semibold">
+              {user?.username ? `${user.username.toUpperCase()}'S WORKSPACE` : 'WORKSPACE'}
+            </h2>
             <Button variant="ghost" size="icon" onClick={() => setOpen(false)}>
               <X className="h-4 w-4" />
             </Button>
           </div>
           <div className="overflow-y-auto flex-1">
-            <SimpleSidebar />
+            <SidebarNavigation />
           </div>
         </div>
       </SheetContent>

@@ -2,11 +2,13 @@ import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase"
 import { SignJWT } from "jose"
+import { jwtVerify } from "jose"
 
 export async function POST() {
   try {
     // Get the current token
-    const token = cookies().get("auth_token")?.value
+    const cookieStore = await cookies()
+    const token = cookieStore.get("auth_token")?.value
 
     if (!token) {
       return NextResponse.json({ success: false, error: "No token found" }, { status: 401 })

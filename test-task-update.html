@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Task Update API</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .result { background: #f5f5f5; padding: 15px; margin: 10px 0; border-radius: 5px; }
+        .error { background: #ffe6e6; border: 1px solid #ff9999; }
+        .success { background: #e6ffe6; border: 1px solid #99ff99; }
+        button { padding: 10px 15px; margin: 5px; background: #007cba; color: white; border: none; border-radius: 3px; cursor: pointer; }
+        input, select { padding: 8px; margin: 5px; width: 200px; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Task Update API Test</h1>
+    
+    <div>
+        <h3>1. Get All Tasks</h3>
+        <button onclick="getAllTasks()">Get Tasks</button>
+        <div id="tasks-result" class="result"></div>
+    </div>
+    
+    <div>
+        <h3>2. Update Task Status</h3>
+        <input type="text" id="task-id" placeholder="Task ID" />
+        <select id="new-status">
+            <option value="pending">Pending</option>
+            <option value="in_progress">In Progress</option>
+            <option value="completed">Completed</option>
+        </select>
+        <input type="text" id="completion-notes" placeholder="Completion notes" />
+        <button onclick="updateTask()">Update Task</button>
+        <div id="update-result" class="result"></div>
+    </div>
+    
+    <div>
+        <h3>3. Test Connection</h3>
+        <button onclick="testConnection()">Test API Connection</button>
+        <div id="connection-result" class="result"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:3001';
+        
+        async function getAllTasks() {
+            const resultDiv = document.getElementById('tasks-result');
+            resultDiv.innerHTML = '⏳ Loading tasks...';
+            
+            try {
+                console.log('🔄 Fetching tasks from:', `${API_BASE}/api/tasks`);
+                
+                const response = await fetch(`${API_BASE}/api/tasks`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                console.log('📥 Response status:', response.status);
+                const responseText = await response.text();
+                console.log('📥 Raw response:', responseText);
+                
+                const tasks = JSON.parse(responseText);
+                
+                if (response.ok) {
+                    resultDiv.className = 'result success';
+                    resultDiv.innerHTML = `
+                        <h4>✅ Found ${tasks.length} tasks:</h4>
+                        <pre>${JSON.stringify(tasks, null, 2)}</pre>
+                    `;
+                    
+                    // Auto-fill first task ID
+                    if (tasks.length > 0) {
+                        document.getElementById('task-id').value = tasks[0].id;
+                    }
+                } else {
+                    throw new Error(tasks.error || 'Failed to fetch tasks');
+                }
+                
+            } catch (error) {
+                console.error('❌ Error:', error);
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `<h4>❌ Error:</h4><pre>${error.message}</pre>`;
+            }
+        }
+        
+        async function updateTask() {
+            const resultDiv = document.getElementById('update-result');
+            const taskId = document.getElementById('task-id').value;
+            const status = document.getElementById('new-status').value;
+            const notes = document.getElementById('completion-notes').value;
+            
+            if (!taskId) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = '❌ Please enter a Task ID';
+                return;
+            }
+            
+            resultDiv.innerHTML = '⏳ Updating task...';
+            
+            try {
+                const payload = {
+                    status: status,
+                    completion_notes: notes,
+                    previous_status: 'pending',
+                    updated_by: 'Test User',
+                    actual_hours: status === 'completed' ? 2 : null
+                };
+                
+                console.log('🔄 Updating task:', taskId);
+                console.log('📤 Payload:', payload);
+                
+                const response = await fetch(`${API_BASE}/api/tasks/${taskId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload)
+                });
+                
+                console.log('📥 Response status:', response.status);
+                console.log('📥 Response headers:', Object.fromEntries(response.headers.entries()));
+                
+                const responseText = await response.text();
+                console.log('📥 Raw response:', responseText);
+                
+                const result = JSON.parse(responseText);
+                console.log('📥 Parsed response:', result);
+                
+                if (response.ok) {
+                    resultDiv.className = 'result success';
+                    resultDiv.innerHTML = `
+                        <h4>✅ Task updated successfully!</h4>
+                        <pre>${JSON.stringify(result, null, 2)}</pre>
+                    `;
+                } else {
+                    throw new Error(result.error || result.details || `HTTP ${response.status}`);
+                }
+                
+            } catch (error) {
+                console.error('❌ Error:', error);
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `<h4>❌ Error:</h4><pre>${error.message}</pre>`;
+            }
+        }
+        
+        async function testConnection() {
+            const resultDiv = document.getElementById('connection-result');
+            resultDiv.innerHTML = '⏳ Testing connection...';
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/tasks`, {
+                    method: 'OPTIONS'
+                });
+                
+                resultDiv.className = 'result success';
+                resultDiv.innerHTML = `
+                    <h4>✅ Connection OK</h4>
+                    <p>Status: ${response.status}</p>
+                    <p>Server is reachable at ${API_BASE}</p>
+                `;
+                
+            } catch (error) {
+                console.error('❌ Connection error:', error);
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `
+                    <h4>❌ Connection Failed</h4>
+                    <p>Cannot reach server at ${API_BASE}</p>
+                    <p>Error: ${error.message}</p>
+                    <p>Make sure your Next.js server is running on port 3001</p>
+                `;
+            }
+        }
+        
+        // Auto-test connection on load
+        window.addEventListener('load', () => {
+            testConnection();
+            getAllTasks();
+        });
+    </script>
+</body>
+</html> 

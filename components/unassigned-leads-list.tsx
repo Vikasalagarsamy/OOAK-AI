@@ -33,7 +33,7 @@ export function UnassignedLeadsList() {
       const { data: leadsData, error: leadsError } = await supabase
         .from("leads")
         .select("*")
-        .eq("status", "UNASSIGNED")
+        .is("assigned_to", null)
         .order("created_at", { ascending: false })
 
       if (leadsError) {

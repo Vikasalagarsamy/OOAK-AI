@@ -3,8 +3,8 @@ import { cookies } from "next/headers"
 
 export async function GET() {
   try {
-    // Clear the auth token cookie
-    cookies().delete("auth_token")
+    const cookieStore = await cookies()
+    cookieStore.delete("auth_token")
 
     // Return a simple text response
     return new NextResponse("Logged out successfully. Please go back to the login page.", {
@@ -21,13 +21,24 @@ export async function GET() {
 
 export async function POST() {
   try {
-    // Clear the auth token cookie
-    cookies().delete("auth_token")
+    const cookieStore = await cookies()
+    cookieStore.delete("auth_token")
 
-    // Return a simple JSON response
-    return NextResponse.json({ success: true, message: "Logged out successfully" })
+    return NextResponse.json(
+      {
+        success: true,
+        message: "Logged out successfully",
+      },
+      { status: 200 }
+    )
   } catch (error) {
-    console.error("Logout POST error:", error)
-    return NextResponse.json({ success: false, error: "Failed to log out" }, { status: 500 })
+    console.error("Logout error:", error)
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Failed to log out",
+      },
+      { status: 500 }
+    )
   }
 }

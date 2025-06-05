@@ -4,6 +4,12 @@ import { cookies } from "next/headers"
 import { createClient } from "@/lib/supabase"
 import bcrypt from "bcryptjs"
 import { SignJWT, jwtVerify } from "jose"
+import { Database } from "@/types/database.types"
+
+type UserAccount = Database["public"]["Tables"]["user_accounts"]["Row"] & {
+  employees?: Database["public"]["Tables"]["employees"]["Row"]
+  roles?: Database["public"]["Tables"]["roles"]["Row"]
+}
 
 // Define types
 type AuthResult = {
@@ -96,12 +102,8 @@ export async function authenticate(username: string, password: string): Promise<
       console.log("Token created successfully")
 
       // Store in cookie
-      const cookieStore = cookies()
-
-      // First clear any existing auth cookie to prevent conflicts
+      const cookieStore = await cookies()
       cookieStore.delete("auth_token")
-
-      // Set new cookie with proper attributes
       cookieStore.set("auth_token", token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
@@ -155,7 +157,7 @@ async function createSessionToken(user: any) {
 export async function getCurrentUser() {
   try {
     console.log("getCurrentUser: Starting to get current user")
-    const cookieStore = cookies()
+    const cookieStore = await cookies()
     const token = cookieStore.get("auth_token")?.value
 
     if (!token) {
@@ -202,7 +204,7 @@ export async function getCurrentUser() {
 export async function logout() {
   try {
     // Clear the auth token cookie
-    const cookieStore = cookies()
+    const cookieStore = await cookies()
     cookieStore.delete("auth_token")
 
     // Return success instead of redirecting
@@ -283,7 +285,7 @@ export async function refreshUserSession() {
     const token = await createSessionToken(user)
 
     // Store in cookie
-    const cookieStore = cookies()
+    const cookieStore = await cookies()
     cookieStore.set("auth_token", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",

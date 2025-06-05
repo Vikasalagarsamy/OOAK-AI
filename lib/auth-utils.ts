@@ -75,7 +75,8 @@ export async function verifyAuth(token: string) {
 // Check user's permission for a specific resource and action
 export async function checkPermission(resourceName: string, actionType: string) {
   try {
-    const token = cookies().get("auth_token")?.value
+    const cookieStore = await cookies()
+    const token = cookieStore.get("auth_token")?.value
 
     if (!token) {
       console.log("No auth token found")
@@ -138,7 +139,8 @@ export function createProtectedAction<T, A extends any[]>(
   return async (...args: A): Promise<T | { error: string }> => {
     try {
       // First check authentication
-      const token = cookies().get("auth_token")?.value
+      const cookieStore = await cookies()
+      const token = cookieStore.get("auth_token")?.value
 
       if (!token) {
         return { error: "Authentication required" }
@@ -171,7 +173,7 @@ export function createProtectedAction<T, A extends any[]>(
 // Helper to get the current user
 export async function getCurrentUser() {
   try {
-    const cookieStore = cookies()
+    const cookieStore = await cookies()
     const token = cookieStore.get("auth_token")?.value
 
     if (!token) {

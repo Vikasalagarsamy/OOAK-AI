@@ -1,54 +1,66 @@
-import { Suspense } from "react"
+import { getCurrentUser } from "@/actions/auth-actions"
+import { PersonalizedHeader } from "@/components/dashboard/personalized-header"
+import { StatsCard } from "@/components/dashboard/stats-card"
 import { RealTimeDashboard } from "@/components/dashboard/real-time-dashboard"
-import { getDashboardStats } from "@/services/dashboard-service"
-import { Skeleton } from "@/components/ui/skeleton"
+import { AIBusinessIntelligence } from "@/components/ai/ai-business-intelligence"
+import { 
+  Building2, 
+  Users, 
+  TrendingUp, 
+  DollarSign,
+  GitBranch,
+  UserCheck
+} from "lucide-react"
 
 // Add this export to make the page dynamic since it uses cookies
-export const dynamic = "force-dynamic"
-export const revalidate = 60 // Fallback revalidation if real-time updates fail
+export const dynamic = 'force-dynamic'
 
 export default async function DashboardPage() {
-  // Fetch initial data server-side with error handling
-  const initialData = await getDashboardStats().catch((error) => {
-    console.error("Error fetching initial dashboard data:", error)
-    // Return null to trigger the fallback data in RealTimeDashboard
-    return null
-  })
+  const user = await getCurrentUser()
+  
+  // If user is Admin, show AI Business Intelligence Dashboard
+  if (user?.isAdmin) {
+    return (
+      <div className="space-y-6">
+        <PersonalizedHeader />
+        <AIBusinessIntelligence user={user} />
+      </div>
+    )
+  }
 
-  return (
-    <Suspense fallback={<DashboardSkeleton />}>
-      <RealTimeDashboard initialData={initialData} />
-    </Suspense>
-  )
-}
-
-function DashboardSkeleton() {
+  // Regular dashboard for non-admin users
   return (
     <div className="space-y-6">
-      <div>
-        <Skeleton className="h-10 w-[250px] mb-2" />
-        <Skeleton className="h-4 w-[350px]" />
-      </div>
-
+      <PersonalizedHeader />
+      
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {Array(4)
-          .fill(0)
-          .map((_, i) => (
-            <Skeleton key={i} className="h-[120px]" />
-          ))}
+        <StatsCard
+          title="Total Companies"
+          value={6}
+          icon={<Building2 className="h-4 w-4 text-blue-600" />}
+          trend={{ isPositive: false, value: 100 }}
+        />
+        <StatsCard
+          title="Total Branches"
+          value={6}
+          icon={<GitBranch className="h-4 w-4 text-red-600" />}
+          trend={{ isPositive: false, value: 100 }}
+        />
+        <StatsCard
+          title="Total Employees"
+          value={2}
+          icon={<Users className="h-4 w-4 text-orange-600" />}
+          trend={{ isPositive: false, value: 100 }}
+        />
+        <StatsCard
+          title="Total Clients"
+          value={8}
+          icon={<UserCheck className="h-4 w-4 text-green-600" />}
+          trend={{ isPositive: true, value: 100 }}
+        />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Skeleton className="h-[350px]" />
-        <Skeleton className="h-[350px]" />
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <Skeleton className="h-[350px]" />
-        <Skeleton className="h-[350px]" />
-      </div>
-
-      <Skeleton className="h-[400px]" />
+      <RealTimeDashboard />
     </div>
   )
 }
