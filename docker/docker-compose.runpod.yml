@@ -1,0 +1,97 @@
+version: '3.8'
+
+services:
+  # Local LLM Service (Ollama)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: task_management_llm
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_ORIGINS=*
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Next.js Application
+  task_management_app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.production
+    container_name: task_management_web
+    ports:
+      - "3000:3000"
+    environment:
+      # Database Connection
+      - NEXT_PUBLIC_SUPABASE_URL=${SUPABASE_URL}
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      
+      # LLM Configuration
+      - LLM_ENDPOINT=http://ollama:11434
+      - LLM_MODEL=llama3.1:8b
+      - LLM_PROVIDER=ollama
+      
+      # Application Settings
+      - NODE_ENV=production
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NEXTAUTH_URL=${NEXTAUTH_URL}
+      
+      # Security
+      - CORS_ORIGIN=${CORS_ORIGIN}
+      - API_SECRET_KEY=${API_SECRET_KEY}
+      
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Optional: Model Management Service
+  model_manager:
+    image: alpine:latest
+    container_name: model_manager
+    volumes:
+      - ollama_data:/data
+    command: |
+      sh -c "
+        apk add --no-cache curl &&
+        echo 'Waiting for Ollama to be ready...' &&
+        while ! curl -f http://ollama:11434/api/tags; do sleep 5; done &&
+        echo 'Pulling required models...' &&
+        curl -X POST http://ollama:11434/api/pull -d '{\"name\":\"llama3.1:8b\"}' &&
+        curl -X POST http://ollama:11434/api/pull -d '{\"name\":\"qwen2.5:7b\"}' &&
+        echo 'Models pulled successfully!' &&
+        tail -f /dev/null
+      "
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: "no"
+
+volumes:
+  ollama_data:
+    driver: local
+
+networks:
+  default:
+    driver: bridge 
