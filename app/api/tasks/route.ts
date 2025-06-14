@@ -1,27 +1,221 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { getCurrentUser } from '@/lib/auth-utils'
 
-// GET /api/tasks - Fetch all AI tasks
+// GET /api/tasks - Fetch AI tasks with proper role-based filtering
 export async function GET(request: NextRequest) {
   try {
     const supabase = createClient()
     
-    const { data: tasks, error } = await supabase
+    // Get current user and role for security filtering
+    console.log('🔍 Starting getCurrentUser...')
+    let currentUser
+    try {
+      currentUser = await getCurrentUser()
+      console.log('🔍 getCurrentUser result:', currentUser ? `${currentUser.username} (${currentUser.roleName})` : 'null')
+    } catch (authError: any) {
+      console.error('❌ getCurrentUser failed:', authError)
+      return NextResponse.json(
+        { error: 'Authentication failed', details: authError.message },
+        { status: 401 }
+      )
+    }
+    
+    if (!currentUser) {
+      console.log('❌ No current user found')
+      return NextResponse.json(
+        { error: 'Unauthorized access' },
+        { status: 401 }
+      )
+    }
+    
+    console.log(`🔐 Tasks request from user: ${currentUser.username}, role: ${currentUser.roleName}, employeeId: ${currentUser.employeeId}`)
+    
+    // Determine filtering based on role - join with employees only (leads will be fetched separately)
+    let query = supabase
       .from('ai_tasks')
-      .select('*')
+      .select(`
+        *,
+        assigned_employee:employees!assigned_to_employee_id(
+          id,
+          first_name,
+          last_name,
+          job_title
+        )
+      `)
       .order('created_at', { ascending: false })
       .limit(100)
+    
+    // Check for personal scope query parameter
+    const url = new URL(request.url)
+    const scope = url.searchParams.get('scope')
 
-    if (error) {
-      console.error('❌ Error fetching AI tasks:', error)
+    if (scope === 'personal') {
+      // Strict personal filtering: only show tasks assigned to the current user
+      // Exclude completed tasks that have generated quotations (they should move to approval workflow)
+      if (currentUser.employeeId) {
+        query = query
+          .eq('assigned_to_employee_id', currentUser.employeeId)
+          .or('status.neq.completed,quotation_id.is.null')
+        console.log(`🔐 [Personal Scope] Only active tasks for employee ID: ${currentUser.employeeId}`)
+      } else {
+        console.log('🔐 [Personal Scope] Employee ID not found, returning empty result')
+        return NextResponse.json([])
+      }
+    } else {
+      // Department head logic: Admins see all, department heads see their department, others see only their own
+      const isDepartmentHead = currentUser.roleName && currentUser.roleName.endsWith('Head')
+
+      if (currentUser.roleName === 'Administrator' || currentUser.isAdmin) {
+        // Admins see all tasks
+        console.log('🔐 Admin access - showing all tasks')
+      } else if (isDepartmentHead) {
+        // Department head: get their department_id
+        console.log('🔐 Department head detected, checking department...')
+        try {
+          const { data: headEmployee, error: headError } = await supabase
+            .from('employees')
+            .select('department_id')
+            .eq('id', currentUser.employeeId)
+            .single()
+          
+          if (headError) {
+            console.error('❌ Error fetching department for head:', headError)
+            return NextResponse.json([])
+          }
+          
+          if (!headEmployee || !headEmployee.department_id) {
+            console.log('🔐 Department head but no department found, returning empty result')
+            return NextResponse.json([])
+          }
+          
+          // Get all employees in this department
+          const { data: deptEmployees, error: deptError } = await supabase
+            .from('employees')
+            .select('id')
+            .eq('department_id', headEmployee.department_id)
+          
+          if (deptError) {
+            console.error('❌ Error fetching department employees:', deptError)
+            return NextResponse.json([])
+          }
+          
+          if (!deptEmployees || deptEmployees.length === 0) {
+            console.log('🔐 No employees found in department, returning empty result')
+            return NextResponse.json([])
+          }
+          
+          const employeeIds = deptEmployees.map(e => e.id)
+          query = query.in('assigned_to_employee_id', employeeIds)
+          console.log(`🔐 Department head access - showing tasks for department_id ${headEmployee.department_id}, employees: ${employeeIds}`)
+        } catch (deptError) {
+          console.error('❌ Exception in department head logic:', deptError)
+          return NextResponse.json([])
+        }
+      } else {
+        // Regular employees only see tasks assigned to them
+        if (currentUser.employeeId) {
+          query = query.eq('assigned_to_employee_id', currentUser.employeeId)
+          console.log(`🔐 Strict filtering: Only tasks for employee ID: ${currentUser.employeeId}`)
+        } else {
+          console.log('🔐 Employee ID not found, returning empty result')
+          return NextResponse.json([])
+        }
+      }
+    }
+    
+    console.log('🔍 Executing database query...')
+    const { data: tasks, error: tasksError } = await query
+
+    if (tasksError) {
+      console.error('❌ Error fetching AI tasks:', tasksError)
       return NextResponse.json(
-        { error: 'Failed to fetch tasks', details: error.message },
+        { error: 'Failed to fetch tasks', details: tasksError.message },
         { status: 500 }
       )
     }
 
-    console.log(`📋 Fetched ${tasks?.length || 0} AI tasks`)
-    return NextResponse.json(tasks || [])
+    console.log(`🔍 Database returned ${tasks?.length || 0} tasks`)
+
+    // Get all unique lead IDs from tasks to fetch phone numbers separately
+    const leadIds = tasks
+      ?.filter(task => task.lead_id)
+      .map(task => task.lead_id)
+      .filter((id, index, self) => self.indexOf(id) === index) || []
+
+    // Fetch lead phone numbers in separate query if there are leads
+    let leadsMap = new Map()
+    if (leadIds.length > 0) {
+      console.log('📞 Fetching lead phone numbers for IDs:', leadIds)
+      const { data: leads, error: leadsError } = await supabase
+        .from('leads')
+        .select('id, phone, country_code, whatsapp_number')
+        .in('id', leadIds)
+
+      console.log('📞 Leads query result:', { leads, error: leadsError })
+      
+      if (!leadsError && leads) {
+        leads.forEach(lead => {
+          console.log(`📞 Lead ${lead.id}: phone=${lead.phone}`)
+          leadsMap.set(lead.id, lead)
+        })
+      }
+    }
+
+    // Get all unique quotation IDs from tasks
+    const quotationIds = tasks
+      ?.filter(task => task.quotation_id)
+      .map(task => task.quotation_id)
+      .filter((id, index, self) => self.indexOf(id) === index) || []
+
+    // Fetch all quotation data in single query if there are quotations
+    let quotationsMap = new Map()
+    if (quotationIds.length > 0) {
+      console.log('📋 Fetching quotations for IDs:', quotationIds)
+      const { data: quotations, error: quotationsError } = await supabase
+        .from('quotations')
+        .select('id, slug, workflow_status')
+        .in('id', quotationIds)
+
+      console.log('📋 Quotations query result:', { quotations, error: quotationsError })
+      
+      if (!quotationsError && quotations) {
+        quotations.forEach(q => {
+          console.log(`📋 Quotation ${q.id}: slug=${q.slug}`)
+          quotationsMap.set(q.id, q)
+        })
+      }
+    }
+
+    // Combine tasks with lead and quotation data and fix assigned_to field
+    const optimizedTasks = tasks?.map(task => {
+      const quotation = quotationsMap.get(task.quotation_id) || null
+      const lead = leadsMap.get(task.lead_id) || null
+      
+      // Fix assigned_to field using employee data
+      let assignedToName = task.assigned_to
+      if (task.assigned_employee) {
+        assignedToName = `${task.assigned_employee.first_name} ${task.assigned_employee.last_name}`.trim()
+      }
+      
+      // Get client phone from lead data (only use phone field that exists)
+      let clientPhone = null
+      if (lead && lead.phone) {
+        clientPhone = lead.phone
+      }
+      
+      return {
+        ...task,
+        assigned_to: assignedToName,
+        client_phone: clientPhone,
+        quotation_approval_status: null, // Column doesn't exist in quotations table
+        quotation_workflow_status: quotation?.workflow_status || null,
+        quotation_slug: quotation?.slug || null
+      }
+    }) || []
+
+    console.log(`📋 Fetched ${optimizedTasks.length} AI tasks with ${quotationIds.length} quotations and ${leadIds.length} leads in 3 optimized queries`)
+    return NextResponse.json(optimizedTasks)
   } catch (error: any) {
     console.error('❌ Exception in GET /api/tasks:', error)
     return NextResponse.json(
@@ -34,61 +228,114 @@ export async function GET(request: NextRequest) {
 // POST /api/tasks - Create a new AI task
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
+    console.log('🔄 POST /api/tasks - Starting task creation...')
+    
+    let body
+    try {
+      body = await request.json()
+      console.log('📝 Request body received:', JSON.stringify(body, null, 2))
+    } catch (jsonError: any) {
+      console.error('❌ Failed to parse JSON from request:', jsonError)
+      return NextResponse.json(
+        { error: 'Invalid JSON in request body', details: jsonError.message },
+        { status: 400 }
+      )
+    }
+    
     const supabase = createClient()
     
     // Validate required fields
     if (!body.title) {
+      console.log('❌ Validation failed: Missing title')
       return NextResponse.json(
         { error: 'Missing required field: title' },
         { status: 400 }
       )
     }
 
-    // Prepare task data with proper schema mapping
+    console.log('✅ Validation passed, preparing task data...')
+
+    // Prepare task data with minimal required fields only and ensure all values are serializable
     const taskData = {
-      title: body.title,
-      description: body.description || '',
-      task_type: body.task_type || 'general',
-      priority: body.priority || 'medium',
-      status: body.status || 'pending',
-      assigned_to_employee_id: body.assigned_to_employee_id,
-      assigned_by_user_id: body.assigned_by_user_id || 1,
-      due_date: body.due_date,
-      lead_id: body.lead_id,
-      quotation_id: body.quotation_id,
-      client_name: body.client_name,
-      ai_generated: body.ai_generated !== false, // Default to true
-      ai_confidence_score: body.ai_confidence_score || 0.8,
-      ai_reasoning: body.ai_reasoning,
-      business_impact: body.business_impact || 'medium',
-      estimated_value: body.estimated_value,
-      estimated_duration_minutes: body.estimated_duration_minutes || 30,
-      optimal_time_start: body.optimal_time_start || 9,
-      optimal_time_end: body.optimal_time_end || 17,
-      timezone: body.timezone || 'UTC'
+      task_title: String(body.title || ''),
+      task_description: String(body.description || ''),
+      task_type: String(body.task_type || 'general'),
+      priority: String(body.priority || 'medium'),
+      status: String(body.status || 'pending'),
+      assigned_to_employee_id: body.assigned_to_employee_id ? Number(body.assigned_to_employee_id) : null,
+      due_date: body.due_date || null,
+      lead_id: body.lead_id ? Number(body.lead_id) : null,
+      client_name: String(body.client_name || ''),
+      business_impact: String(body.business_impact || 'medium'),
+      estimated_value: Number(body.estimated_value || 0)
     }
 
+    console.log('📋 Prepared task data:', JSON.stringify(taskData, null, 2))
+
+    // Test JSON serialization before sending to database
+    try {
+      JSON.stringify(taskData)
+      console.log('✅ Task data is JSON serializable')
+    } catch (serializationError: any) {
+      console.error('❌ Task data is not JSON serializable:', serializationError)
+      return NextResponse.json(
+        { error: 'Task data contains non-serializable values', details: serializationError.message },
+        { status: 400 }
+      )
+    }
+
+    console.log('🔄 Attempting to insert into ai_tasks table...')
     const { data: task, error } = await supabase
       .from('ai_tasks')
       .insert(taskData)
       .select('*')
-      .single()
 
     if (error) {
-      console.error('❌ Error creating AI task:', error)
+      console.error('❌ Supabase error creating AI task:', error)
+      console.error('❌ Error details:', JSON.stringify(error, null, 2))
       return NextResponse.json(
-        { error: 'Failed to create task', details: error.message },
+        { error: 'Failed to create task', details: error.message, supabaseError: error },
         { status: 500 }
       )
     }
 
-    console.log('✅ AI task created successfully:', task.id)
-    return NextResponse.json(task, { status: 201 })
+    // Since insert returns an array, get the first item
+    const createdTask = Array.isArray(task) ? task[0] : task
+
+    if (!createdTask) {
+      console.error('❌ No task was created - empty result')
+      return NextResponse.json(
+        { error: 'Task creation failed - no data returned' },
+        { status: 500 }
+      )
+    }
+
+    console.log('✅ AI task created successfully:', createdTask.id)
+    
+    // Create a clean, serializable response object
+    const responseTask = {
+      id: createdTask.id,
+      task_title: createdTask.task_title,
+      task_description: createdTask.task_description,
+      task_type: createdTask.task_type,
+      priority: createdTask.priority,
+      status: createdTask.status,
+      assigned_to_employee_id: createdTask.assigned_to_employee_id,
+      due_date: createdTask.due_date,
+      lead_id: createdTask.lead_id,
+      client_name: createdTask.client_name,
+      business_impact: createdTask.business_impact,
+      estimated_value: createdTask.estimated_value,
+      created_at: createdTask.created_at,
+      updated_at: createdTask.updated_at
+    }
+
+    return NextResponse.json(responseTask, { status: 201 })
   } catch (error: any) {
     console.error('❌ Exception in POST /api/tasks:', error)
+    console.error('❌ Exception stack:', error.stack)
     return NextResponse.json(
-      { error: 'Internal server error', details: error.message },
+      { error: 'Internal server error', details: error.message, stack: error.stack },
       { status: 500 }
     )
   }
