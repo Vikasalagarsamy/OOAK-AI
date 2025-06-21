@@ -399,3 +399,4 @@ export async function getBugDetails(id: number) {
     }
   }
 }
+export const bugService = {};

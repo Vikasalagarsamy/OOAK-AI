@@ -52,12 +52,7 @@ const nextConfig = {
   },
 
   // Output configuration for production
-  output: process.env.NODE_ENV === 'production' ? 'standalone' : undefined,
-  
-  // Experimental features for better performance
-  experimental: {
-    serverComponentsExternalPackages: ['pg', 'pg-pool']
-  }
+  output: process.env.NODE_ENV === 'production' ? 'standalone' : undefined
 }
 
 export default nextConfig

@@ -6,7 +6,7 @@ import { redirect } from "next/navigation"
 export default async function EditBugPage({
   params,
 }: {
-  params: { id: string }
+  params: Promise<{ id: string }>
 }) {
   const user = await getCurrentUser()
 
@@ -14,7 +14,8 @@ export default async function EditBugPage({
     redirect("/dashboard?error=insufficient_permissions")
   }
 
-  const bugId = Number.parseInt(params.id)
+  const resolvedParams = await params
+  const bugId = Number.parseInt(resolvedParams.id)
   const { success, data: bug, error } = await getBugById(bugId)
 
   if (!success || !bug) {

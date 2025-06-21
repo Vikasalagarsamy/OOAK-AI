@@ -51,7 +51,6 @@ export async function healthCheck() {
   }
 }
 
-
 // Add missing exports to fix build errors
 export function createClient() {
   return pool

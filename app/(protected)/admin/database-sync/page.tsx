@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, Database, Sync, CheckCircle, AlertCircle, Play, Pause } from 'lucide-react'
+import { Loader2, Database, RefreshCw as Sync, CheckCircle, AlertCircle, Play, Pause } from 'lucide-react'
 
 export default function DatabaseSyncPage() {
   const [syncStatus, setSyncStatus] = useState<any>(null)
