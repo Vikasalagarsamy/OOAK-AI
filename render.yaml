@@ -1,86 +1,88 @@
 services:
-  # Production Web Service
+  # Employee Workspace Service (workspace.ooak.photography)
   - type: web
     name: ooak-production
-    env: node
+    runtime: node
     plan: starter
-    buildCommand: npm ci && npm run build
-    startCommand: npm start
+    region: oregon
+    branch: main
+    buildCommand: npm ci && npm run build:workspace
+    startCommand: npm run start:workspace
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
-        value: 3000
-      - key: NEXT_PUBLIC_BASE_URL
-        generateValue: true
-      - key: POSTGRES_HOST
-        fromDatabase:
-          name: ooak-database
-          property: host
-      - key: POSTGRES_PORT
-        fromDatabase:
-          name: ooak-database
-          property: port
-      - key: POSTGRES_USER
-        fromDatabase:
-          name: ooak-database
-          property: user
-      - key: POSTGRES_PASSWORD
-        fromDatabase:
-          name: ooak-database
-          property: password
-      - key: POSTGRES_DATABASE
-        fromDatabase:
-          name: ooak-database
-          property: database
+        value: 4000
+      - key: NEXT_PUBLIC_APP_URL
+        value: https://workspace.ooak.photography
       - key: DATABASE_URL
         fromDatabase:
           name: ooak-database
           property: connectionString
+      - key: DIRECT_URL
+        fromDatabase:
+          name: ooak-database
+          property: connectionString
+      - key: WHATSAPP_VERIFY_TOKEN
+        value: whatsapp_verify_123
+      - key: NEXTAUTH_SECRET
+        value: mbBSSdwnS2UY9/F9WOyXigxlDFUqubjQFf5VnXrcWXE=
+      - key: NEXTAUTH_URL
+        value: https://workspace.ooak.photography
+      - key: JWT_SECRET
+        value: 5fh+rT0PoqFDLtrITHjyEnYYNUG4p2MTWu+QGhDgRbQ=
+      - key: ENCRYPTION_KEY
+        value: ldX6UIaAtxdFhCr3ZE4hBjh33fOD0UekAvjgU1xJe/8=
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
     domains:
       - workspace.ooak.photography
     healthCheckPath: /api/health
 
-  # WhatsApp API Service
+  # WhatsApp API Service (api.ooak.photography)
   - type: web
     name: ooak-whatsapp-api
-    env: node
+    runtime: node
     plan: starter
-    buildCommand: npm ci && npm run build
-    startCommand: npm start
+    region: oregon
+    branch: main
+    buildCommand: npm ci && npm run build:api
+    startCommand: npm run start:api
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 3000
-      - key: SERVICE_NAME
-        value: whatsapp-automation
-      - key: NEXT_PUBLIC_BASE_URL
-        generateValue: true
-      - key: POSTGRES_HOST
-        fromDatabase:
-          name: ooak-database
-          property: host
-      - key: POSTGRES_PORT
-        fromDatabase:
-          name: ooak-database
-          property: port
-      - key: POSTGRES_USER
-        fromDatabase:
-          name: ooak-database
-          property: user
-      - key: POSTGRES_PASSWORD
-        fromDatabase:
-          name: ooak-database
-          property: password
-      - key: POSTGRES_DATABASE
-        fromDatabase:
-          name: ooak-database
-          property: database
+      - key: NEXT_PUBLIC_APP_URL
+        value: https://api.ooak.photography
       - key: DATABASE_URL
         fromDatabase:
           name: ooak-database
           property: connectionString
+      - key: DIRECT_URL
+        fromDatabase:
+          name: ooak-database
+          property: connectionString
+      - key: WHATSAPP_VERIFY_TOKEN
+        value: whatsapp_verify_123
+      - key: NEXTAUTH_SECRET
+        value: mbBSSdwnS2UY9/F9WOyXigxlDFUqubjQFf5VnXrcWXE=
+      - key: NEXTAUTH_URL
+        value: https://api.ooak.photography
+      - key: JWT_SECRET
+        value: 5fh+rT0PoqFDLtrITHjyEnYYNUG4p2MTWu+QGhDgRbQ=
+      - key: ENCRYPTION_KEY
+        value: ldX6UIaAtxdFhCr3ZE4hBjh33fOD0UekAvjgU1xJe/8=
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
     domains:
       - api.ooak.photography
     healthCheckPath: /api/health
@@ -90,3 +92,4 @@ databases:
     databaseName: ooak_future_production
     user: ooak_user
     plan: starter
+    region: oregon
