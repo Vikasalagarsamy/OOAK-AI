@@ -1,0 +1,45 @@
+services:
+  # WhatsApp API Service (api.ooak.photography)
+  - type: web
+    name: ooak-whatsapp-api
+    runtime: node
+    plan: starter
+    region: oregon
+    branch: main
+    buildCommand: |
+      npm ci
+      npm run build:api
+    startCommand: npm run start:api
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: NEXT_PUBLIC_APP_URL
+        value: https://api.ooak.photography
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ooak-database
+          property: connectionString
+      - key: DIRECT_URL
+        fromDatabase:
+          name: ooak-database
+          property: connectionString
+      - key: WHATSAPP_VERIFY_TOKEN
+        value: whatsapp_verify_123
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+    domains:
+      - api.ooak.photography
+    healthCheckPath: /api/health
+    
+databases:
+  - name: ooak-database
+    databaseName: ooak_future_production
+    user: ooak_user
+    plan: starter
+    region: oregon 
