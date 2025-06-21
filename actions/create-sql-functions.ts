@@ -3,13 +3,13 @@
 import { createClient } from "@/lib/postgresql-client"
 
 export async function createSqlFunctions() {
-  const { query, transaction } = createClient()
+  const client = createClient()
 
   try {
     console.log("🔧 Creating PostgreSQL SQL functions...")
 
     // Create the exec_sql function
-    await query(`
+    await client.query(`
       CREATE OR REPLACE FUNCTION exec_sql(sql_query TEXT)
       RETURNS VOID AS $$
       BEGIN
@@ -21,7 +21,7 @@ export async function createSqlFunctions() {
     console.log("✅ Created exec_sql function")
 
     // Create the exec_sql_with_result function
-    await query(`
+    await client.query(`
       CREATE OR REPLACE FUNCTION exec_sql_with_result(sql_query TEXT)
       RETURNS SETOF json AS $$
       BEGIN

@@ -82,14 +82,15 @@ async function getLeadActivities(leadId: string) {
   }
 }
 
-export default async function LeadDetailPage({ params }: { params: { id: string } }) {
+export default async function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
   try {
-    console.log(`🏠 [LEAD_DETAILS] Loading lead details page for ID: ${params.id}`)
+    const resolvedParams = await params
+    console.log(`🏠 [LEAD_DETAILS] Loading lead details page for ID: ${resolvedParams.id}`)
     
-    const lead = await getLeadWithDetails(params.id)
+    const lead = await getLeadWithDetails(resolvedParams.id)
     
     if (!lead) {
-      console.log(`❌ [LEAD_DETAILS] Lead ${params.id} not found, showing 404`)
+      console.log(`❌ [LEAD_DETAILS] Lead ${resolvedParams.id} not found, showing 404`)
       return (
         <div className="container mx-auto p-4 max-w-6xl">
           <div className="mb-6">
@@ -114,7 +115,7 @@ export default async function LeadDetailPage({ params }: { params: { id: string 
       )
     }
 
-    const activities = await getLeadActivities(params.id)
+    const activities = await getLeadActivities(resolvedParams.id)
 
     const getStatusBadge = (status: string) => {
       switch (status?.toUpperCase()) {

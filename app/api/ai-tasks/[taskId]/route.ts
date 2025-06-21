@@ -3,10 +3,11 @@ import { AITaskManagementService } from '@/services/ai-task-management-service'
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { taskId: string } }
+  { params }: { params: Promise<{ taskId: string }> }
 ) {
   try {
-    const { taskId } = params
+    const resolvedParams = await params
+    const { taskId } = resolvedParams
     const body = await request.json()
     const { status, completion_notes } = body
 
@@ -42,10 +43,11 @@ export async function PATCH(
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { taskId: string } }
+  { params }: { params: Promise<{ taskId: string }> }
 ) {
   try {
-    const { taskId } = params
+    const resolvedParams = await params
+    const { taskId } = resolvedParams
 
     // You can implement single task retrieval here if needed
     return NextResponse.json({

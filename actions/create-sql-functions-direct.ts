@@ -4,7 +4,7 @@ import { createClient } from "@/lib/postgresql-client"
 
 export async function createSqlFunctionsDirect() {
   try {
-    const { query, transaction } = createClient()
+    const client = createClient()
 
     console.log("🔧 Creating SQL functions directly via PostgreSQL...")
 

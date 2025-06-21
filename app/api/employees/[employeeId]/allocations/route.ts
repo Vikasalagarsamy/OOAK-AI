@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/postgresql-client"
 import { cookies } from "next/headers"
 
-export async function GET(request: NextRequest, { params }: { params: { employeeId: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<any> }) {
   const employeeId = params.employeeId
   const cookieStore = cookies()
   const supabase = createClient(cookieStore)
@@ -58,7 +58,7 @@ export async function GET(request: NextRequest, { params }: { params: { employee
   }
 }
 
-export async function POST(request: NextRequest, { params }: { params: { employeeId: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<any> }) {
   const employeeId = params.employeeId
   const cookieStore = cookies()
   const supabase = createClient(cookieStore)

@@ -6,7 +6,7 @@ import { NotificationService } from '@/lib/notification-service'
 // POST /api/tasks/[taskId]/remind
 export async function POST(
   request: NextRequest,
-  { params }: { params: { taskId: string } }
+  { params }: { params: Promise<any> }
 ) {
   try {
     const currentUser = await getCurrentUser()

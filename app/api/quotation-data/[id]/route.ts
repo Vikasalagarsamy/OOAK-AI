@@ -3,7 +3,7 @@ import { getQuotation } from '@/actions/quotations-actions'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<any> }
 ) {
   try {
     const quotationResult = await getQuotation(params.id)

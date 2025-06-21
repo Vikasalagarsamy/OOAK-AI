@@ -7,7 +7,7 @@ import { pool } from '@/lib/postgresql-client'
 // 📖 Mark notification as read
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<any> }
 ) {
   try {
     const notificationId = params.id

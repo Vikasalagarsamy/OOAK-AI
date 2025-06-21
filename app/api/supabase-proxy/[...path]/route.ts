@@ -11,7 +11,7 @@ const LOCAL_SUPABASE_URL = 'http://127.0.0.1:54321'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { path: string[] } }
+  { params }: { params: Promise<any> }
 ) {
   const resolvedParams = await params
   return handleSupabaseProxy(request, resolvedParams.path, 'GET')
@@ -19,7 +19,7 @@ export async function GET(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { path: string[] } }
+  { params }: { params: Promise<any> }
 ) {
   const resolvedParams = await params
   return handleSupabaseProxy(request, resolvedParams.path, 'POST')
@@ -27,7 +27,7 @@ export async function POST(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { path: string[] } }
+  { params }: { params: Promise<any> }
 ) {
   const resolvedParams = await params
   return handleSupabaseProxy(request, resolvedParams.path, 'PUT')
@@ -35,7 +35,7 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { path: string[] } }
+  { params }: { params: Promise<any> }
 ) {
   const resolvedParams = await params
   return handleSupabaseProxy(request, resolvedParams.path, 'DELETE')
@@ -43,7 +43,7 @@ export async function DELETE(
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { path: string[] } }
+  { params }: { params: Promise<any> }
 ) {
   const resolvedParams = await params
   return handleSupabaseProxy(request, resolvedParams.path, 'PATCH')

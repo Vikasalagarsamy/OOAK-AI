@@ -1,23 +1,24 @@
-import { Suspense } from "react"
-import { EmployeeDetailView } from "@/components/employee-detail-view"
-import { Skeleton } from "@/components/ui/skeleton"
+import { getEmployeeById } from "@/actions/employee-actions"
+import { EmployeeDetailsCard } from "@/components/employee/employee-details-card"
 import { redirect } from "next/navigation"
 
-export default async function EmployeeDetailPage({ params }: { params: { id: string } }) {
-  // If the ID is "add", redirect to the add employee page
-  if (params.id === "add") {
-    redirect("/people/employees/add")
-    return null
+export default async function EmployeeDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = await params
+  const employeeId = parseInt(resolvedParams.id)
+
+  const { success, data: employee, error } = await getEmployeeById(employeeId)
+
+  if (!success || !employee) {
+    redirect("/people/employees?error=employee_not_found")
   }
 
-  // For valid IDs, continue with the existing logic
-  const id = Number.parseInt(params.id)
-
   return (
-    <div className="container mx-auto py-6 space-y-6">
-      <Suspense fallback={<Skeleton className="h-[600px] w-full" />}>
-        <EmployeeDetailView id={params.id} />
-      </Suspense>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-bold tracking-tight">Employee Details</h1>
+      </div>
+      
+      <EmployeeDetailsCard employee={employee} />
     </div>
   )
 }

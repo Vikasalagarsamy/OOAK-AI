@@ -5,7 +5,7 @@ import { logActivity } from '@/services/activity-service'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { leadId: string } }
+  { params }: { params: Promise<any> }
 ) {
   try {
     const leadId = parseInt(params.leadId)
@@ -61,7 +61,7 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { leadId: string } }
+  { params }: { params: Promise<any> }
 ) {
   try {
     const leadId = parseInt(params.leadId)

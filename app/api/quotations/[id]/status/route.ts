@@ -6,7 +6,7 @@ import { pool } from '@/lib/postgresql-client'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<any> }
 ) {
   try {
     console.log('🐘 Getting quotation status from PostgreSQL...')

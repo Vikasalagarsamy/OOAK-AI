@@ -5,11 +5,12 @@ import { getUserIdForDatabase } from '@/lib/uuid-helpers'
 // PUT /api/tasks/[taskId] - Update a specific task
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { taskId: string } }
+  { params }: { params: Promise<any> }
 ) {
   try {
     const { query, transaction } = createClient()
-    const { taskId } = params
+    const resolvedParams = await params
+    const { taskId } = resolvedParams
     const body = await request.json()
 
     console.log(`🔄 Updating task ${taskId}:`, body)

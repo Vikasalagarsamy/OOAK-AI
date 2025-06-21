@@ -4,9 +4,10 @@ import { cookies } from "next/headers"
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { employeeId: string; allocationId: string } },
+  { params }: { params: Promise<any> },
 ) {
-  const { employeeId, allocationId } = params
+  const resolvedParams = await params
+    const { employeeId, allocationId } = resolvedParams
   const cookieStore = cookies()
   const supabase = createClient(cookieStore)
 
@@ -77,9 +78,10 @@ export async function PATCH(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { employeeId: string; allocationId: string } },
+  { params }: { params: Promise<any> },
 ) {
-  const { employeeId, allocationId } = params
+  const resolvedParams = await params
+    const { employeeId, allocationId } = resolvedParams
   const cookieStore = cookies()
   const supabase = createClient(cookieStore)
 

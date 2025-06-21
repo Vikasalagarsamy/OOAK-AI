@@ -5,14 +5,15 @@ import { getEmployee } from "@/actions/employee-actions"
 export const dynamic = "force-dynamic"
 
 interface EditEmployeePageProps {
-  params: {
+  params: Promise<{
     id: string
-  }
+  }>
 }
 
 export default async function EditEmployeePage({ params }: EditEmployeePageProps) {
   try {
-    const employee = await getEmployee(params.id)
+    const resolvedParams = await params
+    const employee = await getEmployee(resolvedParams.id)
 
     if (!employee) {
       notFound()

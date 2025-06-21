@@ -4,7 +4,7 @@ import { pool } from '@/lib/postgresql-client'
 // Direct PostgreSQL connection
 // Using centralized PostgreSQL client
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<any> }) {
   try {
     console.log(`🐘 Getting role ID ${params.id} from PostgreSQL...`)
     const roleId = parseInt(params.id)
@@ -52,7 +52,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<any> }) {
   try {
     console.log(`🐘 Updating role ID ${params.id} in PostgreSQL...`)
     const roleId = parseInt(params.id)
@@ -109,7 +109,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<any> }) {
   try {
     console.log(`🐘 Deleting role ID ${params.id} from PostgreSQL...`)
     const roleId = parseInt(params.id)

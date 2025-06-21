@@ -4,7 +4,7 @@ import { createClient } from '@/lib/postgresql-client'
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<any> }
 ) {
   try {
     const currentUser = await getCurrentUser()
@@ -12,7 +12,8 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { id } = params
+    const resolvedParams = await params
+    const { id } = resolvedParams
     const { query, transaction } = createClient()
 
     const { error } = await supabase

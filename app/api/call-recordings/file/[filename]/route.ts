@@ -5,10 +5,11 @@ import { constants } from 'fs';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { filename: string } }
+  { params }: { params: Promise<any> }
 ) {
   try {
-    const { filename } = params;
+    const resolvedParams = await params
+    const { filename } = resolvedParams;
     
     // Security: validate filename to prevent directory traversal
     if (!filename || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {

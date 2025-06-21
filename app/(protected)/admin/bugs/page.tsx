@@ -9,7 +9,7 @@ import type { BugFilterParams } from "@/types/bug"
 export default async function BugsPage({
   searchParams,
 }: {
-  searchParams: { [key: string]: string | string[] | undefined }
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
   const user = await getCurrentUser()
 
@@ -17,23 +17,26 @@ export default async function BugsPage({
     redirect("/dashboard?error=insufficient_permissions")
   }
 
+  // Await searchParams for Next.js 15
+  const resolvedSearchParams = await searchParams
+
   // Parse query parameters for filtering
   const filters: BugFilterParams = {}
 
-  if (searchParams.status) {
-    filters.status = searchParams.status as any
+  if (resolvedSearchParams.status) {
+    filters.status = resolvedSearchParams.status as any
   }
 
-  if (searchParams.severity) {
-    filters.severity = searchParams.severity as any
+  if (resolvedSearchParams.severity) {
+    filters.severity = resolvedSearchParams.severity as any
   }
 
-  if (searchParams.assignee) {
-    filters.assignee_id = searchParams.assignee as string
+  if (resolvedSearchParams.assignee) {
+    filters.assignee_id = resolvedSearchParams.assignee as string
   }
 
-  if (searchParams.search) {
-    filters.search = searchParams.search as string
+  if (resolvedSearchParams.search) {
+    filters.search = resolvedSearchParams.search as string
   }
 
   // Fetch bugs with filters

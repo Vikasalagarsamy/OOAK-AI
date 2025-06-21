@@ -542,14 +542,4 @@ export async function POST(request: NextRequest) {
 }
 
 // **UTILITY FUNCTIONS FOR TESTING**
-export function getCachedWhatsAppMessages() {
-  return whatsappMessagesCache
-}
 
-export function getStorageInfo() {
-  return {
-    cache_count: whatsappMessagesCache.length,
-    file_exists: existsSync(MESSAGES_FILE),
-    storage_dir: STORAGE_DIR
-  }
-} 
