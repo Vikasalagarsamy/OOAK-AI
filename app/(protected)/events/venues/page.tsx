@@ -54,7 +54,6 @@ export default function VenuesPage() {
     <div className="space-y-6">
       <EventsHeader
         title="Venues"
-        description="Manage locations where events are held"
         icon={<MapPin className="h-6 w-6" />}
       >
         <Button>

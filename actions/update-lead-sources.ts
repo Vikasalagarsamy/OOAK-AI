@@ -84,12 +84,12 @@ export async function updateMissingLeadSourceIds(): Promise<{
 
           // Log the activity
           await logActivity({
-            actionType: "update",
-            entityType: "lead",
-            entityId: lead.id.toString(),
-            entityName: lead.lead_number,
+            type: "update",
+            entity_type: "lead",
+            entity_id: lead.id,
+            
             description: `Updated lead source ID for lead ${lead.lead_number} (Source: ${lead.lead_source}, ID: ${sourceId})`,
-            userName: "System",
+            
           })
         } catch (updateError) {
           console.error(`❌ Error updating lead ${lead.lead_number}:`, updateError)

@@ -20,7 +20,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/use-toast"
 import { cn } from "@/lib/utils"
-import { createQuotation, updateQuotation, type QuotationData, type SavedQuotation } from "@/actions/quotations-actions"
+import { createQuotation, updateQuotation, type QuotationData, type SavedQuotation } from "@/lib/client-safe-actions"
 import { getQuotationData, type QuotationServiceItem, type QuotationDeliverableItem, type QuotationEventType } from "@/actions/quotation-data-actions"
 import { getQuotationServices, getQuotationDeliverables } from "@/lib/quotation-utils"
 

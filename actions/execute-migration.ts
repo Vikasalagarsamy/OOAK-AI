@@ -69,7 +69,7 @@ export async function verifyRejectionColumns(): Promise<{
         }
       } catch (columnError) {
         console.error(`❌ [MIGRATION] Error checking column ${columnName}:`, columnError)
-        results.push({ name: columnName, exists: false, error: columnError.toString() })
+        results.push({ name: columnName, exists: false, error: (columnError as Error).message || String(columnError) })
       }
     }
 

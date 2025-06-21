@@ -5,7 +5,6 @@ import { FollowUpList } from "@/components/follow-ups/follow-up-list"
 export default function FollowUpPage() {
   return (
     <div>
-      <SalesHeader title="Follow Up Management" description="Schedule and track follow-ups with potential clients" />
 
       <FollowUpStats />
 

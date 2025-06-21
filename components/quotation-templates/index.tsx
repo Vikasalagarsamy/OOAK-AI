@@ -1,5 +1,5 @@
 // Template registry for quotation pages
-import { SavedQuotation } from "@/actions/quotations-actions"
+import { SavedQuotation } from "@/lib/client-safe-actions"
 import React from "react"
 
 export interface QuotationTemplateProps {

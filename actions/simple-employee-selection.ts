@@ -113,7 +113,7 @@ export async function getEmployeesForLeadAssignment(
     if (companyId) {
       filteredEmployees = groupedEmployees.filter(emp => {
         // Check if employee has allocation to this company
-        const hasAllocation = emp.employee_companies?.some(allocation => 
+        const hasAllocation = emp.employee_companies?.some((allocation: any) => 
           allocation.company_id === companyId && 
           allocation.status === 'active' &&
           (!branchId || allocation.branch_id === branchId)
@@ -128,8 +128,8 @@ export async function getEmployeesForLeadAssignment(
     const formattedEmployees = filteredEmployees.map(emp => {
       // Find the relevant company allocation
       const companyAllocation = companyId 
-        ? emp.employee_companies?.find(a => a.company_id === companyId)
-        : emp.employee_companies?.find(a => a.is_primary) || emp.employee_companies?.[0]
+        ? emp.employee_companies?.find((a: any) => a.company_id === companyId)
+        : emp.employee_companies?.find((a: any) => a.is_primary) || emp.employee_companies?.[0]
 
       return {
         id: emp.id,
@@ -269,8 +269,8 @@ export async function assignLeadToEmployee(
         `${employee.first_name} ${employee.last_name}`
       )
       
-      if (aiResult.success && aiResult.tasksGenerated > 0) {
-        console.log(`✅ [SIMPLE] AI generated ${aiResult.tasksGenerated} task(s) for lead ${lead.lead_number}`)
+      if (aiResult.success && ((aiResult.tasksGenerated ?? 0) ?? 0) > 0) {
+        console.log(`✅ [SIMPLE] AI generated ${(aiResult.tasksGenerated ?? 0)} task(s) for lead ${lead.lead_number}`)
       } else {
         console.log(`ℹ️ [SIMPLE] No AI tasks generated for lead ${lead.lead_number}: ${aiResult.message}`)
       }

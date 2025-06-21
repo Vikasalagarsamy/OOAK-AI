@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { query, transaction } from "@/lib/postgresql-client"
+
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { toast } from "@/components/ui/use-toast"

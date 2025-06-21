@@ -82,7 +82,7 @@ export async function fixLeadFollowupsTable(): Promise<{ success: boolean; messa
           ORDER BY ordinal_position
         `)
 
-        const existingColumns = columnsResult.rows.map(row => row.column_name)
+        const existingColumns = columnsResult.rows.map((row: any) => row.column_name)
         console.log(`🔍 [LEAD_FOLLOWUPS] Found existing columns: ${existingColumns.join(', ')}`)
 
         // Check if followup_type exists but contact_method doesn't

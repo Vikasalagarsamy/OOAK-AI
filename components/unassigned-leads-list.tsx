@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useCurrentUser } from "@/hooks/use-current-user"
-import { query } from "@/lib/postgresql-client"
+
 import { AssignLeadDialog } from "@/components/assign-lead-dialog"
 import { formatDistanceToNow } from "date-fns"
 import type { Lead } from "@/types/lead"

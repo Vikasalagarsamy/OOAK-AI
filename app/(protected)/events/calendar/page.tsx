@@ -8,7 +8,7 @@ export default function EventCalendarPage() {
     <div className="space-y-6">
       <EventsHeader
         title="Event Calendar"
-        description="View and manage events in calendar view"
+        
         icon={<CalendarIcon className="h-6 w-6" />}
       />
 

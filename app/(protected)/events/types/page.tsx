@@ -19,7 +19,6 @@ export default function EventTypesPage() {
     <div className="space-y-6">
       <EventsHeader
         title="Event Types"
-        description="Manage categories for different types of events"
         icon={<ClipboardList className="h-6 w-6" />}
       >
         <Button>

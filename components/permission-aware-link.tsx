@@ -5,7 +5,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { NavigationMenuLink } from "@/components/ui/navigation-menu"
 import { cn } from "@/lib/utils"
-import { query } from "@/lib/postgresql-client"
+
 
 interface PermissionAwareLinkProps {
   href: string

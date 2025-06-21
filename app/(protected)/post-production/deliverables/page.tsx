@@ -501,13 +501,13 @@ export default function DeliverablePage() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-6">
+                  <TableCell className="text-center py-6">
                     Loading deliverables...
                   </TableCell>
                 </TableRow>
               ) : filteredDeliverables.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-6">
+                  <TableCell className="text-center py-6">
                     No deliverables found
                   </TableCell>
                 </TableRow>

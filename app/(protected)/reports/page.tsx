@@ -46,7 +46,6 @@ const reportCards = [
 export default function ReportsPage() {
   return (
     <div className="space-y-6">
-      <ReportsHeader title="Reports Dashboard" description="Access analytical reports and data insights" />
 
       <ReportsSubmenu />
 

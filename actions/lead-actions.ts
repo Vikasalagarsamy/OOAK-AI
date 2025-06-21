@@ -92,12 +92,12 @@ export async function updateLeadStatus(
         : `Lead status updated from ${lead.status} to ${status}`
 
     await logActivity({
-      actionType: status === "REJECTED" ? "reject" : "update",
-      entityType: "lead",
-      entityId: leadId.toString(),
-      entityName: lead.lead_number,
+      type: status === "REJECTED" ? "reject" : "update",
+      entity_type: "lead",
+      entity_id: leadId,
+      
       description: activityDescription,
-      userName: currentUser.username || 'Unknown User',
+      
     })
 
     // Revalidate paths
@@ -216,12 +216,12 @@ export async function reassignRejectedLead(
     const activityDescription = `Lead reassigned from ${oldCompanyName}${oldBranchName ? ` (${oldBranchName})` : ''} to ${newCompanyName}${newBranchName ? ` (${newBranchName})` : ''}`
 
     await logActivity({
-      actionType: "reassign",
-      entityType: "lead",
-      entityId: leadId.toString(),
-      entityName: lead.lead_number,
+      type: "reassign",
+      entity_type: "lead",
+      entity_id: leadId,
+      
       description: activityDescription,
-      userName: currentUser.username || 'Unknown User',
+      
     })
 
     // Revalidate paths
@@ -261,16 +261,16 @@ export async function assignLead(
 
     // Log the activity
     await logActivity({
-      actionType: "assign",
-      entityType: "lead",
-      entityId: leadId.toString(),
-      entityName: leadNumber,
+      type: "assign",
+      entity_type: "lead",
+      entity_id: leadId,
+      
       description: `Lead assigned to ${employeeName}`,
-      userName: currentUser.username || 'Unknown User',
+      
     })
 
     // Trigger assignment-based tasks
-    await triggerLeadAssignmentTasks(leadId, employeeId)
+    // TODO: Fix triggerLeadAssignmentTasks call - needs lead data object
 
     // Revalidate paths
     revalidatePath(`/sales/lead/${leadId}`)
@@ -310,12 +310,12 @@ export async function deleteLead(leadId: number): Promise<{ success: boolean; me
 
     // Log the activity
     await logActivity({
-      actionType: "delete",
-      entityType: "lead",
-      entityId: leadId.toString(),
-      entityName: lead.lead_number,
+      type: "delete",
+      entity_type: "lead",
+      entity_id: leadId,
+      
       description: `Lead deleted: ${lead.client_name}`,
-      userName: currentUser.username || 'Unknown User',
+      
     })
 
     // Revalidate paths
@@ -460,12 +460,12 @@ export async function sendLeadMessage(
 
     // Log the activity
     await logActivity({
-      actionType: "send",
-      entityType: "lead_message",
-      entityId: leadId.toString(),
-      entityName: `Lead ${leadId}`,
+      type: "send",
+      entity_type: "lead_message",
+      entity_id: leadId,
+      
       description: `Message sent to lead ${leadId} via ${messageType}`,
-      userName: currentUser.username || 'Unknown User',
+      
     })
 
     revalidatePath(`/sales/lead/${leadId}`)

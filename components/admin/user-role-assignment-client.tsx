@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/use-toast"
-import { query, transaction } from "@/lib/postgresql-client"
+
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle, UserPlus } from "lucide-react"

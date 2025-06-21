@@ -362,7 +362,8 @@ export async function triggerQuotationApprovedTasks(
  */
 export async function getLeadTaskAnalytics(leadId: number) {
   try {
-    return await integrationService.getLeadTaskAnalytics(leadId)
+    // TODO: Implement getLeadTaskAnalytics
+    return { success: false, message: "Analytics not implemented" }
   } catch (error: any) {
     console.error('❌ Error fetching lead task analytics:', error)
     return null
@@ -374,7 +375,8 @@ export async function getLeadTaskAnalytics(leadId: number) {
  */
 export async function getTaskGenerationSummary() {
   try {
-    return await integrationService.getTaskGenerationSummary()
+    // TODO: Implement getTaskGenerationSummary
+    return "Task generation summary not implemented"
   } catch (error: any) {
     console.error('❌ Error fetching task generation summary:', error)
     return 'Unable to fetch task generation summary'

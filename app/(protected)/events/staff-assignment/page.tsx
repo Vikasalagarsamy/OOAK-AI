@@ -59,7 +59,6 @@ export default function StaffAssignmentPage() {
     <div className="space-y-6">
       <EventsHeader
         title="Staff Assignment"
-        description="Manage employee assignments for events"
         icon={<Users className="h-6 w-6" />}
       >
         <Button>

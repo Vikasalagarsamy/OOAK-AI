@@ -8,7 +8,7 @@ export default function EventsDashboardPage() {
     <div className="space-y-6">
       <EventsHeader
         title="Events Dashboard"
-        description="Overview of all event coordination activities"
+        
         icon={<Calendar className="h-6 w-6" />}
       />
 

@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/components/ui/use-toast"
-import { query } from "@/lib/postgresql-client"
+
 import type { Client } from "@/types/client"
 import { logActivity } from "@/services/activity-service"
 

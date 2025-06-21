@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Bug, Database, RefreshCw, AlertCircle, Search } from "lucide-react"
-import { query } from "@/lib/postgresql-client"
+
 
 interface LeadSourceMapping {
   id: number

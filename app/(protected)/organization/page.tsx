@@ -108,7 +108,6 @@ export default function OrganizationPage() {
     <div className="space-y-8">
       <OrganizationHeader
         title="Organization Management"
-        description="Streamline your organization structure with our comprehensive management suite. Control companies, branches, relationships, and security from one unified platform."
       />
 
       {/* Quick Stats */}

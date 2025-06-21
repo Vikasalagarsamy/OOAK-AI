@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle, CheckCircle, Loader2 } from "lucide-react"
-import { createClient } from "@/lib/postgresql-client"
+
 
 export function ExecuteSqlScript() {
   const [isExecuting, setIsExecuting] = useState(false)

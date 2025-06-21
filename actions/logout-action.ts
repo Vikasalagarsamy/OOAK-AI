@@ -6,7 +6,7 @@ import { redirect } from "next/navigation"
 export async function logoutAction() {
   try {
     // Clear the auth token cookie
-    const cookieStore = cookies()
+    const cookieStore = await cookies()
     cookieStore.delete("auth_token")
 
     // Redirect to login page

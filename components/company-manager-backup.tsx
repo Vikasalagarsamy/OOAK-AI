@@ -8,7 +8,7 @@ import AddBranchForm from "./add-branch-form"
 import EditCompanyModal from "./edit-company-modal"
 import EditBranchModal from "./edit-branch-modal"
 import type { Company, Branch } from "@/types/company"
-import { query } from "@/lib/postgresql-client"
+
 import { Loader2 } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 

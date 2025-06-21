@@ -11,7 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useCurrentUser } from "@/hooks/use-current-user"
-import { query } from "@/lib/postgresql-client"
+
 import { formatDistanceToNow } from 'date-fns'
 
 interface Notification {

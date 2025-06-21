@@ -14,7 +14,6 @@ export default function LeadSourcesPage() {
     <div className="space-y-6">
       <ReportsHeader
         title="Lead Source Analysis"
-        description="Compare the performance of different lead acquisition channels"
       />
 
       <ReportsSubmenu />

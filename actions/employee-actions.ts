@@ -395,13 +395,13 @@ export async function addEmployeeCompany(employeeId: number | string, formData: 
 
       if (columnExists.start_date && formData.get("start_date")) {
         insertColumns.push('start_date')
-        insertValues.push(formData.get("start_date"))
+        insertValues.push(formData.get("start_date") as string)
         placeholders.push(`$${insertValues.length}`)
       }
 
       if (columnExists.end_date && formData.get("end_date")) {
         insertColumns.push('end_date')
-        insertValues.push(formData.get("end_date"))
+        insertValues.push(formData.get("end_date") as string)
         placeholders.push(`$${insertValues.length}`)
       }
 
@@ -742,3 +742,7 @@ export async function getProjectsByCompany(companyId: number) {
 }
 
 export const generateEmployeeId = generateEmployeeIdUtil
+
+// Export aliases for backward compatibility
+export const getEmployeeById = getEmployee
+

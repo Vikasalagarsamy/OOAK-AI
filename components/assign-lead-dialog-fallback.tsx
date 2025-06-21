@@ -17,7 +17,7 @@ import { Label } from "@/components/ui/label"
 import { useToast } from "@/components/ui/use-toast"
 import type { Lead } from "@/types/lead"
 import { assignLead } from "@/actions/lead-actions"
-import { query } from "@/lib/postgresql-client"
+
 import { UserCog, Loader2, Check, X, User } from "lucide-react"
 import { useDialogPosition } from "@/hooks/use-dialog-position"
 

@@ -277,8 +277,8 @@ export async function assignLeadToEmployee(
           `${employee.first_name} ${employee.last_name} Assignment`
         )
         
-        if (aiResult.success && aiResult.tasksGenerated > 0) {
-          console.log(`✅ [LEAD ASSIGNMENT] AI generated ${aiResult.tasksGenerated} task(s) for lead ${leadId} → ${employee.first_name} ${employee.last_name}`)
+        if (aiResult.success && ((aiResult.tasksGenerated ?? 0) ?? 0) > 0) {
+          console.log(`✅ [LEAD ASSIGNMENT] AI generated ${(aiResult.tasksGenerated ?? 0)} task(s) for lead ${leadId} → ${employee.first_name} ${employee.last_name}`)
         } else {
           console.log(`ℹ️ [LEAD ASSIGNMENT] No AI tasks generated for lead ${leadId}: ${aiResult.message}`)
         }

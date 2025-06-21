@@ -4,7 +4,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/use-toast"
 import { Loader2 } from "lucide-react"
-import { query, transaction } from "@/lib/postgresql-client"
+
 
 export function UpdateConstraintsSqlExecutor() {
   const [isLoading, setIsLoading] = useState(false)

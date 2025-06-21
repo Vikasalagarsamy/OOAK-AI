@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2, AlertCircle, CheckCircle2 } from "lucide-react"
-import { query, transaction } from "@/lib/postgresql-client"
+
 
 interface Employee {
   id: number

@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle, RefreshCw, User, Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { query } from "@/lib/postgresql-client"
+
 import { Badge } from "@/components/ui/badge"
 
 interface UserWithRole {

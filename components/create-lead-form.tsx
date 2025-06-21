@@ -18,7 +18,7 @@ import { checkLeadSourceColumn, addLeadSourceColumn } from "@/actions/schema-act
 import { getLeadSources } from "@/services/lead-source-service"
 import { getCompanies, getBranches } from "@/actions/employee-actions"
 import { createLead } from "@/actions/lead-actions"
-import { query } from "@/lib/postgresql-client"
+
 import { logActivity } from "@/services/activity-service"
 import type { LeadSource } from "@/types/lead-source"
 import { Loader2, Building2, Phone, FileText, Save, Info, AlertCircle, MapPin } from "lucide-react"

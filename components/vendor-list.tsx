@@ -20,7 +20,7 @@ import { EditVendorDialog } from "./edit-vendor-dialog"
 import { DeleteVendorDialog } from "./delete-vendor-dialog"
 import { useToast } from "@/components/ui/use-toast"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { query } from "@/lib/postgresql-client"
+
 
 // Define the Vendor type if it's not imported
 // type Vendor = {

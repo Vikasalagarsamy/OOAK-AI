@@ -12,7 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Calendar, Phone, Upload, CheckCircle, AlertCircle, FileText, Users } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
-import type { SavedQuotation } from "@/actions/quotations-actions"
+import type { SavedQuotation } from "@/lib/client-safe-actions"
 
 interface PostSaleConfirmationDialogProps {
   open: boolean

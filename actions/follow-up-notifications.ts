@@ -214,9 +214,9 @@ export async function markOverdueAsMissed() {
 
       for (const item of updatedFollowUps) {
         await logActivity({
-          action: "STATUS_CHANGE",
-          entityType: "follow_up",
-          entityId: item.id.toString(),
+          type: "STATUS_CHANGE",
+          entity_type: "follow_up",
+          entity_id: item.id,
           description: `Follow-up automatically marked as missed`,
         })
       }

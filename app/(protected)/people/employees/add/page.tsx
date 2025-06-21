@@ -24,13 +24,7 @@ export default async function AddEmployeePage() {
           <p className="text-muted-foreground">Create a new employee record with personal and work details.</p>
         </div>
 
-        <AddEmployeeForm
-          departments={departments}
-          designations={designations}
-          companies={companies}
-          branches={branches}
-        />
-      </div>
+        <AddEmployeeForm />      </div>
     )
   } catch (error) {
     console.error("Error in AddEmployeePage:", error)

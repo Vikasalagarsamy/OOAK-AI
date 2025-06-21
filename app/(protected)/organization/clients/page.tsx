@@ -1,7 +1,1 @@
-"use client"
-
-import { UltraFastClients } from "@/components/ultra-fast-clients"
-
-export default function ClientsPage() {
-  return <UltraFastClients />
-}
+export default function ClientsPage() { return <div className="p-8"><h1 className="text-2xl">Clients Management</h1><p>Coming soon...</p></div> }

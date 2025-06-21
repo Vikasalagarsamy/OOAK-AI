@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { useToast } from "@/components/ui/use-toast"
-import { query } from "@/lib/postgresql-client"
+
 import type { Client } from "@/types/client"
 import { logActivity } from "@/services/activity-service"
 import { generateClientCode, ensureUniqueClientCode } from "@/utils/client-code-generator"

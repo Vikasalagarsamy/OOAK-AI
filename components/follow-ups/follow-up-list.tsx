@@ -64,7 +64,7 @@ import { getSuggestedLeadStatuses } from "@/lib/follow-up-utils"
 import type { FollowUpWithLead, FollowUpStatus, LeadStatus } from "@/types/follow-up"
 import type { FollowupType } from "@/lib/follow-up-constants"
 import { VALID_FOLLOWUP_TYPES } from "@/lib/follow-up-constants"
-import { getQuotationByLeadId, type SavedQuotation } from "@/actions/quotations-actions"
+import { getQuotationByLeadId, type SavedQuotation } from "@/lib/client-safe-actions"
 import { getQuotationAction } from "@/lib/quotation-utils"
 
 // Local followup type icons

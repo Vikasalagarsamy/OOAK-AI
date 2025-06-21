@@ -6,7 +6,7 @@ import { EmployeeAuditList } from "@/components/audit/employee-audit-list"
 export default function EmployeeAuditPage() {
   return (
     <>
-      <AuditHeader title="Employee Audit" description="Review employee-specific activity and changes" />
+      <AuditHeader title="Employee Audit"  />
 
       <AuditSubmenu />
 

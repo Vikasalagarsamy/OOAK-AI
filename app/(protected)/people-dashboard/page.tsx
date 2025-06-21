@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic"
 async function getEmployeeData() {
   const { query, transaction } = createClient()
 
-  const { data, error } = await query(`SELECT * FROM ${functionName}(${params})`)
+  const { data, error } = await query(`SELECT * FROM employees`)
 
   if (error) {
     console.error("Error fetching employee data:", error)

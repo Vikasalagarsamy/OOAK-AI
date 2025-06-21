@@ -12,7 +12,7 @@ import { EditClientDialog } from "./edit-client-dialog"
 import { DeleteClientDialog } from "./delete-client-dialog"
 import { ViewClientDialog } from "./view-client-dialog"
 import type { Client } from "@/types/client"
-import { query } from "@/lib/postgresql-client"
+
 import { useToast } from "@/components/ui/use-toast"
 import { Checkbox } from "@/components/ui/checkbox"
 import { BatchDeleteClientsDialog } from "./batch-delete-clients-dialog"

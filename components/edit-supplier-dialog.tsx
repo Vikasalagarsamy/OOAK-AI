@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
-import { query } from "@/lib/postgresql-client"
+
 import type { Supplier, SupplierFormData } from "@/types/supplier"
 import { Button } from "@/components/ui/button"
 import {

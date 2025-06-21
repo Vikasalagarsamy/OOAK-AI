@@ -159,9 +159,9 @@ export async function reassignLead(
       : "unassigned"
 
     await logActivity({
-      action: "REASSIGN_LEAD",
-      entityType: "lead",
-      entityId: leadId,
+      type: "REASSIGN_LEAD",
+      entity_type: "lead",
+      entity_id: parseInt(leadId),
       description: `Lead ${lead.lead_number} reassigned from ${previousAssignee} to ${employee.first_name} ${employee.last_name}`,
     })
 
@@ -281,9 +281,9 @@ export async function bulkReassignLeads(
     // Log activity for each successfully reassigned lead
     for (const lead of updateResult.rows) {
       await logActivity({
-        action: "BULK_REASSIGN_LEAD",
-        entityType: "lead",
-        entityId: lead.id.toString(),
+        type: "BULK_REASSIGN_LEAD",
+        entity_type: "lead",
+        entity_id: lead.id,
         description: `Lead ${lead.lead_number} bulk reassigned to ${employee.first_name} ${employee.last_name}`,
       })
     }
