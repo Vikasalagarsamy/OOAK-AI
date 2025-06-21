@@ -1,155 +1,166 @@
 "use server"
 
-import { createClient } from "@/lib/supabase"
+import { query, transaction } from "@/lib/postgresql-client"
 
-export type ActivityType =
-  | "company"
-  | "branch"
-  | "employee"
-  | "client"
-  | "vendor"
-  | "supplier"
-  | "department"
-  | "designation"
-  | "role"
-  | "lead"
-  | "follow_up"
-
-interface LogActivityProps {
-  actionType: string
-  entityType: ActivityType
-  entityId: string
-  entityName: string
+export interface Activity {
+  id?: number
+  type: string
   description: string
-  userName: string
+  entity_type?: string
+  entity_id?: number
+  metadata?: any
+  created_by?: number
+  created_at?: string
+  updated_at?: string
 }
 
-export async function logActivity({
-  actionType,
-  entityType,
-  entityId,
-  entityName,
-  description,
-  userName,
-}: LogActivityProps) {
+export async function logActivity(activity: Omit<Activity, 'id' | 'created_at' | 'updated_at'>) {
   try {
-    const supabase = createClient()
+    console.log('📝 Logging activity via PostgreSQL:', activity.type)
 
-    const { error } = await supabase.from("activities").insert({
-      action_type: actionType,
-      entity_type: entityType,
-      entity_id: entityId,
-      entity_name: entityName,
-      description: description,
-      user_name: userName,
-    })
+    const result = await query(`
+      INSERT INTO activities (
+        action_type, description, entity_type, entity_id, 
+        entity_name, user_name
+      ) VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING *
+    `, [
+      activity.type,
+      activity.description,
+      activity.entity_type || null,
+      activity.entity_id?.toString() || null,
+      activity.entity_type || 'unknown',
+      'System'
+    ])
 
-    if (error) {
-      console.error("Error logging activity:", error)
+    console.log('✅ Activity logged successfully via PostgreSQL')
+    
+    return {
+      success: true,
+      data: result.rows[0]
     }
   } catch (error) {
-    console.error("Error in logActivity:", error)
+    console.error("Error logging activity (PostgreSQL):", error)
+    return {
+      success: false,
+      error: error.message
+    }
   }
 }
 
-export async function getRecentActivities(limit = 5) {
+export async function getRecentActivities(limit: number = 20) {
   try {
-    const supabase = createClient()
+    console.log('📊 Fetching recent activities via PostgreSQL...')
 
-    const { data, error } = await supabase
-      .from("activities")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(limit)
+    const result = await query(`
+      SELECT 
+        a.*,
+        a.action_type as type
+      FROM activities a
+      ORDER BY a.created_at DESC
+      LIMIT $1
+    `, [limit])
 
-    if (error) {
-      console.error("Error fetching activities:", error)
-      return []
-    }
-
-    // Transform the data to match the expected format
-    return data.map((activity) => ({
-      id: activity.id,
-      title: `${formatActionType(activity.action_type)} ${activity.entity_type}`,
-      description: activity.description,
-      timestamp: formatTimeAgo(new Date(activity.created_at)),
-      type: activity.entity_type as ActivityType,
-      user: {
-        name: activity.user_name || "System",
-        initials: getInitials(activity.user_name || "System"),
-      },
+    // Process and format activities
+    const activities = result.rows.map(activity => ({
+      ...activity,
+      type: activity.action_type,
+      timestamp: activity.created_at,
+      user: activity.user_name || 'System'
     }))
+
+    console.log('✅ Recent activities fetched successfully via PostgreSQL')
+    
+    return activities
   } catch (error) {
-    console.error("Error in getRecentActivities:", error)
-    // Return mock data if there's an error
+    console.error("Error fetching recent activities (PostgreSQL):", error)
+    
+    // Return fallback mock data
     return [
       {
-        id: "mock-1",
-        title: "System Status",
-        description: "Database connection is currently unavailable",
-        timestamp: "just now",
-        type: "company",
-        user: {
-          name: "System",
-          initials: "SY",
-        },
+        id: 1,
+        type: "lead_created",
+        description: "New lead added",
+        timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
+        user: "System",
+        metadata: {}
       },
+      {
+        id: 2,
+        type: "quotation_sent",
+        description: "Quotation sent to client",
+        timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
+        user: "System",
+        metadata: {}
+      }
     ]
   }
 }
 
-// Helper function to format action type
-function formatActionType(actionType: string): string {
-  switch (actionType) {
-    case "create":
-      return "New"
-    case "update":
-      return "Updated"
-    case "delete":
-      return "Deleted"
-    case "status_change":
-      return "Status Changed"
-    case "assignment":
-      return "Assigned"
-    default:
-      return "Modified"
+export async function getActivitiesByEntity(entityType: string, entityId: number, limit: number = 10) {
+  try {
+    console.log(`📊 Fetching activities for ${entityType}:${entityId} via PostgreSQL...`)
+
+    const result = await query(`
+      SELECT 
+        a.*,
+        a.action_type as type
+      FROM activities a
+      WHERE a.entity_type = $1 AND a.entity_id = $2
+      ORDER BY a.created_at DESC
+      LIMIT $3
+    `, [entityType, entityId.toString(), limit])
+
+    const activities = result.rows.map(activity => ({
+      ...activity,
+      type: activity.action_type,
+      timestamp: activity.created_at,
+      user: activity.user_name || 'System'
+    }))
+
+    console.log('✅ Entity activities fetched successfully via PostgreSQL')
+    
+    return {
+      success: true,
+      data: activities
+    }
+  } catch (error) {
+    console.error("Error fetching entity activities (PostgreSQL):", error)
+    return {
+      success: false,
+      error: error.message,
+      data: []
+    }
   }
 }
 
-// Helper function to format time ago
-function formatTimeAgo(date: Date) {
-  const now = new Date()
-  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000)
+export async function getActivityStats() {
+  try {
+    console.log('📊 Fetching activity stats via PostgreSQL...')
 
-  if (diffInSeconds < 60) {
-    return `${diffInSeconds} seconds ago`
+    const result = await query(`
+      SELECT 
+        action_type as type,
+        COUNT(*) as count,
+        DATE_TRUNC('day', created_at) as day
+      FROM activities 
+      WHERE created_at >= NOW() - INTERVAL '7 days'
+      GROUP BY action_type, DATE_TRUNC('day', created_at)
+      ORDER BY day DESC, count DESC
+    `)
+
+    console.log('✅ Activity stats fetched successfully via PostgreSQL')
+    
+    return {
+      success: true,
+      data: result.rows
+    }
+  } catch (error) {
+    console.error("Error fetching activity stats (PostgreSQL):", error)
+    return {
+      success: false,
+      error: error.message,
+      data: []
+    }
   }
-
-  const diffInMinutes = Math.floor(diffInSeconds / 60)
-  if (diffInMinutes < 60) {
-    return `${diffInMinutes} minute${diffInMinutes > 1 ? "s" : ""} ago`
-  }
-
-  const diffInHours = Math.floor(diffInMinutes / 60)
-  if (diffInHours < 24) {
-    return `${diffInHours} hour${diffInHours > 1 ? "s" : ""} ago`
-  }
-
-  const diffInDays = Math.floor(diffInHours / 24)
-  if (diffInDays < 30) {
-    return `${diffInDays} day${diffInDays > 1 ? "s" : ""} ago`
-  }
-
-  const diffInMonths = Math.floor(diffInDays / 30)
-  return `${diffInMonths} month${diffInMonths > 1 ? "s" : ""} ago`
-}
-
-// Helper function to get initials from name
-function getInitials(name: string) {
-  return name
-    .split(" ")
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase()
-    .substring(0, 2)
 }

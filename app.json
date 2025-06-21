@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "OOAK Call Manager Pro",
+    "slug": "ooak-call-manager-pro",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "splash": {
+      "backgroundColor": "#2196F3"
+    },
+    "updates": {
+      "enabled": false
+    },
+    "plugins": [
+      "expo-dev-client"
+    ]
+  }
+} 

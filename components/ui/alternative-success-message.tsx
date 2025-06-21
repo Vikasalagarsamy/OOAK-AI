@@ -1,9 +1,11 @@
 "use client"
 
+import React from "react"
 import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { CheckCircle, ThumbsUp, Award } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
 type AnimationStyle = "fade" | "slide" | "scale" | "bounce"
 type IconType = "check" | "thumbs-up" | "award"
@@ -12,7 +14,7 @@ interface AlternativeSuccessMessageProps {
   message: string
   subMessage?: string
   duration?: number
-  visible: boolean
+  visible?: boolean
   onClose?: () => void
   className?: string
   animationStyle?: AnimationStyle
@@ -80,59 +82,9 @@ export function AlternativeSuccessMessage({
   }, [visible, duration, onClose])
 
   return (
-    <AnimatePresence>
-      {isVisible && (
-        <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none">
-          <motion.div
-            initial={animation.initial}
-            animate={animation.animate}
-            exit={animation.exit}
-            transition={animation.transition}
-            className={cn(
-              "bg-white dark:bg-gray-800 shadow-lg rounded-lg p-6 max-w-md mx-auto pointer-events-auto",
-              "border-l-4 border-green-500",
-              className,
-            )}
-          >
-            <div className="flex items-start space-x-4">
-              <motion.div
-                initial={{ scale: 0, rotate: -10 }}
-                animate={{ scale: 1, rotate: 0 }}
-                transition={{ delay: 0.2, type: "spring", stiffness: 400, damping: 10 }}
-                className="bg-green-100 dark:bg-green-900 p-2 rounded-full"
-              >
-                <IconComponent className="h-6 w-6 text-green-600 dark:text-green-300" />
-              </motion.div>
-              <div className="flex-1">
-                <motion.h3
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.1, duration: 0.4 }}
-                  className="text-lg font-semibold text-gray-900 dark:text-gray-100"
-                >
-                  {message}
-                </motion.h3>
-                {subMessage && (
-                  <motion.p
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 0.8 }}
-                    transition={{ delay: 0.3, duration: 0.4 }}
-                    className="text-sm text-gray-600 dark:text-gray-300 mt-1"
-                  >
-                    {subMessage}
-                  </motion.p>
-                )}
-              </div>
-            </div>
-            <motion.div
-              className="h-1 bg-green-500 mt-4 rounded-full"
-              initial={{ width: "100%" }}
-              animate={{ width: "0%" }}
-              transition={{ duration: duration / 1000, ease: "linear" }}
-            />
-          </motion.div>
-        </div>
-      )}
-    </AnimatePresence>
+    <Alert className="bg-green-50 border-green-200">
+      <CheckCircle className="h-4 w-4 text-green-600" />
+      <AlertDescription className="text-green-700">{message}</AlertDescription>
+    </Alert>
   )
 }

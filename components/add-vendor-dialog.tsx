@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
-import { supabase } from "@/lib/supabase"
+import { query } from "@/lib/postgresql-client"
 import type { VendorFormData } from "@/types/vendor"
 import { generateVendorCode, isVendorCodeUnique } from "@/utils/vendor-code-generator"
 import { Button } from "@/components/ui/button"
@@ -116,16 +116,39 @@ export function AddVendorDialog({ open, onOpenChange, onVendorAdded }: AddVendor
         ...data,
       }
 
-      const { error } = await supabase.from("vendors").insert(vendorData)
+      // Insert vendor using PostgreSQL
+      await query(
+        `INSERT INTO vendors (
+          vendor_code, name, contact_person, email, phone, address, 
+          city, state, postal_code, country, category, tax_id, 
+          payment_terms, website, notes, status
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+        [
+          vendorData.vendor_code,
+          vendorData.name,
+          vendorData.contact_person,
+          vendorData.email,
+          vendorData.phone,
+          vendorData.address,
+          vendorData.city,
+          vendorData.state,
+          vendorData.postal_code,
+          vendorData.country,
+          vendorData.category,
+          vendorData.tax_id || null,
+          vendorData.payment_terms || null,
+          vendorData.website || null,
+          vendorData.notes || null,
+          vendorData.status
+        ]
+      )
 
-      if (error) {
-        throw error
-      }
+      console.log('✅ Vendor added successfully:', vendorData.name)
 
       onVendorAdded()
       form.reset()
     } catch (error: any) {
-      console.error("Error adding vendor:", error)
+      console.error("❌ Error adding vendor:", error)
       toast({
         title: "Error",
         description: error.message || "Failed to add vendor. Please try again.",

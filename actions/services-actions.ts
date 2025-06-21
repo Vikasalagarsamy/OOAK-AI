@@ -1,64 +1,80 @@
 "use server"
 
-import { createClient } from "@/lib/supabase/server"
+import { query, transaction } from "@/lib/postgresql-client"
 import { revalidatePath } from "next/cache"
 import type { Service, ServiceFormData, ServiceFilters } from "@/types/services"
 import { getCurrentUser } from "@/lib/auth-utils"
 
-export async function getServices(filters?: ServiceFilters): Promise<Service[]> {
-  const supabase = createClient()
+/**
+ * SERVICES ACTIONS - NOW 100% POSTGRESQL
+ * 
+ * Complete migration from Supabase to PostgreSQL
+ * - Direct PostgreSQL queries for CRUD operations
+ * - Enhanced error handling and logging
+ * - Service management with package pricing support
+ * - Bulk import capabilities with transaction support
+ * - All Supabase dependencies eliminated
+ */
 
+export async function getServices(filters?: ServiceFilters): Promise<Service[]> {
   try {
-    let query = supabase
-      .from("services")
-      .select("*")
-      .order("created_at", { ascending: false })
+    console.log('🔍 Fetching services via PostgreSQL...')
+    
+    let queryText = `
+      SELECT * FROM services 
+      WHERE 1=1
+    `
+    const params: any[] = []
+    let paramCount = 0
 
     // Apply filters
     if (filters?.status) {
-      query = query.eq("status", filters.status)
+      paramCount++
+      queryText += ` AND status = $${paramCount}`
+      params.push(filters.status)
     }
 
     if (filters?.category) {
-      query = query.eq("category", filters.category)
+      paramCount++
+      queryText += ` AND category = $${paramCount}`
+      params.push(filters.category)
     }
 
     if (filters?.search) {
-      query = query.ilike("servicename", `%${filters.search}%`)
+      paramCount++
+      queryText += ` AND servicename ILIKE $${paramCount}`
+      params.push(`%${filters.search}%`)
     }
 
-    const { data, error } = await query
+    queryText += ` ORDER BY created_at DESC`
 
-    if (error) {
-      console.error("Error fetching services:", error)
-      throw new Error(`Failed to fetch services: ${error.message}`)
-    }
-
-    return data || []
+    const result = await query(queryText, params)
+    
+    console.log(`✅ Found ${result.rows.length} services`)
+    return result.rows || []
   } catch (error) {
-    console.error("Error in getServices:", error)
+    console.error("❌ Error in getServices:", error)
     return []
   }
 }
 
 export async function getServiceById(id: number): Promise<Service | null> {
-  const supabase = createClient()
-
   try {
-    const { data, error } = await supabase
-      .from("services")
-      .select("*")
-      .eq("id", id)
-      .single()
+    console.log(`🔍 Fetching service by ID: ${id}`)
+    
+    const result = await query(`
+      SELECT * FROM services WHERE id = $1
+    `, [id])
 
-    if (error) {
-      console.error("Error fetching service:", error)
+    if (result.rows.length === 0) {
+      console.log(`⚠️ Service not found with ID: ${id}`)
       return null
     }
 
-    return data as Service
+    console.log(`✅ Found service: ${result.rows[0].servicename}`)
+    return result.rows[0] as Service
   } catch (error) {
-    console.error("Error in getServiceById:", error)
+    console.error("❌ Error in getServiceById:", error)
     return null
   }
 }
@@ -75,50 +91,45 @@ export async function createService(
     }
   }
 ): Promise<{ success: boolean; message: string; id?: number }> {
-  const supabase = createClient()
-
   try {
+    console.log('➕ Creating new service via PostgreSQL...')
+    
     const currentUser = await getCurrentUser()
     if (!currentUser) {
       return { success: false, message: "Authentication required" }
     }
 
-    const serviceData = {
-      servicename: formData.servicename.trim(),
-      status: formData.status,
-      description: formData.description?.trim() || null,
-      category: formData.category || null,
-      price: formData.price || null,
-      unit: formData.unit?.trim() || null,
-      basic_price: formData.basic_price || null,
-      premium_price: formData.premium_price || null,
-      elite_price: formData.elite_price || null,
-      package_included: formData.package_included || null,
-      created_at: new Date().toISOString(),
-    }
+    const result = await query(`
+      INSERT INTO services (
+        servicename, status, description, category, price, unit,
+        basic_price, premium_price, elite_price, package_included, created_at
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW()
+      ) RETURNING *
+    `, [
+      formData.servicename.trim(),
+      formData.status,
+      formData.description?.trim() || null,
+      formData.category || null,
+      formData.price || null,
+      formData.unit?.trim() || null,
+      formData.basic_price || null,
+      formData.premium_price || null,
+      formData.elite_price || null,
+      formData.package_included ? JSON.stringify(formData.package_included) : null
+    ])
 
-    const { data, error } = await supabase
-      .from("services")
-      .insert(serviceData)
-      .select()
-      .single()
-
-    if (error) {
-      console.error("Error creating service:", error)
-      return {
-        success: false,
-        message: `Failed to create service: ${error.message}`,
-      }
-    }
+    const createdService = result.rows[0]
+    console.log(`✅ Service created successfully: ${createdService.servicename} (ID: ${createdService.id})`)
 
     revalidatePath("/events/services")
     return {
       success: true,
       message: "Service created successfully",
-      id: data.id,
+      id: createdService.id,
     }
   } catch (error) {
-    console.error("Error creating service:", error)
+    console.error("❌ Error creating service:", error)
     return {
       success: false,
       message: "An unexpected error occurred",
@@ -139,40 +150,51 @@ export async function updateService(
     }
   }
 ): Promise<{ success: boolean; message: string }> {
-  const supabase = createClient()
-
   try {
+    console.log(`📝 Updating service ID: ${id} via PostgreSQL...`)
+    
     const currentUser = await getCurrentUser()
     if (!currentUser) {
       return { success: false, message: "Authentication required" }
     }
 
-    const updateData = {
-      servicename: formData.servicename.trim(),
-      status: formData.status,
-      description: formData.description?.trim() || null,
-      category: formData.category || null,
-      price: formData.price || null,
-      unit: formData.unit?.trim() || null,
-      basic_price: formData.basic_price || null,
-      premium_price: formData.premium_price || null,
-      elite_price: formData.elite_price || null,
-      package_included: formData.package_included || null,
-      updated_at: new Date().toISOString(),
-    }
+    const result = await query(`
+      UPDATE services SET
+        servicename = $1,
+        status = $2,
+        description = $3,
+        category = $4,
+        price = $5,
+        unit = $6,
+        basic_price = $7,
+        premium_price = $8,
+        elite_price = $9,
+        package_included = $10,
+        updated_at = NOW()
+      WHERE id = $11
+      RETURNING *
+    `, [
+      formData.servicename.trim(),
+      formData.status,
+      formData.description?.trim() || null,
+      formData.category || null,
+      formData.price || null,
+      formData.unit?.trim() || null,
+      formData.basic_price || null,
+      formData.premium_price || null,
+      formData.elite_price || null,
+      formData.package_included ? JSON.stringify(formData.package_included) : null,
+      id
+    ])
 
-    const { error } = await supabase
-      .from("services")
-      .update(updateData)
-      .eq("id", id)
-
-    if (error) {
-      console.error("Error updating service:", error)
+    if (result.rows.length === 0) {
       return {
         success: false,
-        message: `Failed to update service: ${error.message}`,
+        message: "Service not found or no changes made",
       }
     }
+
+    console.log(`✅ Service updated successfully: ${result.rows[0].servicename}`)
 
     revalidatePath("/events/services")
     return {
@@ -180,7 +202,7 @@ export async function updateService(
       message: "Service updated successfully",
     }
   } catch (error) {
-    console.error("Error updating service:", error)
+    console.error("❌ Error updating service:", error)
     return {
       success: false,
       message: "An unexpected error occurred",
@@ -191,26 +213,26 @@ export async function updateService(
 export async function deleteService(
   id: number
 ): Promise<{ success: boolean; message: string }> {
-  const supabase = createClient()
-
   try {
+    console.log(`🗑️ Deleting service ID: ${id} via PostgreSQL...`)
+    
     const currentUser = await getCurrentUser()
     if (!currentUser) {
       return { success: false, message: "Authentication required" }
     }
 
-    const { error } = await supabase
-      .from("services")
-      .delete()
-      .eq("id", id)
+    const result = await query(`
+      DELETE FROM services WHERE id = $1 RETURNING *
+    `, [id])
 
-    if (error) {
-      console.error("Error deleting service:", error)
+    if (result.rows.length === 0) {
       return {
         success: false,
-        message: `Failed to delete service: ${error.message}`,
+        message: "Service not found",
       }
     }
+
+    console.log(`✅ Service deleted successfully: ${result.rows[0].servicename}`)
 
     revalidatePath("/events/services")
     return {
@@ -218,7 +240,7 @@ export async function deleteService(
       message: "Service deleted successfully",
     }
   } catch (error) {
-    console.error("Error deleting service:", error)
+    console.error("❌ Error deleting service:", error)
     return {
       success: false,
       message: "An unexpected error occurred",
@@ -229,46 +251,50 @@ export async function deleteService(
 export async function bulkImportServices(
   services: Omit<ServiceFormData, "status">[]
 ): Promise<{ success: boolean; message: string; imported: number }> {
-  const supabase = createClient()
-
   try {
+    console.log(`📦 Bulk importing ${services.length} services via PostgreSQL...`)
+    
     const currentUser = await getCurrentUser()
     if (!currentUser) {
       return { success: false, message: "Authentication required", imported: 0 }
     }
 
-    const servicesData = services.map(service => ({
-      servicename: service.servicename.trim(),
-      status: "Active" as const,
-      description: service.description?.trim() || null,
-      category: service.category || null,
-      price: service.price || null,
-      unit: service.unit?.trim() || null,
-      created_at: new Date().toISOString(),
-    }))
+    let importedCount = 0
 
-    const { data, error } = await supabase
-      .from("services")
-      .insert(servicesData)
-      .select()
-
-    if (error) {
-      console.error("Error importing services:", error)
-      return {
-        success: false,
-        message: `Failed to import services: ${error.message}`,
-        imported: 0,
+    // Use transaction for atomic bulk import
+    await transaction(async (client) => {
+      for (const service of services) {
+        const result = await client.query(`
+          INSERT INTO services (
+            servicename, status, description, category, price, unit, created_at
+          ) VALUES (
+            $1, $2, $3, $4, $5, $6, NOW()
+          ) RETURNING id
+        `, [
+          service.servicename.trim(),
+          "Active",
+          service.description?.trim() || null,
+          service.category || null,
+          service.price || null,
+          service.unit?.trim() || null
+        ])
+        
+        if (result.rows.length > 0) {
+          importedCount++
+        }
       }
-    }
+    })
+
+    console.log(`✅ Bulk import completed: ${importedCount}/${services.length} services imported`)
 
     revalidatePath("/events/services")
     return {
       success: true,
-      message: `Successfully imported ${data.length} services`,
-      imported: data.length,
+      message: `Successfully imported ${importedCount} services`,
+      imported: importedCount,
     }
   } catch (error) {
-    console.error("Error importing services:", error)
+    console.error("❌ Error importing services:", error)
     return {
       success: false,
       message: "An unexpected error occurred during import",
@@ -279,22 +305,18 @@ export async function bulkImportServices(
 
 // Enhanced Services with Package Pricing
 export async function getServicesWithPackages(): Promise<Service[]> {
-  const supabase = createClient()
-
   try {
-    const { data, error } = await supabase
-      .from("services")
-      .select("*")
-      .order("servicename", { ascending: true })
+    console.log('🎁 Fetching services with package pricing via PostgreSQL...')
+    
+    const result = await query(`
+      SELECT * FROM services 
+      ORDER BY servicename ASC
+    `)
 
-    if (error) {
-      console.error("Error fetching services with packages:", error)
-      throw new Error(`Failed to fetch services with packages: ${error.message}`)
-    }
-
-    return data || []
+    console.log(`✅ Found ${result.rows.length} services with package pricing`)
+    return result.rows || []
   } catch (error) {
-    console.error("Error in getServicesWithPackages:", error)
+    console.error("❌ Error in getServicesWithPackages:", error)
     return []
   }
 } 

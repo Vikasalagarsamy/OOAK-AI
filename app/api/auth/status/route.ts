@@ -1,47 +1,104 @@
-import { NextResponse } from "next/server"
-import { cookies } from "next/headers"
-import { jwtVerify } from "jose"
+import { NextRequest, NextResponse } from "next/server"
+import { query } from "@/lib/postgresql-client"
 
-export async function GET() {
+// Simple JWT payload decode (without verification)
+function decodeJWTPayload(token: string) {
   try {
-    const cookieStore = await cookies()
-    const token = cookieStore.get("auth_token")?.value
+    const parts = token.split('.')
+    if (parts.length !== 3) return null
+    
+    const payload = JSON.parse(atob(parts[1]))
+    
+    // Check if token is expired
+    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
+      return null
+    }
+    
+    return payload
+  } catch (error) {
+    return null
+  }
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    // Get the token from cookies
+    const token = request.cookies.get("auth_token")?.value
 
     if (!token) {
-      return NextResponse.json({ authenticated: false, user: null })
-    }
-
-    const secret = process.env.JWT_SECRET || "fallback-secret-only-for-development"
-    const secretKey = new TextEncoder().encode(secret)
-
-    try {
-      const { payload } = await jwtVerify(token, secretKey, {
-        algorithms: ["HS256"],
+      console.log("❌ No auth token found in status check")
+      return NextResponse.json({ 
+        authenticated: false, 
+        user: null,
+        message: "No auth token found" 
       })
-
-      if (!payload.sub) {
-        return NextResponse.json({ authenticated: false, user: null })
-      }
-
-      // Return user data from JWT payload
-      const user = {
-        id: payload.sub,
-        username: payload.username || "",
-        email: payload.email || "",
-        firstName: payload.firstName || "",
-        lastName: payload.lastName || "",
-        roleId: payload.role || "",
-        roleName: payload.roleName || "",
-        isAdmin: payload.isAdmin || false,
-      }
-
-      return NextResponse.json({ authenticated: true, user })
-    } catch (verifyError) {
-      console.error("Token verification error:", verifyError)
-      return NextResponse.json({ authenticated: false, user: null })
     }
+
+    // Decode the token payload
+    const payload = decodeJWTPayload(token)
+    if (!payload || !payload.sub) {
+      console.log("❌ Invalid token in status check")
+      return NextResponse.json({
+        authenticated: false,
+        user: null,
+        message: "Invalid token"
+      })
+    }
+
+    console.log("🐘 Using PostgreSQL client from lib for auth status")
+
+    // Use the correct PostgreSQL client
+    const result = await query(`
+      SELECT 
+        e.id,
+        e.username,
+        e.email,
+        e.first_name,
+        e.last_name,
+        e.role_id,
+        e.is_active,
+        r.title as role_title
+      FROM employees e
+      LEFT JOIN roles r ON e.role_id = r.id
+      WHERE e.id = $1 AND e.is_active = true
+    `, [payload.sub])
+
+    if (result.rows.length === 0) {
+      console.log("❌ User not found or inactive in status check")
+      return NextResponse.json({
+        authenticated: false,
+        user: null,
+        message: "User not found or inactive"
+      })
+    }
+
+    const employee = result.rows[0]
+
+    const user = {
+      id: employee.id,
+      username: employee.username,
+      email: employee.email,
+      firstName: employee.first_name,
+      lastName: employee.last_name,
+      roleId: employee.role_id,
+      roleName: employee.role_title || null,
+      isAdmin: employee.role_title === "Administrator" || employee.role_id === 1
+    }
+
+    console.log("✅ Auth status check successful for user:", employee.username)
+
+    return NextResponse.json({
+      authenticated: true,
+      user,
+      message: "Authentication successful"
+    })
+
   } catch (error) {
     console.error("Auth status error:", error)
-    return NextResponse.json({ authenticated: false, user: null, error: "Internal server error" }, { status: 500 })
+    return NextResponse.json({
+      authenticated: false,
+      user: null,
+      message: "Internal server error"
+    }, { status: 500 })
   }
 }

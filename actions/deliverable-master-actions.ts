@@ -1,6 +1,6 @@
 "use server"
 
-import { createClient } from "@/lib/supabase/server"
+import { query, transaction } from "@/lib/postgresql-client"
 import { revalidatePath } from "next/cache"
 
 export type DeliverableMaster = {
@@ -22,63 +22,57 @@ export type DeliverableMasterFormData = {
  * Get all deliverable master records
  */
 export async function getDeliverableMaster(): Promise<DeliverableMaster[]> {
-  const supabase = createClient()
-  
-  const { data, error } = await supabase
-    .from("deliverable_master")
-    .select("*")
-    .order("category", { ascending: true })
-    .order("type", { ascending: true })
-    .order("deliverable_name", { ascending: true })
+  try {
+    console.log("📋 Fetching deliverable master using PostgreSQL...")
+    
+    const result = await query(
+      `SELECT * FROM deliverable_master 
+       ORDER BY category ASC, type ASC, deliverable_name ASC`
+    )
 
-  if (error) {
+    return result.rows || []
+  } catch (error) {
     console.error("Error fetching deliverable master:", error)
     throw new Error("Failed to fetch deliverable master data")
   }
-
-  return data || []
 }
 
 /**
  * Get deliverable master records by category
  */
 export async function getDeliverableMasterByCategory(category: "Main" | "Optional"): Promise<DeliverableMaster[]> {
-  const supabase = createClient()
-  
-  const { data, error } = await supabase
-    .from("deliverable_master")
-    .select("*")
-    .eq("category", category)
-    .order("type", { ascending: true })
-    .order("deliverable_name", { ascending: true })
+  try {
+    const result = await query(
+      `SELECT * FROM deliverable_master 
+       WHERE category = $1 
+       ORDER BY type ASC, deliverable_name ASC`,
+      [category]
+    )
 
-  if (error) {
+    return result.rows || []
+  } catch (error) {
     console.error("Error fetching deliverable master by category:", error)
     throw new Error("Failed to fetch deliverable master data")
   }
-
-  return data || []
 }
 
 /**
  * Get deliverable master records by type
  */
 export async function getDeliverableMasterByType(type: "Photo" | "Video"): Promise<DeliverableMaster[]> {
-  const supabase = createClient()
-  
-  const { data, error } = await supabase
-    .from("deliverable_master")
-    .select("*")
-    .eq("type", type)
-    .order("category", { ascending: true })
-    .order("deliverable_name", { ascending: true })
+  try {
+    const result = await query(
+      `SELECT * FROM deliverable_master 
+       WHERE type = $1 
+       ORDER BY category ASC, deliverable_name ASC`,
+      [type]
+    )
 
-  if (error) {
+    return result.rows || []
+  } catch (error) {
     console.error("Error fetching deliverable master by type:", error)
     throw new Error("Failed to fetch deliverable master data")
   }
-
-  return data || []
 }
 
 /**
@@ -88,21 +82,19 @@ export async function getDeliverableMasterByCategoryAndType(
   category: "Main" | "Optional",
   type: "Photo" | "Video"
 ): Promise<DeliverableMaster[]> {
-  const supabase = createClient()
-  
-  const { data, error } = await supabase
-    .from("deliverable_master")
-    .select("*")
-    .eq("category", category)
-    .eq("type", type)
-    .order("deliverable_name", { ascending: true })
+  try {
+    const result = await query(
+      `SELECT * FROM deliverable_master 
+       WHERE category = $1 AND type = $2 
+       ORDER BY deliverable_name ASC`,
+      [category, type]
+    )
 
-  if (error) {
+    return result.rows || []
+  } catch (error) {
     console.error("Error fetching deliverable master by category and type:", error)
     throw new Error("Failed to fetch deliverable master data")
   }
-
-  return data || []
 }
 
 /**
@@ -114,38 +106,30 @@ export async function createDeliverableMaster(formData: DeliverableMasterFormDat
   data?: DeliverableMaster
 }> {
   try {
-    const supabase = createClient()
+    console.log("➕ Creating deliverable master using PostgreSQL...")
 
     // Check if the deliverable name already exists for this category and type
-    const { data: existing } = await supabase
-      .from("deliverable_master")
-      .select("id")
-      .eq("category", formData.category)
-      .eq("type", formData.type)
-      .eq("deliverable_name", formData.deliverable_name)
-      .single()
+    const existingResult = await query(
+      `SELECT id FROM deliverable_master 
+       WHERE category = $1 AND type = $2 AND deliverable_name = $3`,
+      [formData.category, formData.type, formData.deliverable_name]
+    )
 
-    if (existing) {
+    if (existingResult.rows && existingResult.rows.length > 0) {
       return {
         success: false,
         message: "A deliverable with this name already exists for the selected category and type",
       }
     }
 
-    const { data, error } = await supabase
-      .from("deliverable_master")
-      .insert([
-        {
-          category: formData.category,
-          type: formData.type,
-          deliverable_name: formData.deliverable_name,
-        },
-      ])
-      .select()
-      .single()
+    const result = await query(
+      `INSERT INTO deliverable_master (category, type, deliverable_name) 
+       VALUES ($1, $2, $3) 
+       RETURNING *`,
+      [formData.category, formData.type, formData.deliverable_name]
+    )
 
-    if (error) {
-      console.error("Error creating deliverable master:", error)
+    if (!result.rows || result.rows.length === 0) {
       return {
         success: false,
         message: "Failed to create deliverable master record",
@@ -157,7 +141,7 @@ export async function createDeliverableMaster(formData: DeliverableMasterFormDat
     return {
       success: true,
       message: "Deliverable master record created successfully",
-      data,
+      data: result.rows[0],
     }
   } catch (error) {
     console.error("Error in createDeliverableMaster:", error)
@@ -180,39 +164,31 @@ export async function updateDeliverableMaster(
   data?: DeliverableMaster
 }> {
   try {
-    const supabase = createClient()
+    console.log(`✏️ Updating deliverable master ${id} using PostgreSQL...`)
 
     // Check if another record with the same name exists (excluding current record)
-    const { data: existing } = await supabase
-      .from("deliverable_master")
-      .select("id")
-      .eq("category", formData.category)
-      .eq("type", formData.type)
-      .eq("deliverable_name", formData.deliverable_name)
-      .neq("id", id)
-      .single()
+    const existingResult = await query(
+      `SELECT id FROM deliverable_master 
+       WHERE category = $1 AND type = $2 AND deliverable_name = $3 AND id != $4`,
+      [formData.category, formData.type, formData.deliverable_name, id]
+    )
 
-    if (existing) {
+    if (existingResult.rows && existingResult.rows.length > 0) {
       return {
         success: false,
         message: "A deliverable with this name already exists for the selected category and type",
       }
     }
 
-    const { data, error } = await supabase
-      .from("deliverable_master")
-      .update({
-        category: formData.category,
-        type: formData.type,
-        deliverable_name: formData.deliverable_name,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", id)
-      .select()
-      .single()
+    const result = await query(
+      `UPDATE deliverable_master 
+       SET category = $1, type = $2, deliverable_name = $3, updated_at = CURRENT_TIMESTAMP 
+       WHERE id = $4 
+       RETURNING *`,
+      [formData.category, formData.type, formData.deliverable_name, id]
+    )
 
-    if (error) {
-      console.error("Error updating deliverable master:", error)
+    if (!result.rows || result.rows.length === 0) {
       return {
         success: false,
         message: "Failed to update deliverable master record",
@@ -224,7 +200,7 @@ export async function updateDeliverableMaster(
     return {
       success: true,
       message: "Deliverable master record updated successfully",
-      data,
+      data: result.rows[0],
     }
   } catch (error) {
     console.error("Error in updateDeliverableMaster:", error)
@@ -243,20 +219,12 @@ export async function deleteDeliverableMaster(id: number): Promise<{
   message: string
 }> {
   try {
-    const supabase = createClient()
+    console.log(`🗑️ Deleting deliverable master ${id} using PostgreSQL...`)
 
-    const { error } = await supabase
-      .from("deliverable_master")
-      .delete()
-      .eq("id", id)
-
-    if (error) {
-      console.error("Error deleting deliverable master:", error)
-      return {
-        success: false,
-        message: "Failed to delete deliverable master record",
-      }
-    }
+    const result = await query(
+      "DELETE FROM deliverable_master WHERE id = $1",
+      [id]
+    )
 
     revalidatePath("/")
     
@@ -277,40 +245,44 @@ export async function deleteDeliverableMaster(id: number): Promise<{
  * Get unique categories from deliverable master
  */
 export async function getDeliverableMasterCategories(): Promise<string[]> {
-  const supabase = createClient()
-  
-  const { data, error } = await supabase
-    .from("deliverable_master")
-    .select("category")
-    .order("category", { ascending: true })
+  try {
+    const result = await query(
+      `SELECT DISTINCT category FROM deliverable_master 
+       ORDER BY category ASC`
+    )
 
-  if (error) {
+    if (!result.rows || result.rows.length === 0) {
+      return ["Main", "Optional"] // Return defaults if no data
+    }
+
+    // Extract unique categories
+    const categories = result.rows.map(row => row.category)
+    return categories.length > 0 ? categories : ["Main", "Optional"]
+  } catch (error) {
     console.error("Error fetching deliverable master categories:", error)
     return ["Main", "Optional"] // Return defaults if error
   }
-
-  // Extract unique categories
-  const categories = [...new Set(data?.map(item => item.category) || [])]
-  return categories.length > 0 ? categories : ["Main", "Optional"]
 }
 
 /**
  * Get unique types from deliverable master
  */
 export async function getDeliverableMasterTypes(): Promise<string[]> {
-  const supabase = createClient()
-  
-  const { data, error } = await supabase
-    .from("deliverable_master")
-    .select("type")
-    .order("type", { ascending: true })
+  try {
+    const result = await query(
+      `SELECT DISTINCT type FROM deliverable_master 
+       ORDER BY type ASC`
+    )
 
-  if (error) {
+    if (!result.rows || result.rows.length === 0) {
+      return ["Photo", "Video"] // Return defaults if no data
+    }
+
+    // Extract unique types
+    const types = result.rows.map(row => row.type)
+    return types.length > 0 ? types : ["Photo", "Video"]
+  } catch (error) {
     console.error("Error fetching deliverable master types:", error)
     return ["Photo", "Video"] // Return defaults if error
   }
-
-  // Extract unique types
-  const types = [...new Set(data?.map(item => item.type) || [])]
-  return types.length > 0 ? types : ["Photo", "Video"]
 } 

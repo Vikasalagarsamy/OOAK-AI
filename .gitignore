@@ -1,27 +1,107 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# dependencies
+# Dependencies
 /node_modules
+/.pnp
+.pnp.js
 
-# next.js
+# Testing
+/coverage
+
+# Next.js
 /.next/
 /out/
 
-# production
+# Production
 /build
 
-# debug
+# Misc
+.DS_Store
+*.pem
+
+# Debug
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files
-.env*
+# Environment files
+.env
+.env*.local
+.env.development
+.env.production
+.env.whatsapp
+.env.workspace
+.env.postgresql
 
-# vercel
+# Vercel
 .vercel
 
-# typescript
+# TypeScript
 *.tsbuildinfo
 next-env.d.ts
+
+# Supabase
+supabase/.temp/
+.supabase/
+
+# Database backups
+backup_*.sql
+*.sql.backup
+
+# Log files
+*.log
+logs/
+whisper-env/
+
+# Process files
+*.txt
+processes.txt
+*-processes.txt
+.production-pids
+
+# Tunnel files
+tunnel-*.yml
+tunnel*.log
+
+# Temporary files
+temp/
+tmp/
+.temp/
+
+# Build artifacts
+build/
+dist/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+Thumbs.db
+
+# Audio/Media files
+uploads/call-recordings/
+*.wav
+*.mp3
+*.m4a
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Node.js cache
+.npm/
+.yarn/
+.pnpm-store/
+
+# Large files
+*.tar.gz
+*.zip
+*.rar
+
+# Sensitive files
+cookies.txt
+*cookies.txt
+secrets.env

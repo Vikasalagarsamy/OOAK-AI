@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
-import { supabase } from "@/lib/supabase"
+import { query } from "@/lib/postgresql-client"
 import type { SupplierFormData } from "@/types/supplier"
 import { generateSupplierCode } from "@/utils/supplier-code-generator"
 import { Button } from "@/components/ui/button"
@@ -103,18 +103,13 @@ export function AddSupplierDialog({ open, onOpenChange, onSupplierAdded }: AddSu
         ...data,
       }
 
-      // Check if the supplier code already exists
-      const { data: existingSupplier, error: checkError } = await supabase
-        .from("suppliers")
-        .select("id")
-        .eq("supplier_code", data.supplier_code)
-        .single()
+      // Check if the supplier code already exists using PostgreSQL
+      const existingSupplierResult = await query(
+        "SELECT id FROM suppliers WHERE supplier_code = $1 LIMIT 1",
+        [data.supplier_code]
+      )
 
-      if (checkError && checkError.code !== "PGRST116") {
-        throw checkError
-      }
-
-      if (existingSupplier) {
+      if (existingSupplierResult.rows.length > 0) {
         // Generate a new code if duplicate
         const newCode = await generateSupplierCode()
         supplierData.supplier_code = newCode
@@ -126,16 +121,40 @@ export function AddSupplierDialog({ open, onOpenChange, onSupplierAdded }: AddSu
         })
       }
 
-      const { error } = await supabase.from("suppliers").insert(supplierData)
+      // Insert the supplier using PostgreSQL
+      const insertResult = await query(
+        `INSERT INTO suppliers (
+          supplier_code, name, contact_person, email, phone, address, 
+          city, state, postal_code, country, category, tax_id, 
+          payment_terms, lead_time, website, notes, status
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+        [
+          supplierData.supplier_code,
+          supplierData.name,
+          supplierData.contact_person,
+          supplierData.email,
+          supplierData.phone,
+          supplierData.address,
+          supplierData.city,
+          supplierData.state,
+          supplierData.postal_code,
+          supplierData.country,
+          supplierData.category,
+          supplierData.tax_id || null,
+          supplierData.payment_terms || null,
+          supplierData.lead_time || null,
+          supplierData.website || null,
+          supplierData.notes || null,
+          supplierData.status
+        ]
+      )
 
-      if (error) {
-        throw error
-      }
+      console.log('✅ Supplier added successfully:', supplierData.name)
 
       onSupplierAdded()
       form.reset()
     } catch (error: any) {
-      console.error("Error adding supplier:", error)
+      console.error("❌ Error adding supplier:", error)
       toast({
         title: "Error",
         description: error.message || "Failed to add supplier. Please try again.",

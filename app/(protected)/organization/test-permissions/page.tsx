@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { getCurrentUser } from "@/actions/auth-actions"
 import { getUserPermissions, hasMenuPermission } from "@/lib/permission-checker"
-import { extractMenuStructure } from "@/lib/menu-extractor"
+import { ENTERPRISE_MENU_CONFIG } from "@/lib/menu-system"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -30,14 +30,13 @@ export default function TestPermissionsPage() {
         setPermissions(userPermissions)
         
         // Test a few key menu permissions
-        const menuStructure = extractMenuStructure()
         const testPermissions: Record<string, boolean> = {}
         
-        for (const section of menuStructure) {
+        for (const section of ENTERPRISE_MENU_CONFIG) {
           testPermissions[section.id] = await hasMenuPermission(section.id, 'view')
           
-          if (section.children) {
-            for (const child of section.children) {
+          if (section.items) {
+            for (const child of section.items) {
               testPermissions[child.id] = await hasMenuPermission(child.id, 'view')
             }
           }
@@ -163,7 +162,7 @@ export default function TestPermissionsPage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {extractMenuStructure().map((section) => (
+            {ENTERPRISE_MENU_CONFIG.map((section) => (
               <div key={section.id} className="border rounded-lg p-4">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-3">
@@ -179,9 +178,9 @@ export default function TestPermissionsPage() {
                   </Badge>
                 </div>
 
-                {section.children && (
+                {section.items && (
                   <div className="ml-4 space-y-2 border-l-2 border-muted pl-4">
-                    {section.children.map((child) => (
+                    {section.items.map((child) => (
                       <div key={child.id} className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <span className="text-sm">{child.name}</span>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import { query } from "@/lib/postgresql-client"
 
 interface FollowUpStats {
   total: number
@@ -21,54 +21,44 @@ export function FollowUpStats() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const supabase = createClientComponentClient()
-
   useEffect(() => {
     async function fetchStats() {
       try {
         setLoading(true)
+        console.log('📊 Fetching follow-up statistics...')
 
-        // Get total count
-        const { count: total, error: totalError } = await supabase
-          .from("lead_followups")
-          .select("*", { count: "exact", head: true })
+        // Get all stats in a single optimized query
+        const result = await query(`
+          SELECT 
+            COUNT(*) as total,
+            COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed,
+            COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending,
+            COUNT(CASE WHEN status = 'pending' AND scheduled_at < NOW() THEN 1 END) as overdue
+          FROM lead_followups
+        `)
 
-        if (totalError) throw totalError
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to fetch follow-up statistics')
+        }
 
-        // Get completed count
-        const { count: completed, error: completedError } = await supabase
-          .from("lead_followups")
-          .select("*", { count: "exact", head: true })
-          .eq("status", "completed")
-
-        if (completedError) throw completedError
-
-        // Get pending count
-        const { count: pending, error: pendingError } = await supabase
-          .from("lead_followups")
-          .select("*", { count: "exact", head: true })
-          .eq("status", "pending")
-
-        if (pendingError) throw pendingError
-
-        // Get overdue count - followups with scheduled_at before now and status not completed
-        const now = new Date().toISOString()
-        const { count: overdue, error: overdueError } = await supabase
-          .from("lead_followups")
-          .select("*", { count: "exact", head: true })
-          .eq("status", "pending")
-          .lt("scheduled_at", now)
-
-        if (overdueError) throw overdueError
-
-        setStats({
-          total: total || 0,
-          completed: completed || 0,
-          pending: pending || 0,
-          overdue: overdue || 0,
-        })
+        if (result.data && result.data.length > 0) {
+          const statsData = result.data[0]
+          setStats({
+            total: parseInt(statsData.total) || 0,
+            completed: parseInt(statsData.completed) || 0,
+            pending: parseInt(statsData.pending) || 0,
+            overdue: parseInt(statsData.overdue) || 0,
+          })
+          
+          console.log('✅ Follow-up stats loaded:', {
+            total: statsData.total,
+            completed: statsData.completed,
+            pending: statsData.pending,
+            overdue: statsData.overdue
+          })
+        }
       } catch (err) {
-        console.error("Error fetching follow-up stats:", err)
+        console.error("❌ Error fetching follow-up stats:", err)
         setError("Failed to load follow-up statistics")
       } finally {
         setLoading(false)
@@ -76,7 +66,7 @@ export function FollowUpStats() {
     }
 
     fetchStats()
-  }, [supabase])
+  }, [])
 
   if (error) {
     return (

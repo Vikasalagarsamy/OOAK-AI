@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { query } from '@/lib/postgresql-client'
 import { getCurrentUser } from '@/actions/auth-actions'
 
 // Real-Time Data Synchronization Service
@@ -7,14 +7,11 @@ export class RealtimeSyncService {
   // 🔄 Sync existing quotations to performance metrics
   static async syncQuotationData() {
     try {
-      const supabase = createClient()
       console.log('🔄 Starting real-time data sync...')
 
       // Get all quotations from the correct table
-      const { data: quotations } = await supabase
-        .from('quotations')
-        .select('*')
-        .order('created_at', { ascending: false })
+      const quotationsData = await query(`SELECT * FROM quotations ORDER BY created_at DESC`)
+      const quotations = quotationsData.rows
 
       if (!quotations?.length) {
         console.log('⚠️ No quotations found to sync')
@@ -60,16 +57,50 @@ export class RealtimeSyncService {
         const performanceData = await this.calculatePerformanceMetrics(metrics)
         
         // Upsert performance data
-        const { error } = await supabase
-          .from('sales_performance_metrics')
-          .upsert(performanceData, { 
-            onConflict: 'employee_id,metric_period'
-          })
+        try {
+          await query(`
+            INSERT INTO sales_performance_metrics 
+            (employee_id, metric_period, quotations_created, quotations_converted, 
+             total_revenue_generated, avg_deal_size, avg_conversion_time_days, 
+             follow_ups_completed, client_meetings_held, calls_made, emails_sent, 
+             conversion_rate, activity_score, performance_score, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+            ON CONFLICT (employee_id, metric_period) 
+            DO UPDATE SET 
+              quotations_created = EXCLUDED.quotations_created,
+              quotations_converted = EXCLUDED.quotations_converted,
+              total_revenue_generated = EXCLUDED.total_revenue_generated,
+              avg_deal_size = EXCLUDED.avg_deal_size,
+              avg_conversion_time_days = EXCLUDED.avg_conversion_time_days,
+              follow_ups_completed = EXCLUDED.follow_ups_completed,
+              client_meetings_held = EXCLUDED.client_meetings_held,
+              calls_made = EXCLUDED.calls_made,
+              emails_sent = EXCLUDED.emails_sent,
+              conversion_rate = EXCLUDED.conversion_rate,
+              activity_score = EXCLUDED.activity_score,
+              performance_score = EXCLUDED.performance_score,
+              created_at = EXCLUDED.created_at
+          `, [
+            performanceData.employee_id,
+            performanceData.metric_period,
+            performanceData.quotations_created,
+            performanceData.quotations_converted,
+            performanceData.total_revenue_generated,
+            performanceData.avg_deal_size,
+            performanceData.avg_conversion_time_days,
+            performanceData.follow_ups_completed,
+            performanceData.client_meetings_held,
+            performanceData.calls_made,
+            performanceData.emails_sent,
+            performanceData.conversion_rate,
+            performanceData.activity_score,
+            performanceData.performance_score,
+            performanceData.created_at
+          ])
 
-        if (!error) {
           syncedCount++
           console.log(`✅ Synced performance for ${metrics.employee_id} - ${metrics.metric_period}`)
-        } else {
+        } catch (error) {
           console.error(`❌ Error syncing ${key}:`, error)
         }
       }
@@ -202,7 +233,6 @@ export class RealtimeSyncService {
   // 👥 Sync team members from existing users
   static async syncTeamMembers() {
     try {
-      const supabase = createClient()
       console.log('👥 Syncing team members...')
 
       // Get current user info for proper display
@@ -210,26 +240,19 @@ export class RealtimeSyncService {
       console.log('🔍 Current user for sync:', currentUser?.username)
 
       // Get unique sales reps from quotations
-      const { data: quotations } = await supabase
-        .from('quotations')
-        .select('created_by')
-        .not('created_by', 'is', null)
+      const quotationsData = await query(`SELECT DISTINCT created_by FROM quotations WHERE created_by IS NOT NULL`)
 
-      if (!quotations?.length) return { success: false, message: 'No quotations found' }
+      if (!quotationsData.rows?.length) return { success: false, message: 'No quotations found' }
 
-      const uniqueReps = [...new Set(quotations.map(q => q.created_by).filter(Boolean))]
+      const uniqueReps = quotationsData.rows.map(q => q.created_by).filter(Boolean)
       console.log(`👥 Found ${uniqueReps.length} unique sales reps`)
 
       let syncedCount = 0
       for (const repId of uniqueReps) {
         // Check if team member already exists
-        const { data: existing } = await supabase
-          .from('sales_team_members')
-          .select('employee_id')
-          .eq('employee_id', repId)
-          .single()
+        const existingData = await query(`SELECT employee_id FROM sales_team_members WHERE employee_id = $1`, [repId])
 
-        if (!existing) {
+        if (!existingData.rows || existingData.rows.length === 0) {
           // Create new team member record with real user data
           const displayName = repId === currentUser?.id ? 
             currentUser.username || `User ${currentUser?.id}` : 
@@ -239,23 +262,25 @@ export class RealtimeSyncService {
             `${currentUser.username}@company.com` : 
             `sales.rep.${repId.slice(-4)}@company.com`
 
-          const { error } = await supabase
-            .from('sales_team_members')
-            .insert({
-              employee_id: repId,
-              full_name: displayName,
-              email: email,
-              role: 'sales_rep',
-              hire_date: '2023-01-01', // Default date
-              territory: 'General',
-              target_monthly: 500000,
-              is_active: true
-            })
+          try {
+            await query(`
+              INSERT INTO sales_team_members 
+              (employee_id, full_name, email, role, hire_date, territory, target_monthly, is_active)
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            `, [
+              repId,
+              displayName,
+              email,
+              'sales_rep',
+              '2023-01-01', // Default date
+              'General',
+              500000,
+              true
+            ])
 
-          if (!error) {
             syncedCount++
             console.log(`✅ Created team member: ${displayName} (${repId})`)
-          } else {
+          } catch (error) {
             console.error(`❌ Error creating team member ${repId}:`, error)
           }
         }
@@ -288,16 +313,11 @@ export class RealtimeSyncService {
   // 📊 Get real-time performance summary
   static async getRealtimePerformanceSummary() {
     try {
-      const supabase = createClient()
-      
-      const { data: metrics } = await supabase
-        .from('sales_performance_metrics')
-        .select('*')
-        .order('metric_period', { ascending: false })
+      const metricsData = await query(`SELECT * FROM sales_performance_metrics ORDER BY metric_period DESC`)
+      const quotationsData = await query(`SELECT status, total_amount, created_at FROM quotations`)
 
-      const { data: quotations } = await supabase
-        .from('quotations')
-        .select('status, total_amount, created_at')
+      const metrics = metricsData.rows
+      const quotations = quotationsData.rows
 
       const summary = {
         total_quotations: quotations?.length || 0,

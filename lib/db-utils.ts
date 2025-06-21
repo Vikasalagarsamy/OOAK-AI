@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { query, transaction } from "@/lib/postgresql-client"
 
 /**
  * Safely checks if a table exists in the database
@@ -6,21 +6,16 @@ import { createClient } from "@/lib/supabase/server"
  * @returns Promise<boolean> True if the table exists, false otherwise
  */
 export async function tableExists(tableName: string): Promise<boolean> {
-  const supabase = createClient()
-
   try {
-    const { data, error } = await supabase
-      .from("information_schema.tables")
-      .select("table_name")
-      .eq("table_name", tableName)
-      .maybeSingle()
+    const result = await query(
+      `SELECT table_name 
+       FROM information_schema.tables 
+       WHERE table_name = $1 
+         AND table_schema = 'public'`,
+      [tableName]
+    )
 
-    if (error) {
-      console.error(`Error checking if table ${tableName} exists:`, error)
-      return false
-    }
-
-    return !!data
+    return result.rows && result.rows.length > 0
   } catch (error) {
     console.error(`Exception checking if table ${tableName} exists:`, error)
     return false

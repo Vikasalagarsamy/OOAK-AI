@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { RealtimeSyncService } from '@/lib/realtime-sync-service'
 import { BusinessNotificationService } from '@/lib/business-notification-service'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/postgresql-client'
 import { AIMLService } from '@/lib/ai-ml-service'
 
 // 🕐 Hourly Sync Cron Job
@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     console.log('✅ Team members synced')
 
     // 3. Generate fresh AI insights
-    const supabase = createClient()
+    const { query, transaction } = createClient()
     const { data: teamMembers } = await supabase
       .from('sales_team_members')
       .select('*')
@@ -90,7 +90,7 @@ async function triggerAINotifications() {
 
 // 📊 Check for performance changes and notify
 async function checkPerformanceChanges() {
-  const supabase = createClient()
+  const { query, transaction } = createClient()
   
   // Get current month's performance
   const currentPeriod = new Date().toISOString().slice(0, 7) + '-01'

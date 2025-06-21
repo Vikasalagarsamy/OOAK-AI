@@ -1,4 +1,4 @@
-import { EventsSubmenuFinder } from "@/components/events-submenu-finder"
+import { EventsSubmenuFinder } from "@/components/menu-system/events-submenu-finder"
 
 export default function EventsSubmenuStatusPage() {
   return (

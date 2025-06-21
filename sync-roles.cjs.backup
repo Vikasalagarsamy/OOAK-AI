@@ -1,0 +1,61 @@
+const { createClient } = require('@supabase/supabase-js')
+const { Client } = require('pg')
+require('dotenv').config({ path: '.env.local' })
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+const supabase = createClient(supabaseUrl, supabaseServiceKey)
+
+const localConfig = {
+  user: 'vikasalagarsamy',
+  host: 'localhost',
+  database: 'ooak_local',
+  port: 5432,
+}
+
+async function syncRoles() {
+  console.log('🔄 Syncing roles from remote to local...')
+  
+  const localClient = new Client(localConfig)
+  
+  try {
+    await localClient.connect()
+    
+    // Get roles from remote
+    const { data: roles, error } = await supabase.from('roles').select('*')
+    
+    if (error) {
+      console.error('❌ Error fetching roles:', error.message)
+      return
+    }
+    
+    console.log(`📊 Found ${roles.length} roles in remote`)
+    
+    // Clear local roles
+    await localClient.query('TRUNCATE TABLE roles CASCADE')
+    
+    // Insert each role
+    for (const role of roles) {
+      const columns = Object.keys(role)
+      const values = Object.values(role)
+      const placeholders = values.map((_, i) => `$${i + 1}`).join(', ')
+      
+      const query = `
+        INSERT INTO roles (${columns.map(col => `"${col}"`).join(', ')})
+        VALUES (${placeholders})
+      `
+      
+      await localClient.query(query, values)
+      console.log(`✅ Synced role: ${role.name}`)
+    }
+    
+    console.log('✅ Roles sync completed!')
+    
+  } catch (error) {
+    console.error('❌ Sync failed:', error.message)
+  } finally {
+    await localClient.end()
+  }
+}
+
+syncRoles() 

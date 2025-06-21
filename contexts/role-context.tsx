@@ -1,72 +1,90 @@
 "use client"
 
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
-import { type Role, DEFAULT_ROLES } from "@/types/role-permissions"
-import { filterMenuByRole } from "@/lib/menu-permissions"
-import type { MenuItem } from "@/types/menu"
-import { menuStructure } from "@/lib/menu-structure"
+import { MenuManager, type MenuSection } from "@/lib/menu-system"
+import { createClient } from "@/lib/supabase"
 
-interface RoleContextType {
-  currentRole: Role
-  setCurrentRole: (role: Role) => void
-  filteredMenu: Record<string, MenuItem>
-  availableRoles: Role[]
-  isAdmin: boolean
+interface Role {
+  id: string
+  name: string
 }
 
-// Export the context so it can be accessed directly if needed
+interface RoleContextType {
+  currentRole: Role | null
+  setCurrentRole: (role: Role) => void
+  filteredMenu: readonly MenuSection[]
+}
+
 export const RoleContext = createContext<RoleContextType | undefined>(undefined)
 
 export function RoleProvider({ children }: { children: ReactNode }) {
-  // Find the admin role
-  const adminRole = DEFAULT_ROLES.find((role) => role.isAdmin) || DEFAULT_ROLES[0]
+  const [currentRole, setCurrentRole] = useState<Role | null>(null)
+  const [filteredMenu, setFilteredMenu] = useState<readonly MenuSection[]>([])
 
-  // Initialize with admin role for testing
-  const [currentRole, setCurrentRole] = useState<Role>(adminRole)
-  const [filteredMenu, setFilteredMenu] = useState<Record<string, MenuItem>>(menuStructure) // Initialize with full menu
-  const [isAdmin, setIsAdmin] = useState<boolean>(!!adminRole.isAdmin)
-
-  // Update filtered menu when role changes
+  // Get user's role on mount
   useEffect(() => {
-    try {
-      console.log(`Role changed to: ${currentRole.name} (${currentRole.id})`)
-      console.log(`Is admin: ${!!currentRole.isAdmin}`)
+    async function getUserRole() {
+      try {
+        const supabase = createClient()
+        
+        // Get current user's employee record
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) return
 
-      setIsAdmin(!!currentRole.isAdmin)
+        // Get employee with role
+        const { data, error } = await supabase
+          .from('employees')
+          .select(`
+            role_id,
+            roles!inner (
+              name
+            )
+          `)
+          .eq('id', session.user.id)
+          .single()
 
-      const menu = filterMenuByRole(currentRole.id)
-      console.log(`Filtered menu has ${Object.keys(menu).length} top-level items`)
+        if (error) {
+          console.error('Error fetching role:', error)
+          return
+        }
 
-      setFilteredMenu(menu)
-
-      // Store selected role in localStorage for persistence
-      localStorage.setItem("selectedRole", currentRole.id)
-    } catch (error) {
-      console.error("Error filtering menu:", error)
-      // Fallback to full menu structure if filtering fails
-      setFilteredMenu(menuStructure)
-    }
-  }, [currentRole])
-
-  // On initial load, check if there's a saved role in localStorage
-  useEffect(() => {
-    const savedRoleId = localStorage.getItem("selectedRole")
-    if (savedRoleId) {
-      const savedRole = DEFAULT_ROLES.find((role) => role.id === savedRoleId)
-      if (savedRole) {
-        setCurrentRole(savedRole)
+        if (data) {
+          setCurrentRole({
+            id: data.role_id.toString(),
+            name: data.roles.name
+          })
+        }
+      } catch (error) {
+        console.error('Error in getUserRole:', error)
       }
     }
+
+    getUserRole()
   }, [])
+
+  // Update menu when role changes
+  useEffect(() => {
+    if (!currentRole) return
+
+    const menuManager = MenuManager.getInstance()
+    
+    menuManager.getMenuForUser({
+      id: currentRole.id,
+      username: currentRole.name,
+      roles: [currentRole.id],
+      permissions: [],
+      isAdmin: false
+    }).then(menu => {
+      setFilteredMenu(menu)
+    })
+  }, [currentRole])
 
   return (
     <RoleContext.Provider
       value={{
         currentRole,
         setCurrentRole,
-        filteredMenu,
-        availableRoles: DEFAULT_ROLES,
-        isAdmin,
+        filteredMenu
       }}
     >
       {children}

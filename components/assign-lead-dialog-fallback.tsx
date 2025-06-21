@@ -17,9 +17,10 @@ import { Label } from "@/components/ui/label"
 import { useToast } from "@/components/ui/use-toast"
 import type { Lead } from "@/types/lead"
 import { assignLead } from "@/actions/lead-actions"
-import { supabase } from "@/lib/supabase"
+import { query } from "@/lib/postgresql-client"
 import { UserCog, Loader2, Check, X, User } from "lucide-react"
 import { useDialogPosition } from "@/hooks/use-dialog-position"
+
 
 interface Employee {
   id: number
@@ -61,20 +62,18 @@ export function AssignLeadDialog({ lead, open, onOpenChange, onComplete, trigger
   const fetchEmployees = async () => {
     setFetchingEmployees(true)
     try {
-      // Fallback approach: Get all active employees
+      // Fallback approach: Get all active employees using PostgreSQL
       // In a real application, you would implement proper department filtering
-      const { data, error } = await supabase
-        .from("employees")
-        .select("id, employee_id, first_name, last_name")
-        .eq("status", "ACTIVE")
-        .order("first_name")
-
-      if (error) {
-        throw error
-      }
+      const result = await query(
+        `SELECT id, employee_id, first_name, last_name 
+         FROM employees 
+         WHERE status = $1 
+         ORDER BY first_name`,
+        ['ACTIVE']
+      )
 
       // Transform the data to include full_name
-      const employeesWithFullName = data.map((emp) => ({
+      const employeesWithFullName = result.rows.map((emp) => ({
         id: emp.id,
         employee_id: emp.employee_id,
         first_name: emp.first_name,
@@ -83,8 +82,9 @@ export function AssignLeadDialog({ lead, open, onOpenChange, onComplete, trigger
       }))
 
       setEmployees(employeesWithFullName)
+      console.log(`✅ Loaded ${employeesWithFullName.length} active employees`)
     } catch (error) {
-      console.error("Error fetching employees:", error)
+      console.error("❌ Error fetching employees:", error)
       toast({
         title: "Error",
         description: "Failed to fetch employees. Please try again.",

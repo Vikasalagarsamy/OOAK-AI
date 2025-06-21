@@ -1,0 +1,84 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { createServerClient } from '@/lib/supabase/server'
+import { getCurrentUser } from '@/actions/auth-actions'
+
+// GET /api/tasks - Fetch AI tasks with simplified role-based filtering
+export async function GET(request: NextRequest) {
+  try {
+    // Use service role client (bypasses JWT validation issues)
+    const supabase = createServerClient()
+    
+    // Get the current user from Supabase auth
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    
+    if (authError || !user) {
+      console.error('❌ Auth error:', authError)
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+
+    console.log('✅ Authenticated user:', user.email)
+
+    // Get the employee record for this user
+    const { data: employee, error: empError } = await supabase
+      .from('employees')
+      .select('id, first_name, last_name, job_title')
+      .eq('email', user.email)
+      .single()
+
+    if (empError || !employee) {
+      console.error('❌ Employee lookup error:', empError)
+      return NextResponse.json({ error: 'Employee not found' }, { status: 404 })
+    }
+
+    console.log('✅ Found employee:', employee)
+
+    // Get tasks assigned to this employee
+    const { data: tasks, error: tasksError } = await supabase
+      .from('ai_tasks')
+      .select(`
+        *,
+        assigned_employee:employees!assigned_to_employee_id(
+          id,
+          first_name,
+          last_name,
+          job_title
+        )
+      `)
+      .eq('assigned_to_employee_id', employee.id)
+      .order('created_at', { ascending: false })
+      .limit(50)
+
+    if (tasksError) {
+      console.error('❌ Tasks query error:', tasksError)
+      return NextResponse.json({ error: 'Failed to fetch tasks' }, { status: 500 })
+    }
+
+    console.log(`✅ Found ${tasks?.length || 0} tasks for employee ${employee.id}`)
+
+    // Get lead data for tasks that have lead_id
+    const tasksWithLeads = []
+    for (const task of tasks || []) {
+      let taskWithLead = { ...task }
+      
+      if (task.lead_id) {
+        const { data: lead } = await supabase
+          .from('leads')
+          .select('id, phone, country_code, whatsapp_number, full_name')
+          .eq('id', task.lead_id)
+          .single()
+        
+        if (lead) {
+          taskWithLead.lead = lead
+        }
+      }
+      
+      tasksWithLeads.push(taskWithLead)
+    }
+
+    return NextResponse.json(tasksWithLeads)
+
+  } catch (error) {
+    console.error('❌ Unexpected error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+} 

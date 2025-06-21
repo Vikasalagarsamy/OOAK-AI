@@ -1,5 +1,8 @@
-import { createClient } from "@/lib/supabase/server"
+import { pool } from '@/lib/postgresql-client'
 import { type NextRequest, NextResponse } from "next/server"
+
+// Direct PostgreSQL connection
+// Using centralized PostgreSQL client
 
 export async function POST(request: NextRequest) {
   try {
@@ -9,55 +12,53 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Table name is required" }, { status: 400 })
     }
 
-    const supabase = createClient()
+    const client = await pool.connect()
 
-    // Use a stored procedure to get the columns if available
-    const { data, error } = await supabase.rpc("get_table_columns", { table_name: table }).catch(() => {
-      // If the function doesn't exist, we'll return an error
-      return { data: null, error: { message: "get_table_columns function does not exist" } }
-    })
-
-    if (error) {
-      // Try an alternative approach - use a direct query to information_schema
-      // This is done through a custom SQL function that we'll create
-      const createFunctionSQL = `
-        CREATE OR REPLACE FUNCTION get_table_columns(table_name text)
-        RETURNS SETOF text AS $$
-        BEGIN
-          RETURN QUERY SELECT column_name::text
-          FROM information_schema.columns
-          WHERE table_name = $1;
-        END;
-        $$ LANGUAGE plpgsql SECURITY DEFINER;
+    try {
+      // Get comprehensive table information from PostgreSQL information_schema
+      const tableInfoQuery = `
+        SELECT 
+          c.column_name,
+          c.data_type,
+          c.is_nullable,
+          c.column_default,
+          c.character_maximum_length,
+          c.numeric_precision,
+          c.numeric_scale
+        FROM information_schema.columns c
+        WHERE c.table_name = $1 
+          AND c.table_schema = 'public'
+        ORDER BY c.ordinal_position
       `
 
-      // Try to create the function
-      const { error: createError } = await supabase.rpc("exec_sql", { sql: createFunctionSQL }).catch(() => {
-        return { error: { message: "Could not create get_table_columns function" } }
+      const result = await client.query(tableInfoQuery, [table])
+
+      if (result.rows.length === 0) {
+        return NextResponse.json({
+          error: `Table '${table}' not found in public schema`
+        }, { status: 404 })
+      }
+
+      return NextResponse.json({
+        success: true,
+        table_name: table,
+        columns: result.rows,
+        metadata: {
+          database: "PostgreSQL localhost:5432",
+          source: "Direct PostgreSQL Admin",
+          timestamp: new Date().toISOString(),
+          column_count: result.rows.length
+        }
       })
 
-      if (createError) {
-        console.error("Error creating get_table_columns function:", createError)
-        return NextResponse.json({ error: "Could not check table columns" }, { status: 500 })
-      }
-
-      // Now try to use the function
-      const { data: columnsData, error: columnsError } = await supabase.rpc("get_table_columns", { table_name: table })
-
-      if (columnsError) {
-        console.error("Error getting table columns:", columnsError)
-        return NextResponse.json({ error: "Could not retrieve table columns" }, { status: 500 })
-      }
-
-      return NextResponse.json({ columns: columnsData })
+    } finally {
+      client.release()
     }
 
-    return NextResponse.json({ columns: data })
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error in check-table-columns API route:", error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "An unexpected error occurred" },
-      { status: 500 },
-    )
+    return NextResponse.json({
+      error: error.message || "An unexpected error occurred"
+    }, { status: 500 })
   }
 }

@@ -1,0 +1,331 @@
+{
+  "business_profile": {
+    "name": "OOAK Photography",
+    "owner": "Vikas Alagarsamy",
+    "specializations": [
+      "Wedding Photography",
+      "Portrait Sessions",
+      "Commercial Photography",
+      "Event Coverage"
+    ],
+    "years_experience": 8,
+    "location": "Bangalore, India",
+    "contact": {
+      "phone": "+91 96773 62524",
+      "email": "vikas@ooak.photography",
+      "website": "ooak.photography",
+      "social": {
+        "instagram": "@ooak.photography",
+        "facebook": "OOAK Photography"
+      }
+    }
+  },
+  "services": {
+    "wedding_photography": {
+      "description": "Complete wedding photography coverage from pre-wedding to reception",
+      "typical_duration": "12-16 hours",
+      "deliverables": [
+        "500+ edited photos",
+        "Online gallery",
+        "USB drive",
+        "Print release"
+      ],
+      "starting_price": 75000,
+      "popular_add_ons": [
+        "Second photographer",
+        "Drone shots",
+        "Same day highlights"
+      ]
+    },
+    "portrait_sessions": {
+      "description": "Professional portrait photography for individuals, couples, and families",
+      "typical_duration": "2-3 hours",
+      "deliverables": [
+        "50+ edited photos",
+        "Online gallery",
+        "Print release"
+      ],
+      "starting_price": 15000,
+      "popular_add_ons": [
+        "Additional outfits",
+        "Location change",
+        "Hair & makeup"
+      ]
+    },
+    "commercial_photography": {
+      "description": "Product, corporate, and brand photography for businesses",
+      "typical_duration": "4-8 hours",
+      "deliverables": [
+        "High-res images",
+        "Commercial license",
+        "Multiple formats"
+      ],
+      "starting_price": 25000,
+      "popular_add_ons": [
+        "Video content",
+        "Social media packages",
+        "Retouching"
+      ]
+    },
+    "event_coverage": {
+      "description": "Corporate events, parties, and special occasions",
+      "typical_duration": "4-6 hours",
+      "deliverables": [
+        "200+ edited photos",
+        "Online gallery",
+        "Same day previews"
+      ],
+      "starting_price": 20000,
+      "popular_add_ons": [
+        "Live photo sharing",
+        "Photo booth",
+        "Prints on site"
+      ]
+    }
+  },
+  "pricing": {
+    "wedding_packages": [
+      {
+        "name": "Essential Wedding Package",
+        "price": 75000,
+        "includes": [
+          "8 hours coverage",
+          "500+ edited photos",
+          "Online gallery",
+          "USB drive"
+        ],
+        "duration": "8 hours",
+        "deliverables": [
+          "Digital gallery",
+          "USB with all photos",
+          "Print release"
+        ],
+        "popular": true
+      },
+      {
+        "name": "Premium Wedding Package",
+        "price": 125000,
+        "includes": [
+          "12 hours coverage",
+          "800+ edited photos",
+          "Second photographer",
+          "Same day highlights",
+          "Print album"
+        ],
+        "duration": "12 hours",
+        "deliverables": [
+          "Everything in Essential",
+          "Physical album",
+          "Drone shots",
+          "Second photographer"
+        ],
+        "popular": true
+      },
+      {
+        "name": "Luxury Wedding Package",
+        "price": 200000,
+        "includes": [
+          "Full day coverage",
+          "1000+ edited photos",
+          "Two photographers",
+          "Videography",
+          "Premium album",
+          "Canvas prints"
+        ],
+        "duration": "16 hours",
+        "deliverables": [
+          "Complete coverage",
+          "Video highlights",
+          "Premium deliverables"
+        ],
+        "popular": false
+      }
+    ],
+    "portrait_packages": [
+      {
+        "name": "Individual Portrait Session",
+        "price": 15000,
+        "includes": [
+          "2 hour session",
+          "50+ edited photos",
+          "Online gallery"
+        ],
+        "duration": "2 hours",
+        "deliverables": [
+          "Digital gallery",
+          "Print release"
+        ],
+        "popular": true
+      },
+      {
+        "name": "Couple Portrait Session",
+        "price": 20000,
+        "includes": [
+          "3 hour session",
+          "75+ edited photos",
+          "Two locations"
+        ],
+        "duration": "3 hours",
+        "deliverables": [
+          "Digital gallery",
+          "Print release",
+          "Social media sizes"
+        ],
+        "popular": true
+      }
+    ],
+    "commercial_rates": [
+      {
+        "name": "Product Photography",
+        "price": 2500,
+        "includes": [
+          "Per product",
+          "Multiple angles",
+          "Basic retouching"
+        ],
+        "duration": "Per product",
+        "deliverables": [
+          "High-res images",
+          "Commercial license"
+        ],
+        "popular": true
+      }
+    ],
+    "add_ons": [
+      {
+        "name": "Second Photographer",
+        "price": 15000,
+        "description": "Additional photographer for different angles and candid moments"
+      },
+      {
+        "name": "Drone Photography",
+        "price": 10000,
+        "description": "Aerial shots and unique perspectives"
+      },
+      {
+        "name": "Same Day Highlights",
+        "price": 8000,
+        "description": "20-30 edited photos delivered within 24 hours"
+      }
+    ]
+  },
+  "availability": {
+    "busy_dates": [
+      "2025-02-14",
+      "2025-12-25",
+      "2025-12-31"
+    ],
+    "preferred_months": [
+      "October",
+      "November",
+      "December",
+      "January",
+      "February"
+    ],
+    "booking_lead_time": "2-3 months minimum",
+    "peak_season": "October to February (wedding season)",
+    "off_season": "June to September (monsoon)"
+  },
+  "communication_templates": {
+    "pricing_inquiries": [
+      {
+        "intent": "wedding_pricing",
+        "context": "Client asking about wedding photography prices",
+        "template": "Hi {name}! I'd love to help with your wedding photography. My wedding packages start at ₹75,000 for essential coverage and go up to ₹2,00,000 for complete luxury coverage. Each package includes professional editing, online gallery, and print rights. Would you like me to share detailed package information based on your specific needs?",
+        "personality_notes": "Warm, professional, specific pricing mentioned upfront"
+      },
+      {
+        "intent": "portrait_pricing",
+        "context": "Client asking about portrait session prices",
+        "template": "Hi {name}! Portrait sessions start at ₹15,000 for individual sessions and ₹20,000 for couples. This includes 2-3 hours of shooting, 50+ professionally edited photos, and an online gallery. What type of portrait session were you thinking about?",
+        "personality_notes": "Direct, friendly, asks for clarification"
+      }
+    ],
+    "availability_requests": [
+      {
+        "intent": "wedding_availability",
+        "context": "Client asking about wedding date availability",
+        "template": "Hi {name}! I'd love to check my availability for your special day. Could you please share your wedding date and venue location? I typically book 2-3 months in advance, and {month} is {season_info}. Let me see what we can arrange!",
+        "personality_notes": "Enthusiastic, asks for specific details, mentions booking timeline"
+      }
+    ],
+    "portfolio_requests": [
+      {
+        "intent": "portfolio_sharing",
+        "context": "Client wants to see work samples",
+        "template": "Hi {name}! I'm excited to share my work with you. You can view my complete portfolio at ooak.photography, and I'd be happy to send you specific examples that match your style preferences. What type of photography are you most interested in - weddings, portraits, or commercial work?",
+        "personality_notes": "Excited, provides website, asks for specifics"
+      }
+    ],
+    "booking_confirmations": [],
+    "follow_ups": []
+  },
+  "ai_personas": {
+    "business_partner": {
+      "name": "Business Intelligence Vikas",
+      "role": "Internal business partner and advisor",
+      "personality": [
+        "Analytical",
+        "Strategic",
+        "Data-driven",
+        "Experienced"
+      ],
+      "communication_style": "Professional colleague who knows every detail of the business",
+      "knowledge_access": [
+        "Full financial data",
+        "Client analytics",
+        "Market insights",
+        "Operational metrics"
+      ],
+      "response_guidelines": [
+        "Speak as an experienced business partner",
+        "Provide detailed analytics and insights",
+        "Suggest strategic improvements",
+        "Use business terminology",
+        "Reference specific data and metrics"
+      ]
+    },
+    "customer_support": {
+      "name": "Customer Support Vikas",
+      "role": "Expert customer support representative",
+      "personality": [
+        "Warm",
+        "Professional",
+        "Knowledgeable",
+        "Solution-oriented"
+      ],
+      "communication_style": "Friendly expert who represents Vikas and knows everything about OOAK services",
+      "knowledge_access": [
+        "Service details",
+        "Pricing information",
+        "Availability",
+        "Portfolio examples"
+      ],
+      "response_guidelines": [
+        "Always identify as representing Vikas/OOAK Photography",
+        "Be warm but professional",
+        "Provide specific, actionable information",
+        "Ask relevant follow-up questions",
+        "Guide toward booking or consultation",
+        "Use photography terminology naturally"
+      ]
+    }
+  },
+  "training_conversations": [],
+  "business_rules": [
+    {
+      "rule_id": "pricing_disclosure",
+      "condition": "Client asks about pricing",
+      "action": "Always provide starting prices and package options",
+      "priority": 1,
+      "active": true
+    },
+    {
+      "rule_id": "availability_check",
+      "condition": "Client asks about dates",
+      "action": "Ask for specific date and location, mention booking timeline",
+      "priority": 1,
+      "active": true
+    }
+  ]
+}

@@ -4,61 +4,21 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Users, Building2, Briefcase } from "lucide-react"
-import { useState, useEffect } from "react"
-import { getCurrentUser, checkPermissions } from "@/lib/permission-utils"
+import { usePermissions } from "@/components/ultra-fast-auth-provider"
 
 export function PeopleSubmenu() {
   const pathname = usePathname()
-  const [permissions, setPermissions] = useState({
-    employees: true,
-    departments: true,
-    designations: true,
-  })
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    async function loadPermissions() {
-      try {
-        const user = await getCurrentUser()
-
-        if (!user) {
-          setPermissions({
-            employees: false,
-            departments: false,
-            designations: false,
-          })
-          setLoading(false)
-          return
-        }
-
-        const permissionResults = await checkPermissions(user.id, [
-          { path: "people.employees" },
-          { path: "people.departments" },
-          { path: "people.designations" },
-        ])
-
-        setPermissions({
-          employees: permissionResults["people.employees"],
-          departments: permissionResults["people.departments"],
-          designations: permissionResults["people.designations"],
-        })
-      } catch (error) {
-        console.error("Error loading permissions:", error)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    loadPermissions()
-  }, [])
-
-  if (loading) {
-    return <div className="h-10"></div>
-  }
+  
+  // 🔥 INSTANT PERMISSION CHECKS (NO LOADING)
+  const permissions = usePermissions([
+    { resource: '/people/employees' },
+    { resource: '/people/departments' },
+    { resource: '/people/designations' }
+  ])
 
   return (
     <div className="flex flex-wrap gap-2">
-      {permissions.employees && (
+      {permissions["/people/employees.view"] && (
         <Link
           href="/people/employees"
           className={cn(
@@ -73,7 +33,7 @@ export function PeopleSubmenu() {
         </Link>
       )}
 
-      {permissions.departments && (
+      {permissions["/people/departments.view"] && (
         <Link
           href="/people/departments"
           className={cn(
@@ -88,7 +48,7 @@ export function PeopleSubmenu() {
         </Link>
       )}
 
-      {permissions.designations && (
+      {permissions["/people/designations.view"] && (
         <Link
           href="/people/designations"
           className={cn(

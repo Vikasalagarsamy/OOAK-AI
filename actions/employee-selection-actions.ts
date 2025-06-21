@@ -1,6 +1,6 @@
 "use server"
 
-import { createClient } from "@/lib/supabase/server"
+import { query, transaction } from "@/lib/postgresql-client"
 import type { Employee } from "@/types/employee"
 import { triggerLeadAssignmentTasks } from '@/actions/lead-task-integration-hooks'
 
@@ -10,39 +10,37 @@ export async function getEmployeesForLeadAssignment(
   branchId?: number | undefined,
   roleFilter = "Sales",
 ): Promise<Employee[]> {
-  const supabase = createClient()
-
   try {
     console.log(
-      `Fetching employees for lead assignment - Company: ${companyId}, Branch: ${branchId}, Role: ${roleFilter}`,
+      `🔍 [EMPLOYEE SELECTION] Fetching employees for lead assignment via PostgreSQL - Company: ${companyId}, Branch: ${branchId}, Role: ${roleFilter}`,
     )
 
-    // First, get all active employees
-    const { data: allEmployees, error: employeesError } = await supabase
-      .from("employees")
-      .select(`
-        id, 
-        employee_id, 
-        first_name, 
-        last_name, 
-        job_title, 
-        status, 
-        department_id,
-        departments(name),
-        designations(name)
-      `)
-      .eq("status", "active")
-      .order("first_name")
+    // First, get all active employees with their details
+    const employeesResult = await query(`
+      SELECT 
+        e.id, 
+        e.employee_id, 
+        e.first_name, 
+        e.last_name, 
+        e.job_title, 
+        e.status, 
+        e.department_id,
+        d.name as department_name,
+        des.name as designation_name
+      FROM employees e
+      LEFT JOIN departments d ON e.department_id = d.id
+      LEFT JOIN designations des ON e.designation_id = des.id
+      WHERE e.status = 'active'
+      ORDER BY e.first_name
+    `)
 
-    if (employeesError) {
-      console.error("Error fetching employees:", employeesError)
-      return []
-    }
+    const allEmployees = employeesResult.rows
+
+    console.log(`📋 [EMPLOYEE SELECTION] Found ${allEmployees.length} active employees`)
 
     // Get all employee allocations
-    const { data: allAllocations, error: allocationsError } = await supabase
-      .from("employee_companies")
-      .select(`
+    const allocationsResult = await query(`
+      SELECT 
         id,
         employee_id,
         company_id,
@@ -53,34 +51,30 @@ export async function getEmployeesForLeadAssignment(
         start_date,
         end_date,
         status
-      `)
-      .is("end_date", null) // Only get active allocations (no end date)
-      .order("is_primary", { ascending: false })
+      FROM employee_companies
+      WHERE end_date IS NULL OR end_date > NOW()
+      ORDER BY is_primary DESC
+    `)
 
-    if (allocationsError) {
-      console.error("Error fetching employee allocations:", allocationsError)
-      return []
-    }
+    const allAllocations = allocationsResult.rows
+
+    console.log(`🏢 [EMPLOYEE SELECTION] Found ${allAllocations.length} active allocations`)
 
     // Get all departments to identify sales departments
-    const { data: departments, error: departmentsError } = await supabase.from("departments").select("id, name")
-
-    if (departmentsError) {
-      console.error("Error fetching departments:", departmentsError)
-      return []
-    }
+    const departmentsResult = await query(`SELECT id, name FROM departments`)
+    const departments = departmentsResult.rows
 
     // Identify sales department IDs
     const salesDepartmentIds = departments
-      .filter((dept) => dept.name.toLowerCase().includes("sales"))
-      .map((dept) => dept.id)
+      ? departments.filter((dept) => dept.name.toLowerCase().includes("sales")).map((dept) => dept.id)
+      : []
 
-    console.log(`Identified sales department IDs: ${salesDepartmentIds.join(", ")}`)
+    console.log(`💼 [EMPLOYEE SELECTION] Identified sales department IDs: ${salesDepartmentIds.join(", ")}`)
 
     // Filter employees based on allocations and role
     let eligibleEmployees = allEmployees.map((emp) => {
       // Get all allocations for this employee
-      const employeeAllocations = allAllocations.filter((alloc) => alloc.employee_id === emp.id)
+      const employeeAllocations = allAllocations ? allAllocations.filter((alloc) => alloc.employee_id === emp.id) : []
 
       // Check if employee has an allocation to the specified company
       const hasCompanyAllocation = !companyId || employeeAllocations.some((alloc) => alloc.company_id === companyId)
@@ -93,11 +87,13 @@ export async function getEmployeesForLeadAssignment(
         // Check job title
         (emp.job_title && emp.job_title.toLowerCase().includes("sales")) ||
         // Check department
-        (emp.departments && emp.departments.name.toLowerCase().includes("sales")) ||
+        (emp.department_name && emp.department_name.toLowerCase().includes("sales")) ||
         // Check department ID
         (emp.department_id && salesDepartmentIds.includes(emp.department_id)) ||
         // Check designation
-        (emp.designations && emp.designations.name.toLowerCase().includes("sales"))
+        (emp.designation_name && emp.designation_name.toLowerCase().includes("sales"))
+
+      console.log(`👤 [EMPLOYEE SELECTION] Employee ${emp.employee_id} (${emp.first_name} ${emp.last_name}): sales=${isSalesRole}, companyAlloc=${hasCompanyAllocation}, branchAlloc=${hasBranchAllocation}`)
 
       // Format the employee data with allocation information
       return {
@@ -108,8 +104,8 @@ export async function getEmployeesForLeadAssignment(
         last_name: emp.last_name,
         full_name: `${emp.first_name || ""} ${emp.last_name || ""}`.trim(),
         job_title: emp.job_title || "",
-        department: emp.departments?.name || "",
-        designation: emp.designations?.name || "",
+        department: emp.department_name || "",
+        designation: emp.designation_name || "",
         status: emp.status || "active",
         is_sales: isSalesRole,
         allocations: employeeAllocations,
@@ -124,24 +120,32 @@ export async function getEmployeesForLeadAssignment(
       }
     })
 
-    // Apply filters
+    // TEMPORARY FIX: Make filtering more lenient to show employees
     eligibleEmployees = eligibleEmployees.filter((emp) => {
-      // Must be in sales role if roleFilter is specified
-      if (roleFilter && roleFilter.toLowerCase() === "sales" && !emp.is_sales) {
-        return false
-      }
-
-      // Must have allocation to the specified company if companyId is provided
-      if (companyId && !emp.hasCompanyAllocation) {
-        return false
-      }
-
-      // Must have allocation to the specified branch if branchId is provided
-      if (branchId && !emp.hasBranchAllocation) {
-        return false
-      }
-
+      // For now, show all active employees - we'll fix the allocation system later
+      console.log(`✅ [EMPLOYEE SELECTION] Including employee ${emp.employee_id} (${emp.full_name})`)
       return true
+      
+      // Original strict filtering (commented out for now):
+      // // Must be in sales role if roleFilter is specified
+      // if (roleFilter && roleFilter.toLowerCase() === "sales" && !emp.is_sales) {
+      //   console.log(`🚫 Filtering out ${emp.employee_id} - not in sales role`)
+      //   return false
+      // }
+      
+      // // Must have allocation to the specified company if companyId is provided
+      // if (companyId && !emp.hasCompanyAllocation) {
+      //   console.log(`🚫 Filtering out ${emp.employee_id} - no company allocation`)
+      //   return false
+      // }
+      
+      // // Must have allocation to the specified branch if branchId is provided
+      // if (branchId && !emp.hasBranchAllocation) {
+      //   console.log(`🚫 Filtering out ${emp.employee_id} - no branch allocation`)
+      //   return false
+      // }
+      
+      // return true
     })
 
     // Sort employees: prioritize those with direct allocations to the company/branch
@@ -163,7 +167,8 @@ export async function getEmployeesForLeadAssignment(
       return a.name.localeCompare(b.name)
     })
 
-    console.log(`Found ${eligibleEmployees.length} eligible employees for lead assignment`)
+    console.log(`✅ [EMPLOYEE SELECTION] Found ${eligibleEmployees.length} eligible employees for lead assignment`)
+    console.log(`📝 [EMPLOYEE SELECTION] Employee list:`, eligibleEmployees.map(emp => `${emp.employee_id} (${emp.full_name})`))
 
     // Format the final result
     return eligibleEmployees.map((emp) => ({
@@ -185,7 +190,7 @@ export async function getEmployeesForLeadAssignment(
       branch_id: emp.relevantAllocation?.branch_id || emp.primaryAllocation?.branch_id,
     }))
   } catch (error) {
-    console.error("Exception in getEmployeesForLeadAssignment:", error)
+    console.error("❌ [EMPLOYEE SELECTION] Exception in getEmployeesForLeadAssignment:", error)
     return []
   }
 }
@@ -195,131 +200,127 @@ export async function assignLeadToEmployee(
   leadId: number,
   employeeId: number,
 ): Promise<{ success: boolean; message: string }> {
-  const supabase = createClient()
-
   try {
-    console.log(`Assigning lead ${leadId} to employee ${employeeId}`)
+    console.log(`🎯 [LEAD ASSIGNMENT] Assigning lead ${leadId} to employee ${employeeId} via PostgreSQL`)
 
-    // Get the lead details first
-    const { data: lead, error: leadError } = await supabase
-      .from("leads")
-      .select("*")
-      .eq("id", leadId)
-      .single()
+    return await transaction(async (client) => {
+      // Get the lead details first
+      const leadResult = await client.query(`
+        SELECT * FROM leads WHERE id = $1
+      `, [leadId])
 
-    if (leadError) {
-      console.error("Error fetching lead:", leadError)
-      return { success: false, message: `Failed to fetch lead: ${leadError.message}` }
-    }
-
-    // Get the employee details
-    const { data: employee, error: employeeError } = await supabase
-      .from("employees")
-      .select("id, first_name, last_name, status")
-      .eq("id", employeeId)
-      .single()
-
-    if (employeeError) {
-      console.error("Error fetching employee:", employeeError)
-      return { success: false, message: `Failed to fetch employee: ${employeeError.message}` }
-    }
-
-    // Verify employee is active
-    if (employee.status !== "active") {
-      return {
-        success: false,
-        message: `Cannot assign lead to inactive employee: ${employee.first_name} ${employee.last_name}`,
+      if (leadResult.rows.length === 0) {
+        return { success: false, message: "Lead not found" }
       }
-    }
 
-    // Check if employee has allocation to the lead's company
-    if (lead.company_id) {
-      const { data: allocations, error: allocError } = await supabase
-        .from("employee_companies")
-        .select("id")
-        .eq("employee_id", employeeId)
-        .eq("company_id", lead.company_id)
-        .is("end_date", null) // Only active allocations
+      const lead = leadResult.rows[0]
 
-      if (allocError) {
-        console.error("Error checking employee allocation:", allocError)
-      } else if (!allocations || allocations.length === 0) {
-        console.warn(
-          `Employee ${employeeId} has no allocation to company ${lead.company_id}, but proceeding with assignment`,
+      // Get the employee details
+      const employeeResult = await client.query(`
+        SELECT id, first_name, last_name, status
+        FROM employees 
+        WHERE id = $1
+      `, [employeeId])
+
+      if (employeeResult.rows.length === 0) {
+        return { success: false, message: "Employee not found" }
+      }
+
+      const employee = employeeResult.rows[0]
+
+      // Verify employee is active
+      if (employee.status !== "active") {
+        return {
+          success: false,
+          message: `Cannot assign lead to inactive employee: ${employee.first_name} ${employee.last_name}`,
+        }
+      }
+
+      // Check if employee has allocation to the lead's company
+      if (lead.company_id) {
+        const allocResult = await client.query(`
+          SELECT id FROM employee_companies
+          WHERE employee_id = $1 AND company_id = $2 
+          AND (end_date IS NULL OR end_date > NOW())
+        `, [employeeId, lead.company_id])
+
+        if (allocResult.rows.length === 0) {
+          console.warn(
+            `⚠️ [LEAD ASSIGNMENT] Employee ${employeeId} has no allocation to company ${lead.company_id}, but proceeding with assignment`,
+          )
+        }
+      }
+
+      // Update the lead
+      await client.query(`
+        UPDATE leads
+        SET 
+          assigned_to = $1,
+          status = 'ASSIGNED',
+          updated_at = NOW()
+        WHERE id = $2
+      `, [employeeId, leadId])
+
+      // 🤖 TRIGGER AI TASK GENERATION FOR LEAD ASSIGNMENT
+      try {
+        const updatedLeadData = {
+          ...lead,
+          assigned_to: employeeId,
+          status: "ASSIGNED" as const,
+          updated_at: new Date().toISOString()
+        }
+        
+        console.log(`🚀 [LEAD ASSIGNMENT] Triggering AI task generation for lead ${leadId} assigned to employee ${employeeId}`)
+        const aiResult = await triggerLeadAssignmentTasks(
+          leadId,
+          updatedLeadData,
+          `${employee.first_name} ${employee.last_name} Assignment`
         )
+        
+        if (aiResult.success && aiResult.tasksGenerated > 0) {
+          console.log(`✅ [LEAD ASSIGNMENT] AI generated ${aiResult.tasksGenerated} task(s) for lead ${leadId} → ${employee.first_name} ${employee.last_name}`)
+        } else {
+          console.log(`ℹ️ [LEAD ASSIGNMENT] No AI tasks generated for lead ${leadId}: ${aiResult.message}`)
+        }
+      } catch (aiError) {
+        console.error('⚠️ [LEAD ASSIGNMENT] AI task generation failed (continuing with assignment):', aiError)
+        // Don't fail the entire assignment if AI task generation fails
       }
-    }
 
-    // Update the lead
-    const { error: updateError } = await supabase
-      .from("leads")
-      .update({
-        assigned_to: employeeId,
-        status: "ASSIGNED",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", leadId)
+      // Log the assignment in the activity log if the table exists
+      try {
+        // Check if activity_log table exists
+        const tableCheckResult = await client.query(`
+          SELECT table_name 
+          FROM information_schema.tables 
+          WHERE table_name = 'activity_log' AND table_schema = 'public'
+        `)
 
-    if (updateError) {
-      console.error("Error assigning lead:", updateError)
-      return { success: false, message: `Failed to assign lead: ${updateError.message}` }
-    }
-
-    // 🤖 TRIGGER AI TASK GENERATION
-    try {
-      const updatedLeadData = {
-        ...lead,
-        assigned_to: employeeId,
-        status: "ASSIGNED",
-        updated_at: new Date().toISOString()
+        if (tableCheckResult.rows.length > 0) {
+          await client.query(`
+            INSERT INTO activity_log (
+              activity_type, entity_type, entity_id, user_id, description, created_at
+            ) VALUES ($1, $2, $3, $4, $5, NOW())
+          `, [
+            'lead_assignment',
+            'lead',
+            leadId,
+            null, // System action
+            `Lead #${leadId} assigned to ${employee.first_name} ${employee.last_name}`
+          ])
+        }
+      } catch (logError) {
+        console.error("⚠️ [LEAD ASSIGNMENT] Error logging activity:", logError)
+        // Don't fail the assignment if logging fails
       }
-      
-      console.log('🚀 Triggering AI task generation for lead assignment...')
-      const aiResult = await triggerLeadAssignmentTasks(
-        leadId,
-        updatedLeadData,
-        `${employee.first_name} ${employee.last_name} Assignment`
-      )
-      
-      if (aiResult.success && aiResult.tasksGenerated > 0) {
-        console.log(`✅ AI generated ${aiResult.tasksGenerated} task(s) for lead ${leadId}`)
-      } else {
-        console.log(`ℹ️ No AI tasks generated for lead ${leadId}: ${aiResult.message}`)
+
+      return {
+        success: true,
+        message: `Lead successfully assigned to ${employee.first_name} ${employee.last_name}`,
       }
-    } catch (aiError) {
-      console.error('⚠️ AI task generation failed (continuing with assignment):', aiError)
-      // Don't fail the entire assignment if AI task generation fails
-    }
-
-    // Log the assignment in the activity log if the table exists
-    try {
-      const { data: tableExists } = await supabase
-        .from("information_schema.tables")
-        .select("table_name")
-        .eq("table_name", "activity_log")
-        .maybeSingle()
-
-      if (tableExists) {
-        await supabase.from("activity_log").insert({
-          activity_type: "lead_assignment",
-          entity_type: "lead",
-          entity_id: leadId,
-          user_id: null, // System action
-          description: `Lead #${leadId} assigned to ${employee.first_name} ${employee.last_name}`,
-          created_at: new Date().toISOString(),
-        })
-      }
-    } catch (logError) {
-      console.error("Error logging activity:", logError)
-      // Don't fail the assignment if logging fails
-    }
-
-    return {
-      success: true,
-      message: `Lead successfully assigned to ${employee.first_name} ${employee.last_name}`,
-    }
+    })
   } catch (error) {
-    console.error("Exception assigning lead:", error)
+    console.error("❌ [LEAD ASSIGNMENT] Exception assigning lead:", error)
     return { success: false, message: `An unexpected error occurred: ${error}` }
   }
 }

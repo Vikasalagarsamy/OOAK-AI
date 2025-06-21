@@ -25,7 +25,8 @@ import {
   Eye,
   Clock,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  Phone
 } from 'lucide-react'
 
 interface NavigationItem {
@@ -64,7 +65,7 @@ const navigationStructure: NavigationItem[] = [
   {
     title: "⚡ Admin Control Center",
     icon: <Shield className="w-5 h-5" />,
-    href: "/admin/task-management",
+    href: "/tasks/admin",
     badge: "ADMIN",
     subItems: [
       { title: "Team Task Overview", icon: <Target className="w-4 h-4" />, href: "/admin/task-management" },
@@ -107,6 +108,7 @@ const navigationStructure: NavigationItem[] = [
     title: "📊 Reports & Analytics",
     icon: <BarChart3 className="w-5 h-5" />,
     subItems: [
+      { title: "Call Analytics Dashboard", icon: <Phone className="w-4 h-4" />, href: "/call-monitoring" },
       { title: "Business Intelligence", icon: <BarChart3 className="w-4 h-4" />, href: "/reports/business-intelligence" },
       { title: "Task Performance Reports", icon: <Target className="w-4 h-4" />, href: "/reports/task-performance" },
       { title: "Revenue Analytics", icon: <TrendingUp className="w-4 h-4" />, href: "/reports/revenue" },

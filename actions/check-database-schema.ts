@@ -1,6 +1,6 @@
 "use server"
 
-import { createClient } from "@/lib/supabase/server"
+import { query, transaction } from "@/lib/postgresql-client"
 
 /**
  * Checks if the lead_source column exists in the leads table
@@ -13,41 +13,40 @@ export async function checkLeadSourceColumnExists(): Promise<{
   error?: string
 }> {
   try {
-    const supabase = createClient()
+    console.log("🔍 Checking lead_source column existence using PostgreSQL...")
 
     // Check if lead_source column exists
-    const { data, error } = await supabase
-      .from("information_schema.columns")
-      .select("column_name, data_type, is_nullable")
-      .eq("table_name", "leads")
-      .eq("column_name", "lead_source")
-
-    if (error) {
-      return {
-        exists: false,
-        error: `Error checking schema: ${error.message}`,
-      }
-    }
+    const columnCheckResult = await query(
+      `SELECT column_name, data_type, is_nullable 
+       FROM information_schema.columns 
+       WHERE table_name = $1 AND column_name = $2 AND table_schema = 'public'`,
+      ["leads", "lead_source"]
+    )
 
     // Get all columns for reference
-    const { data: allColumns, error: columnsError } = await supabase
-      .from("information_schema.columns")
-      .select("column_name, data_type")
-      .eq("table_name", "leads")
-      .order("ordinal_position")
+    const allColumnsResult = await query(
+      `SELECT column_name, data_type, ordinal_position
+       FROM information_schema.columns 
+       WHERE table_name = $1 AND table_schema = 'public'
+       ORDER BY ordinal_position`,
+      ["leads"]
+    )
 
-    if (columnsError) {
-      console.error("Error fetching all columns:", columnsError)
-    }
+    const exists = columnCheckResult.rows && columnCheckResult.rows.length > 0
+    const details = exists ? columnCheckResult.rows[0] : undefined
+    const allColumns = allColumnsResult.rows || []
+
+    console.log(`✅ Schema check complete. lead_source column exists: ${exists}`)
+    console.log(`📊 Total columns in leads table: ${allColumns.length}`)
 
     return {
-      exists: data && data.length > 0,
-      details: data && data.length > 0 ? data[0] : undefined,
-      allColumns: allColumns || [],
+      exists,
+      details,
+      allColumns,
       error: undefined,
     }
   } catch (error) {
-    console.error("Unexpected error checking schema:", error)
+    console.error("Error checking database schema:", error)
     return {
       exists: false,
       error: `Unexpected error: ${error instanceof Error ? error.message : String(error)}`,

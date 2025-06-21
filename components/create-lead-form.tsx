@@ -13,11 +13,13 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useToast } from "@/components/ui/use-toast"
-import { createClient } from "@/lib/supabase"
 import { generateLeadNumber, ensureUniqueLeadNumber } from "@/utils/lead-number-generator"
-import { logActivity } from "@/services/activity-service"
 import { checkLeadSourceColumn, addLeadSourceColumn } from "@/actions/schema-actions"
 import { getLeadSources } from "@/services/lead-source-service"
+import { getCompanies, getBranches } from "@/actions/employee-actions"
+import { createLead } from "@/actions/lead-actions"
+import { query } from "@/lib/postgresql-client"
+import { logActivity } from "@/services/activity-service"
 import type { LeadSource } from "@/types/lead-source"
 import { Loader2, Building2, Phone, FileText, Save, Info, AlertCircle, MapPin } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -139,7 +141,7 @@ export function CreateLeadForm() {
   const [loadingBranches, setLoadingBranches] = useState(true)
   const [loadingLeadSources, setLoadingLeadSources] = useState(true)
   const [formError, setFormError] = useState<string | null>(null)
-  const [debugInfo, setDebugInfo] = useState<string | null>(null)
+
   const [hasLeadSourceColumn, setHasLeadSourceColumn] = useState<boolean>(false)
   const [schemaChecked, setSchemaChecked] = useState<boolean>(false)
   const [addingColumn, setAddingColumn] = useState(false)
@@ -194,8 +196,8 @@ export function CreateLeadForm() {
 
         // Fallback: Try a direct query to the leads table
         try {
-          const supabase = createClient()
-          const { data, error } = await supabase.from("leads").select("lead_source").limit(1)
+          // Using PostgreSQL query function instead of createClient
+          const { data, error } = await query("SELECT lead_source FROM leads LIMIT 1")
 
           // If this query succeeds without error, the column exists
           columnExists = !error
@@ -289,16 +291,12 @@ export function CreateLeadForm() {
   const fetchCompanies = async () => {
     setLoadingCompanies(true)
     try {
-      const supabase = createClient()
-      const { data, error } = await supabase.from("companies").select("id, name, company_code").order("name")
-
-      if (error) {
-        throw error
-      }
-
+      console.log('🏢 [UI] Fetching companies via server action...')
+      const data = await getCompanies()
       setCompanies(data || [])
+      console.log(`✅ [UI] Loaded ${data?.length || 0} companies`)
     } catch (error) {
-      console.error("Error fetching companies:", error)
+      console.error("❌ [UI] Error fetching companies:", error)
       toast({
         title: "Error",
         description: "Failed to fetch companies. Please try again.",
@@ -312,16 +310,12 @@ export function CreateLeadForm() {
   const fetchBranches = async () => {
     setLoadingBranches(true)
     try {
-      const supabase = createClient()
-      const { data, error } = await supabase.from("branches").select("id, name, company_id, location").order("name")
-
-      if (error) {
-        throw error
-      }
-
+      console.log('🏪 [UI] Fetching branches via server action...')
+      const data = await getBranches()
       setBranches(data || [])
+      console.log(`✅ [UI] Loaded ${data?.length || 0} branches`)
     } catch (error) {
-      console.error("Error fetching branches:", error)
+      console.error("❌ [UI] Error fetching branches:", error)
       toast({
         title: "Error",
         description: "Failed to fetch branches. Please try again.",
@@ -359,8 +353,6 @@ export function CreateLeadForm() {
     setLoading(true)
 
     try {
-      const supabase = createClient()
-
       // Generate a unique lead number
       let leadNumber = await generateLeadNumber()
       leadNumber = await ensureUniqueLeadNumber(leadNumber)
@@ -408,12 +400,26 @@ export function CreateLeadForm() {
         }
       }
 
-      // Debug the lead data before submission
+      // Debug the lead data before submission (console only)
       console.log("Lead data being submitted:", JSON.stringify(leadData, null, 2))
-      setDebugInfo(JSON.stringify(leadData, null, 2))
 
       // Insert the lead
-      const { data: insertedLead, error } = await supabase.from("leads").insert(leadData).select().single()
+      const { data: insertedLead, error } = await query("INSERT INTO leads (lead_number, company_id, branch_id, client_name, email, country_code, phone, is_whatsapp, has_separate_whatsapp, whatsapp_country_code, whatsapp_number, location, notes, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *", [
+        leadData.lead_number,
+        leadData.company_id,
+        leadData.branch_id,
+        leadData.client_name,
+        leadData.email,
+        leadData.country_code,
+        leadData.phone,
+        leadData.is_whatsapp,
+        leadData.has_separate_whatsapp,
+        leadData.whatsapp_country_code,
+        leadData.whatsapp_number,
+        leadData.location,
+        leadData.notes,
+        leadData.status
+      ])
 
       if (error) {
         throw error
@@ -810,16 +816,7 @@ export function CreateLeadForm() {
             {errors.notes && <p className="text-sm text-destructive">{errors.notes.message}</p>}
           </div>
 
-          {/* Debug Information */}
-          {debugInfo && (
-            <div className="mt-4 p-4 bg-gray-50 rounded border text-xs">
-              <div className="flex items-center mb-2">
-                <Info className="h-4 w-4 mr-1 text-blue-500" />
-                <span className="font-semibold">Debug Information</span>
-              </div>
-              <pre className="whitespace-pre-wrap overflow-auto">{debugInfo}</pre>
-            </div>
-          )}
+
         </CardContent>
         <CardFooter className="flex justify-between">
           <Button variant="outline" type="button" onClick={() => router.back()} disabled={loading}>

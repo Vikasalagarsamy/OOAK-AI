@@ -3,124 +3,67 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { Users, Building2, Briefcase, LayoutDashboard } from "lucide-react"
-import { useState, useEffect } from "react"
-import { getCurrentUser, checkPermissions } from "@/lib/permission-utils"
+import { Users, Building2, Briefcase } from "lucide-react"
+import { usePermissions } from "@/components/ultra-fast-auth-provider"
 
 export function EnhancedPeopleSubmenu() {
   const pathname = usePathname()
-  const [permissions, setPermissions] = useState({
-    dashboard: true,
-    employees: true,
-    departments: true,
-    designations: true,
-  })
-  const [loading, setLoading] = useState(true)
+  
+  // 🔥 INSTANT PERMISSION CHECKS (NO LOADING)
+  const permissions = usePermissions([
+    { resource: '/people/employees' },
+    { resource: '/people/departments' },
+    { resource: '/people/designations' }
+  ])
 
-  useEffect(() => {
-    async function loadPermissions() {
-      try {
-        const user = await getCurrentUser()
-
-        if (!user) {
-          setPermissions({
-            dashboard: false,
-            employees: false,
-            departments: false,
-            designations: false,
-          })
-          setLoading(false)
-          return
-        }
-
-        const permissionResults = await checkPermissions(user.id, [
-          { path: "people.dashboard" },
-          { path: "people.employees" },
-          { path: "people.departments" },
-          { path: "people.designations" },
-        ])
-
-        setPermissions({
-          dashboard: permissionResults["people.dashboard"],
-          employees: permissionResults["people.employees"],
-          departments: permissionResults["people.departments"],
-          designations: permissionResults["people.designations"],
-        })
-      } catch (error) {
-        console.error("Error loading permissions:", error)
-      } finally {
-        setLoading(false)
-      }
+  const menuItems = [
+    {
+      title: "Employees",
+      icon: Users,
+      path: "/people/employees",
+      permissionKey: "/people/employees.view",
+      enabled: permissions["/people/employees.view"]
+    },
+    {
+      title: "Departments",
+      icon: Building2,
+      path: "/people/departments",
+      permissionKey: "/people/departments.view",
+      enabled: permissions["/people/departments.view"]
+    },
+    {
+      title: "Designations",
+      icon: Briefcase,
+      path: "/people/designations",
+      permissionKey: "/people/designations.view",
+      enabled: permissions["/people/designations.view"]
     }
-
-    loadPermissions()
-  }, [])
-
-  if (loading) {
-    return <div className="h-10"></div>
-  }
+  ]
 
   return (
-    <div className="flex flex-wrap gap-2">
-      {permissions.dashboard && (
-        <Link
-          href="/people/dashboard"
-          className={cn(
-            "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-            pathname === "/people/dashboard"
-              ? "bg-primary text-primary-foreground hover:bg-primary/90"
-              : "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-          )}
-        >
-          <LayoutDashboard className="mr-2 h-4 w-4" />
-          Dashboard
-        </Link>
-      )}
+    <nav className="flex space-x-1 border-b border-gray-200">
+      {menuItems.map((item) => {
+        if (!item.enabled) return null
 
-      {permissions.employees && (
-        <Link
-          href="/people/employees"
-          className={cn(
-            "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-            pathname === "/people/employees" || pathname.startsWith("/people/employees/")
-              ? "bg-primary text-primary-foreground hover:bg-primary/90"
-              : "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-          )}
-        >
-          <Users className="mr-2 h-4 w-4" />
-          Employees
-        </Link>
-      )}
+        const Icon = item.icon
+        const isActive = pathname === item.path
 
-      {permissions.departments && (
-        <Link
-          href="/people/departments"
-          className={cn(
-            "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-            pathname === "/people/departments"
-              ? "bg-primary text-primary-foreground hover:bg-primary/90"
-              : "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-          )}
-        >
-          <Building2 className="mr-2 h-4 w-4" />
-          Departments
-        </Link>
-      )}
-
-      {permissions.designations && (
-        <Link
-          href="/people/designations"
-          className={cn(
-            "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-            pathname === "/people/designations"
-              ? "bg-primary text-primary-foreground hover:bg-primary/90"
-              : "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-          )}
-        >
-          <Briefcase className="mr-2 h-4 w-4" />
-          Designations
-        </Link>
-      )}
-    </div>
+        return (
+          <Link
+            key={item.path}
+            href={item.path}
+            className={cn(
+              "flex items-center space-x-2 px-4 py-2 text-sm font-medium rounded-t-lg transition-colors duration-200",
+              isActive
+                ? "bg-blue-50 text-blue-700 border-b-2 border-blue-500"
+                : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+            )}
+          >
+            <Icon size={16} />
+            <span>{item.title}</span>
+          </Link>
+        )
+      })}
+    </nav>
   )
 }

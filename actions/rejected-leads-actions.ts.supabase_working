@@ -1,0 +1,250 @@
+"use server"
+
+import { query, transaction } from "@/lib/postgresql-client"
+
+/**
+ * REJECTED LEADS ACTIONS - NOW 100% POSTGRESQL
+ * 
+ * Complete migration from Supabase to PostgreSQL
+ * - Direct PostgreSQL queries for maximum performance
+ * - Enhanced error handling and logging
+ * - Complex lead relationship fetching
+ * - All Supabase dependencies eliminated
+ */
+
+export async function getRejectedLeads() {
+  try {
+    console.log('🔍 Fetching rejected leads via PostgreSQL...')
+
+    // Check if the rejection_reason column exists
+    let hasRejectionColumns = false
+    try {
+      const columnCheckResult = await query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'leads' 
+        AND column_name = 'rejection_reason' 
+        AND table_schema = 'public'
+      `)
+      
+      hasRejectionColumns = columnCheckResult.rows.length > 0
+      console.log(`📋 Rejection columns exist: ${hasRejectionColumns}`)
+    } catch (error) {
+      console.error("⚠️ Error checking for rejection_reason column:", error)
+      // Continue with the assumption that the column might not exist
+    }
+
+    // Fetch rejected leads with different queries based on column existence
+    let leadsResult
+    if (hasRejectionColumns) {
+      leadsResult = await query(`
+        SELECT 
+          id, 
+          lead_number, 
+          client_name, 
+          status, 
+          company_id, 
+          branch_id,
+          created_at,
+          updated_at,
+          rejection_reason,
+          rejected_at,
+          rejected_by
+        FROM leads 
+        WHERE status = 'REJECTED'
+        ORDER BY updated_at DESC
+      `)
+    } else {
+      leadsResult = await query(`
+        SELECT 
+          id, 
+          lead_number, 
+          client_name, 
+          status, 
+          company_id, 
+          branch_id,
+          created_at,
+          updated_at
+        FROM leads 
+        WHERE status = 'REJECTED'
+        ORDER BY updated_at DESC
+      `)
+    }
+
+    const leads = leadsResult.rows
+
+    if (!leads || leads.length === 0) {
+      console.log('✅ No rejected leads found')
+      return { success: true, data: [] }
+    }
+
+    console.log(`📊 Found ${leads.length} rejected leads`)
+
+    // Extract company and branch IDs for fetching related data
+    const companyIds = [...new Set(leads.map((lead) => lead.company_id).filter(Boolean))]
+    const branchIds = [...new Set(leads.map((lead) => lead.branch_id).filter(Boolean))]
+
+    // Extract lead IDs for fetching rejection activities
+    const leadIds = leads.map((lead) => lead.id.toString())
+
+    // Fetch companies and branches in parallel
+    const [companiesResult, branchesResult] = await Promise.all([
+      companyIds.length > 0 ? query('SELECT id, name FROM companies WHERE id = ANY($1)', [companyIds]) : Promise.resolve({ rows: [] }),
+      branchIds.length > 0 ? query('SELECT id, name FROM branches WHERE id = ANY($1)', [branchIds]) : Promise.resolve({ rows: [] })
+    ])
+
+    const companies = companiesResult.rows
+    const branches = branchesResult.rows
+
+    console.log(`🏢 Found ${companies.length} companies, ${branches.length} branches`)
+
+    // Create lookup maps
+    const companyMap = new Map()
+    const branchMap = new Map()
+
+    companies.forEach((company) => companyMap.set(company.id, company))
+    branches.forEach((branch) => branchMap.set(branch.id, branch))
+
+    // If we don't have rejection columns, try to get rejection info from activities
+    const rejectionInfo = new Map()
+
+    if (!hasRejectionColumns && leadIds.length > 0) {
+      try {
+        console.log('📚 Fetching rejection activities from PostgreSQL...')
+        
+        const activitiesResult = await query(`
+          SELECT *
+          FROM activities
+          WHERE action_type = 'reject'
+          AND entity_id = ANY($1)
+          ORDER BY created_at DESC
+        `, [leadIds])
+
+        const activities = activitiesResult.rows
+
+        if (activities && activities.length > 0) {
+          console.log(`📝 Found ${activities.length} rejection activities`)
+          
+          // Create a map of the most recent rejection activity for each lead
+          const processedLeadIds = new Set()
+
+          activities.forEach((activity) => {
+            const leadId = Number.parseInt(activity.entity_id)
+
+            // Only use the first (most recent) activity for each lead
+            if (!isNaN(leadId) && !processedLeadIds.has(leadId)) {
+              processedLeadIds.add(leadId)
+
+              // Extract rejection reason from description
+              let rejectionReason = "No reason provided"
+              if (activity.description.includes("Reason:")) {
+                rejectionReason = activity.description.split("Reason:")[1].trim()
+              }
+
+              rejectionInfo.set(leadId, {
+                rejection_reason: rejectionReason,
+                rejected_at: activity.created_at,
+                rejected_by: activity.user_name,
+              })
+            }
+          })
+        }
+      } catch (error) {
+        console.error("❌ Error processing activities:", error)
+      }
+    }
+
+    // Process leads to include related data
+    const processedLeads = leads.map((lead) => {
+      const company = companyMap.get(lead.company_id)
+      const branch = branchMap.get(lead.branch_id)
+
+      // Get rejection info either from the lead itself or from activities
+      let rejectionData = {}
+
+      if (hasRejectionColumns) {
+        rejectionData = {
+          rejection_reason: lead.rejection_reason || "No reason provided",
+          rejected_at: lead.rejected_at || lead.updated_at,
+          rejected_by: lead.rejected_by || null,
+        }
+      } else {
+        // Use the rejection info from the activities map, ensuring we match by lead ID
+        const activityInfo = rejectionInfo.get(lead.id)
+        if (activityInfo) {
+          rejectionData = activityInfo
+        } else {
+          rejectionData = {
+            rejection_reason: "No reason provided",
+            rejected_at: lead.updated_at,
+            rejected_by: null,
+          }
+        }
+      }
+
+      return {
+        ...lead,
+        companies: company ? { name: company.name } : null,
+        branches: branch ? { name: branch.name } : null,
+        ...rejectionData,
+      }
+    })
+
+    console.log(`✅ Successfully processed ${processedLeads.length} rejected leads`)
+    return { success: true, data: processedLeads }
+  } catch (error) {
+    console.error("❌ Error in getRejectedLeads:", error)
+    return { success: false, message: "An unexpected error occurred", data: [] }
+  }
+}
+
+// Keep other existing functions
+export async function getCompaniesForReassignment(excludeCompanyId: number) {
+  try {
+    console.log(`🏢 Fetching companies for reassignment (excluding ID: ${excludeCompanyId})`)
+    
+    const result = await query(`
+      SELECT id, name
+      FROM companies
+      WHERE status = 'active'
+      AND id != $1
+      ORDER BY name
+    `, [excludeCompanyId])
+
+    console.log(`✅ Found ${result.rows.length} companies for reassignment`)
+    return { success: true, data: result.rows || [] }
+  } catch (error) {
+    console.error("❌ Error in getCompaniesForReassignment:", error)
+    return { success: false, message: "An unexpected error occurred", data: [] }
+  }
+}
+
+export async function getBranchesForCompany(companyId: number, excludeBranchId?: number | null) {
+  try {
+    console.log(`🏪 Fetching branches for company ${companyId} (excluding: ${excludeBranchId || 'none'})`)
+    
+    let queryText = `
+      SELECT id, name, location
+      FROM branches
+      WHERE company_id = $1
+      AND status = 'active'
+    `
+    let params = [companyId]
+
+    // If excludeBranchId is provided and not null, exclude that branch
+    if (excludeBranchId) {
+      queryText += ' AND id != $2'
+      params.push(excludeBranchId)
+    }
+
+    queryText += ' ORDER BY name'
+
+    const result = await query(queryText, params)
+
+    console.log(`✅ Found ${result.rows.length} branches for company ${companyId}`)
+    return { success: true, data: result.rows || [] }
+  } catch (error) {
+    console.error("❌ Error in getBranchesForCompany:", error)
+    return { success: false, message: "An unexpected error occurred", data: [] }
+  }
+}

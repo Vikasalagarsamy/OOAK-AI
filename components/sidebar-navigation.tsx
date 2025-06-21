@@ -1,312 +1,261 @@
 "use client"
 
-import type React from "react"
-
-import { useState, useEffect, useMemo, useCallback } from "react"
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { cn } from "@/lib/utils"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import {
-  ChevronDown,
-  ChevronRight,
-  LayoutDashboard,
+import React, { useState, useEffect } from 'react'
+import { useRouter, usePathname } from 'next/navigation'
+import { 
+  ChevronDown, 
+  ChevronRight, 
+  Home,
+  DollarSign,
   Building2,
   Users,
-  BarChart,
-  UserCog,
-  Briefcase,
-  Building,
-  PieChart,
-  GitBranch,
-  TrendingUp,
-  Settings,
+  CheckSquare,
   Calendar,
-  MapPin,
-  ClipboardList,
+  Film,
+  Handshake,
+  PieChart,
+  Settings,
+  LayoutGrid,
+  BarChart,
+  Cpu,
+  UserPlus,
+  UserMinus,
+  PhoneCall,
   FileText,
-  DollarSign,
   Clock,
-  AlertCircle,
-  Activity,
-  FileSearch,
-  Shield,
-  Video,
-  Package,
-  BarChart3,
-  CheckCircle,
-  CreditCard,
+  X,
+  Check,
+  XCircle,
+  Globe,
+  Brain,
   Phone,
-  History,
-  Loader2,
-  Target,
-  Bot,
-  RefreshCw,
+  TrendingUp,
+  Filter,
+  Building,
+  GitBranch,
+  Truck,
+  Store,
+  Shield,
+  User,
+  Menu,
+  Grid,
+  Award,
+  List,
+  Command,
+  Receipt,
+  CreditCard,
+  Star,
+  Tag,
+  Wrench,
+  MapPin,
+  Package,
+  Folder,
+  Shuffle,
+  CheckCircle,
   Eye,
-  PieChart as PieChartIcon
-} from "lucide-react"
-import { extractMenuStructure, type PermissionMenuItem } from "@/lib/menu-extractor"
-import { filterMenuByPermissions } from "@/lib/permission-checker"
-import { getCurrentUser } from "@/actions/auth-actions"
+  Send,
+  Headphones,
+  MessageSquare,
+  LineChart,
+  Link2,
+  BarChart2,
+  RefreshCw
+} from 'lucide-react'
+import { MenuItem } from './menu-system/menu-data'
 
-type MenuItem = {
-  title: string
-  href?: string
-  icon: React.ReactNode
-  submenu?: {
-    title: string
-    href: string
-    icon: React.ReactNode
-    description?: string
-  }[]
+// Icon mapping for dynamic icon rendering
+const iconMap = {
+  Home, DollarSign, Building2, Users, CheckSquare, Calendar, Film, Handshake, 
+  PieChart, Settings, LayoutGrid, BarChart, Cpu, UserPlus, UserMinus, PhoneCall, 
+  FileText, Clock, X, Check, XCircle, Globe, Brain, Phone, TrendingUp, Filter,
+  Building, GitBranch, Truck, Store, Shield, User, Menu, Grid, Award, List,
+  Command, Receipt, CreditCard, Star, Tag, Tool: Wrench, MapPin, Package, Folder,
+  Shuffle, CheckCircle, Eye, Send, Headphones, MessageSquare, LineChart,
+  Link2, BarChart2, RefreshCw
 }
 
-// Cache for menu data - avoid re-fetching on every navigation
-let menuCache: {
-  user: any | null
-  menuItems: PermissionMenuItem[]
-  timestamp: number
-  userId: string
-} | null = null
-
-// Cache duration: 5 minutes
-const CACHE_DURATION = 5 * 60 * 1000
-
-// Function to clear cache (export for use when user logs out/changes)
-export const clearSidebarCache = () => {
-  menuCache = null
-  console.log("🗑️ Sidebar cache cleared")
+interface SidebarNavigationProps {
+  className?: string
 }
 
-// Icon mapping for menu items (memoized)
-const getIconForSection = (sectionId: string): React.ReactNode => {
-  const iconMap: Record<string, React.ReactNode> = {
-    dashboard: <LayoutDashboard className="h-5 w-5" />,
-    organization: <Building2 className="h-5 w-5" />,
-    people: <Users className="h-5 w-5" />,
-    sales: <DollarSign className="h-5 w-5" />,
-    tasks: <Target className="h-5 w-5" />,
-    accounting: <CreditCard className="h-5 w-5" />,
-    'post-sales': <Phone className="h-5 w-5" />,
-    events: <Calendar className="h-5 w-5" />,
-    production: <Video className="h-5 w-5" />,
-    reports: <BarChart className="h-5 w-5" />,
-    audit: <Shield className="h-5 w-5" />,
-    admin: <Settings className="h-5 w-5" />,
-    'follow-ups': <Clock className="h-5 w-5" />,
-  }
-  return iconMap[sectionId] || <FileText className="h-5 w-5" />
+interface FilteredMenuResponse {
+  success: boolean
+  menu: MenuItem[]
+  user: {
+    roleId: number
+    roleName: string
+    isAdmin: boolean
+  } | null
+  message?: string
 }
 
-const getIconForChild = (childId: string): React.ReactNode => {
-  const iconMap: Record<string, React.ReactNode> = {
-    // Organization children
-    'organization-companies': <Building className="h-4 w-4" />,
-    'organization-branches': <Building2 className="h-4 w-4" />,
-    'organization-clients': <Briefcase className="h-4 w-4" />,
-    'organization-suppliers': <Package className="h-4 w-4" />,
-    'organization-vendors': <Briefcase className="h-4 w-4" />,
-    'organization-roles': <UserCog className="h-4 w-4" />,
-    'organization-user-accounts': <Users className="h-4 w-4" />,
-    'organization-account-creation': <UserCog className="h-4 w-4" />,
-    
-    // People children
-    'people-dashboard': <LayoutDashboard className="h-4 w-4" />,
-    'people-employees': <Users className="h-4 w-4" />,
-    'people-departments': <Building className="h-4 w-4" />,
-    'people-designations': <UserCog className="h-4 w-4" />,
-    
-    // Sales children
-    'sales-dashboard': <LayoutDashboard className="h-4 w-4" />,
-    'sales-create-lead': <FileText className="h-4 w-4" />,
-    'sales-my-leads': <ClipboardList className="h-4 w-4" />,
-    'sales-unassigned-lead': <AlertCircle className="h-4 w-4" />,
-    'sales-lead-sources': <GitBranch className="h-4 w-4" />,
-    'sales-follow-up': <Clock className="h-4 w-4" />,
-    'sales-quotations': <FileText className="h-4 w-4" />,
-    'sales-approvals': <CheckCircle className="h-4 w-4" />,
-    'sales-order-confirmation': <FileText className="h-4 w-4" />,
-    'sales-rejected-leads': <AlertCircle className="h-4 w-4" />,
-    'sales-ai-insights': <Activity className="h-4 w-4" />,
-    
-    // Tasks children
-    'tasks-dashboard': <Target className="h-4 w-4" />,
-    'tasks-admin': <Settings className="h-4 w-4" />,
-    'tasks-ai-generator': <Bot className="h-4 w-4" />,
-    'tasks-migration': <RefreshCw className="h-4 w-4" />,
-    'tasks-analytics': <BarChart3 className="h-4 w-4" />,
-    'tasks-calendar': <Calendar className="h-4 w-4" />,
-    'tasks-reports': <FileText className="h-4 w-4" />,
-    
-    // Accounting children
-    'accounting-payments': <CreditCard className="h-4 w-4" />,
-    
-    // Post-Sales children
-    'post-sales-confirmations': <Phone className="h-4 w-4" />,
-    
-    // Events children
-    'events-calendar': <Calendar className="h-4 w-4" />,
-    'events-list': <Calendar className="h-4 w-4" />,
-    'events-venues': <MapPin className="h-4 w-4" />,
-    'events-staff': <Users className="h-4 w-4" />,
-    
-    // Production children
-    'production-timeline': <Activity className="h-4 w-4" />,
-    'production-assets': <Package className="h-4 w-4" />,
-    'production-delivery': <Package className="h-4 w-4" />,
-    
-    // Reports children
-    'reports-lead-sources': <GitBranch className="h-4 w-4" />,
-    'reports-conversion-funnel': <TrendingUp className="h-4 w-4" />,
-    'reports-team-performance': <Users className="h-4 w-4" />,
-    'reports-trends': <TrendingUp className="h-4 w-4" />,
-    'reports-custom': <FileText className="h-4 w-4" />,
-    'reports-workflow-history': <History className="h-4 w-4" />,
-    
-    // Audit children
-    'audit-activity-logs': <ClipboardList className="h-4 w-4" />,
-    'audit-employee-audit': <FileSearch className="h-4 w-4" />,
-    
-    // Admin children
-    'admin-migration': <Settings className="h-4 w-4" />,
-    'admin-templates': <FileText className="h-4 w-4" />,
-    'admin-menu-permissions': <Shield className="h-4 w-4" />,
-    'admin-system-settings': <Settings className="h-4 w-4" />,
-    
-    // Follow-ups children
-    'follow-ups-pending': <Clock className="h-4 w-4" />,
-    'follow-ups-completed': <CheckCircle className="h-4 w-4" />,
-  }
-  return iconMap[childId] || <FileText className="h-4 w-4" />
-}
-
-export function SidebarNavigation() {
-  const [openMenu, setOpenMenu] = useState<string | null>('sales') // Only one menu can be open at a time
-  const [filteredMenuItems, setFilteredMenuItems] = useState<PermissionMenuItem[]>([])
-  const [loading, setLoading] = useState(true)
-  const [userInfo, setUserInfo] = useState<string>("")
+export default function SidebarNavigation({ className = "" }: SidebarNavigationProps) {
+  const router = useRouter()
   const pathname = usePathname()
+  const [expandedItems, setExpandedItems] = useState<number[]>([])
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [currentUser, setCurrentUser] = useState<{roleId: number, roleName: string, isAdmin: boolean} | null>(null)
 
-  // Simple cache check function (no async operations)
-  const hasValidCache = useCallback(() => {
-    if (!menuCache) return false
-    const now = Date.now()
-    return (now - menuCache.timestamp) < CACHE_DURATION
-  }, [])
-
-  // Load menu items filtered by user permissions (with immediate cache loading)
-  useEffect(() => {
-    const loadFilteredMenu = async () => {
-      try {
-        // IMMEDIATE cache check - no async operations
-        if (hasValidCache() && menuCache) {
-          console.log("⚡ Instantly loading from cache")
-          setUserInfo(`${menuCache.user?.username} (${menuCache.user?.roleName})`)
-          setFilteredMenuItems(menuCache.menuItems)
-          setLoading(false)
-          
-          // Background validation (don't await this)
-          validateUserInBackground()
-          return
-        }
-
-        console.log("🔄 Loading fresh menu data...")
-        await loadFreshMenuData()
-      } catch (error) {
-        console.error("❌ Error loading filtered menu:", error)
-        setFallbackMenu()
-      }
-    }
-
-    // Background user validation (doesn't affect immediate loading)
-    const validateUserInBackground = async () => {
-      try {
-        const currentUser = await getCurrentUser()
-        if (currentUser?.id !== menuCache?.userId) {
-          console.log("👤 User changed in background, refreshing...")
-          await loadFreshMenuData()
-        }
-      } catch (error) {
-        console.log("🔍 Background validation failed, keeping cache")
-      }
-    }
-
-    // Load fresh data
-    const loadFreshMenuData = async () => {
+  // Load filtered menu based on user role
+  const loadFilteredMenu = async () => {
+    try {
+      console.log('🔄 Loading role-based menu...')
       setLoading(true)
       
-      const user = await getCurrentUser()
-      if (user) {
-        setUserInfo(`${user.username} (${user.roleName})`)
-      }
-
-      const allMenuItems = extractMenuStructure()
-      const filtered = await filterMenuByPermissions(allMenuItems)
+      const response = await fetch('/api/menu/filtered')
+      const data: FilteredMenuResponse = await response.json()
       
-      // Update cache
-      menuCache = {
-        user,
-        menuItems: filtered,
-        timestamp: Date.now(),
-        userId: user?.id || ""
+      if (data.success) {
+        setMenuItems(data.menu)
+        setCurrentUser(data.user)
+        console.log(`✅ Loaded ${data.menu.length} menu items for role: ${data.user?.roleName || 'Guest'}`)
+      } else {
+        console.error('❌ Failed to load filtered menu:', data)
+        // Fallback to minimal menu
+        setMenuItems([
+          {
+            id: 1,
+            name: "Dashboard",
+            description: "Access dashboard",
+            icon: "Home",
+            path: "/dashboard",
+            string_id: "dashboard",
+            is_visible: true,
+            is_admin_only: false,
+            badge_variant: "secondary",
+            is_new: false,
+            category: "primary",
+            sort_order: 1
+          }
+        ])
       }
-      
-      console.log("✅ Menu loaded and cached:", filtered.length, "sections")
-      setFilteredMenuItems(filtered)
+    } catch (error) {
+      console.error('❌ Error loading filtered menu:', error)
+      // Fallback to basic menu
+      setMenuItems([
+        {
+          id: 1,
+          name: "Dashboard",
+          description: "Access dashboard",
+          icon: "Home",
+          path: "/dashboard",
+          string_id: "dashboard",
+          is_visible: true,
+          is_admin_only: false,
+          badge_variant: "secondary",
+          is_new: false,
+          category: "primary",
+          sort_order: 1
+        }
+      ])
+    } finally {
       setLoading(false)
     }
+  }
 
-    // Set fallback menu
-    const setFallbackMenu = () => {
-      const fallbackMenu = [{
-        id: 'dashboard',
-        name: 'Dashboard',
-        path: '/dashboard',
-        description: 'Main dashboard'
-      }]
-      setFilteredMenuItems(fallbackMenu)
-      setLoading(false)
-    }
-
+  // Load menu on component mount
+  useEffect(() => {
     loadFilteredMenu()
-  }, [hasValidCache]) // Only depend on simple cache check
-
-  // Accordion-style toggle function - only one menu can be open at a time
-  const toggleMenu = useCallback((menuId: string) => {
-    setOpenMenu(prevOpenMenu => {
-      // If clicking the same menu that's already open, close it
-      if (prevOpenMenu === menuId) {
-        return null
-      }
-      // Otherwise, open the clicked menu (this closes any other open menu)
-      return menuId
-    })
   }, [])
 
-  // Show cached content immediately, only show loading for truly fresh loads
-  if (loading && !hasValidCache()) {
+  const toggleExpanded = (itemId: number) => {
+    setExpandedItems(prev => 
+      prev.includes(itemId) 
+        ? prev.filter(id => id !== itemId)
+        : [...prev, itemId]
+    )
+  }
+
+  const isActive = (path: string) => {
+    if (path === '/dashboard' && pathname === '/dashboard') return true
+    if (path !== '/dashboard' && pathname.startsWith(path)) return true
+    return false
+  }
+
+  const renderIcon = (iconName: string, className: string = "h-4 w-4") => {
+    const IconComponent = iconMap[iconName as keyof typeof iconMap]
+    if (!IconComponent) return <Home className={className} />
+    return <IconComponent className={className} />
+  }
+
+  const renderMenuItem = (item: MenuItem, level: number = 0) => {
+    const hasChildren = item.children && item.children.length > 0
+    const isExpanded = expandedItems.includes(item.id)
+    const isItemActive = isActive(item.path)
+
+    if (!item.is_visible) return null
+
     return (
-      <div className="w-64 h-full bg-background border-r">
-        <div className="p-4">
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            <span className="ml-2 text-sm text-muted-foreground">Loading menu...</span>
+      <div key={item.id} className="w-full">
+        <div
+          className={`
+            flex items-center justify-between w-full px-3 py-2 text-sm rounded-lg cursor-pointer transition-colors
+            ${level > 0 ? 'ml-4' : ''}
+            ${isItemActive 
+              ? 'bg-blue-100 text-blue-900 font-medium' 
+              : 'text-gray-700 hover:bg-gray-100'
+            }
+          `}
+          onClick={() => {
+            if (hasChildren) {
+              toggleExpanded(item.id)
+            } else {
+              router.push(item.path)
+            }
+          }}
+        >
+          <div className="flex items-center gap-3">
+            {renderIcon(item.icon)}
+            <span className="font-medium">{item.name}</span>
+            {item.badge_text && (
+              <span className={`
+                px-2 py-1 text-xs rounded-full
+                ${item.badge_variant === 'secondary' 
+                  ? 'bg-gray-200 text-gray-700' 
+                  : 'bg-blue-200 text-blue-700'
+                }
+              `}>
+                {item.badge_text}
+              </span>
+            )}
+            {item.is_new && (
+              <span className="px-2 py-1 text-xs bg-green-200 text-green-700 rounded-full">
+                New
+              </span>
+            )}
           </div>
+          
+          {hasChildren && (
+            <div className="transition-transform duration-200">
+              {isExpanded ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
+            </div>
+          )}
         </div>
+
+        {hasChildren && isExpanded && (
+          <div className="mt-1 space-y-1">
+            {item.children?.map(child => renderMenuItem(child, level + 1))}
+          </div>
+        )}
       </div>
     )
   }
 
-  if (filteredMenuItems.length === 0 && !loading) {
+  if (loading) {
     return (
-      <div className="w-64 h-full bg-background border-r">
+      <div className={`bg-white shadow-sm border-r border-gray-200 ${className}`}>
         <div className="p-4">
-          <div className="text-center py-8">
-            <AlertCircle className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-            <p className="text-sm text-muted-foreground">No menu access</p>
-            <p className="text-xs text-muted-foreground mt-1">Contact administrator</p>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">
+            OOAK Enterprise
+          </h2>
+          <div className="flex items-center justify-center py-8">
+            <RefreshCw className="h-6 w-6 animate-spin text-blue-500" />
+            <span className="ml-2 text-sm text-gray-600">Loading menu...</span>
           </div>
         </div>
       </div>
@@ -314,107 +263,22 @@ export function SidebarNavigation() {
   }
 
   return (
-    <div className="w-64 h-full bg-background border-r">
-      <ScrollArea className="h-full">
-        <div className="p-4">
-          {/* User info banner */}
-          {userInfo && (
-            <div className="mb-4 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800">
-              <div className="font-medium">Logged in as:</div>
-              <div>{userInfo}</div>
+    <div className={`bg-white shadow-sm border-r border-gray-200 ${className}`}>
+      <div className="p-4">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">
+          OOAK Enterprise
+        </h2>
+        
+        <nav className="space-y-2">
+          {menuItems.length > 0 ? (
+            menuItems.map(item => renderMenuItem(item))
+          ) : (
+            <div className="text-center py-4 text-gray-500 text-sm">
+              No menu items available
             </div>
           )}
-
-          <nav className="space-y-2">
-            {filteredMenuItems.map((section) => {
-              const hasChildren = section.children && section.children.length > 0
-              const isOpen = openMenu === section.id
-              const isActive = pathname === section.path || 
-                              (section.children?.some(child => pathname === child.path))
-
-              if (!hasChildren && section.path) {
-                // Simple menu item without children
-                return (
-                  <Link
-                    key={section.id}
-                    href={section.path}
-                    className={cn(
-                      "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                      isActive
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                    )}
-                  >
-                    {getIconForSection(section.id)}
-                    {section.name}
-                  </Link>
-                )
-              }
-
-              // Menu item with children - accordion style
-              return (
-                <div key={section.id}>
-                  <Button
-                    variant="ghost"
-                    className={cn(
-                      "w-full justify-start gap-3 font-medium transition-all duration-200",
-                      isActive && "bg-muted",
-                      isOpen && "bg-muted/70"
-                    )}
-                    onClick={() => toggleMenu(section.id)}
-                  >
-                    {getIconForSection(section.id)}
-                    <span className="flex-1 text-left">{section.name}</span>
-                    {hasChildren && (
-                      <>
-                        <Badge variant="secondary" className="text-xs">
-                          {section.children?.length}
-                        </Badge>
-                        <ChevronDown 
-                          className={cn(
-                            "h-4 w-4 transition-transform duration-200",
-                            isOpen ? "rotate-180" : "rotate-0"
-                          )} 
-                        />
-                      </>
-                    )}
-                  </Button>
-
-                  {hasChildren && isOpen && (
-                    <div className="ml-4 mt-1 space-y-1 border-l border-border pl-4 pb-2 animate-in slide-in-from-top-2 duration-300">
-                      {section.children?.map((child) => {
-                        const isChildActive = pathname === child.path
-                        return (
-                          <Link
-                            key={child.id}
-                            href={child.path}
-                            className={cn(
-                              "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
-                              isChildActive
-                                ? "bg-primary text-primary-foreground"
-                                : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                            )}
-                          >
-                            {getIconForChild(child.id)}
-                            <div className="flex-1">
-                              <div className="font-medium">{child.name}</div>
-                              {child.description && (
-                                <div className="text-xs text-muted-foreground">
-                                  {child.description}
-                                </div>
-                              )}
-                            </div>
-                          </Link>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </nav>
-        </div>
-      </ScrollArea>
+        </nav>
+      </div>
     </div>
   )
-}
+} 

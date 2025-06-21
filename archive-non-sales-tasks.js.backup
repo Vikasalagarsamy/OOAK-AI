@@ -1,0 +1,109 @@
+#!/usr/bin/env node
+
+/**
+ * Archive Non-Sales AI Tasks
+ * ==========================
+ * Before cleaning up the ai_tasks table to be sales-only,
+ * we'll archive the non-sales tasks for potential future use.
+ */
+
+import { createClient } from '@supabase/supabase-js'
+import fs from 'fs'
+
+const supabaseUrl = 'http://127.0.0.1:54321'
+const supabaseKey = 'yJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhdm9mcWR6amh5Zmp5Z2t4eW5xIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NTA5ODkxNCwiZXhwIjoyMDYwNjc0OTE0fQ.EDdXANDTnC8zjWciG_p6JORec0KyMVZQe2c0Ca6HfLY'
+
+async function archiveNonSalesTasks() {
+  try {
+    const supabase = createClient(supabaseUrl, supabaseKey)
+    
+    console.log('🗂️  Archiving Non-Sales AI Tasks...\n')
+    
+    // 1. Get all current tasks
+    const { data: allTasks, error } = await supabase
+      .from('ai_tasks')
+      .select('*')
+      .order('id')
+    
+    if (error) {
+      console.error('❌ Error fetching tasks:', error)
+      return
+    }
+    
+    console.log(`📋 Found ${allTasks.length} total tasks`)
+    
+    // 2. Categorize tasks
+    const salesTasks = []
+    const nonSalesTasks = []
+    
+    allTasks.forEach(task => {
+      const title = task.task_title || task.title || 'Unknown'
+      const leadId = task.lead_id
+      const quotationId = task.quotation_id
+      const category = task.category
+      
+      // Determine if sales-related
+      const isSales = (
+        leadId !== null ||
+        quotationId !== null ||
+        title.toLowerCase().includes('quotation') ||
+        title.toLowerCase().includes('lead') ||
+        title.toLowerCase().includes('follow') ||
+        title.toLowerCase().includes('contact') ||
+        title.toLowerCase().includes('client') ||
+        title.toLowerCase().includes('payment') ||
+        title.toLowerCase().includes('meeting') ||
+        ['sales_followup', 'lead_follow_up', 'quotation_follow_up'].includes(category)
+      )
+      
+      if (isSales) {
+        salesTasks.push(task)
+      } else {
+        nonSalesTasks.push(task)
+      }
+    })
+    
+    console.log(`🎯 Sales tasks: ${salesTasks.length}`)
+    console.log(`❌ Non-sales tasks: ${nonSalesTasks.length}\n`)
+    
+    // 3. Display categorization
+    console.log('📊 SALES TASKS (keeping):')
+    salesTasks.forEach(task => {
+      console.log(`   ✅ Task ${task.id}: ${task.task_title || task.title}`)
+    })
+    
+    console.log('\n🗑️  NON-SALES TASKS (archiving):')
+    nonSalesTasks.forEach(task => {
+      console.log(`   ❌ Task ${task.id}: ${task.task_title || task.title}`)
+    })
+    
+    // 4. Create archive file
+    const archiveData = {
+      archived_date: new Date().toISOString(),
+      reason: 'Sales-only AI tasks cleanup',
+      total_tasks_archived: nonSalesTasks.length,
+      sales_tasks_kept: salesTasks.length,
+      archived_tasks: nonSalesTasks
+    }
+    
+    const archiveFilename = `archived-non-sales-tasks-${new Date().toISOString().split('T')[0]}.json`
+    fs.writeFileSync(archiveFilename, JSON.stringify(archiveData, null, 2))
+    console.log(`\n💾 Archive saved to: ${archiveFilename}`)
+    
+    // 5. Show IDs for deletion
+    const nonSalesIds = nonSalesTasks.map(task => task.id)
+    console.log(`\n🔧 Non-sales task IDs to delete: [${nonSalesIds.join(', ')}]`)
+    
+    return {
+      salesTasks,
+      nonSalesTasks,
+      archiveFilename
+    }
+    
+  } catch (error) {
+    console.error('❌ Archive failed:', error)
+  }
+}
+
+// Run the archive
+archiveNonSalesTasks() 

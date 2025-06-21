@@ -1,44 +1,31 @@
 "use server"
 
-import { createClient } from "@/lib/supabase/server"
+import { query, transaction } from "@/lib/postgresql-client"
 
 export async function createExecSqlFunction() {
   try {
-    const supabase = createClient()
+    console.log("🔧 Creating exec_sql function using PostgreSQL...")
 
     // SQL to create the exec_sql function if it doesn't exist
     const createFunctionSql = `
-      CREATE OR REPLACE FUNCTION exec_sql(sql text)
+      CREATE OR REPLACE FUNCTION exec_sql(sql_query text)
       RETURNS void AS $$
       BEGIN
-        EXECUTE sql;
+        EXECUTE sql_query;
       END;
       $$ LANGUAGE plpgsql SECURITY DEFINER;
+      
+      -- Grant execute permission to appropriate roles
+      GRANT EXECUTE ON FUNCTION exec_sql(text) TO authenticated;
     `
 
-    // Execute the SQL to create the function
-    const { error } = await supabase.rpc("exec_sql", { sql: createFunctionSql })
+    // Execute the SQL directly using PostgreSQL
+    await query(createFunctionSql)
 
-    // If the function doesn't exist yet, we need to execute the SQL directly
-    if (error && error.message.includes("function") && error.message.includes("does not exist")) {
-      const { error: directError } = await supabase.query(createFunctionSql)
-
-      if (directError) {
-        console.error("Error creating exec_sql function directly:", directError)
-        return { success: false, error: directError.message }
-      }
-
-      return { success: true }
-    }
-
-    if (error) {
-      console.error("Error creating exec_sql function:", error)
-      return { success: false, error: error.message }
-    }
-
+    console.log("✅ exec_sql function created successfully")
     return { success: true }
   } catch (error: any) {
-    console.error("Unexpected error creating exec_sql function:", error)
+    console.error("Error creating exec_sql function:", error)
     return { success: false, error: error.message }
   }
 }

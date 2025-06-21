@@ -14,7 +14,6 @@ import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useToast } from "@/components/ui/use-toast"
 import { Loader2 } from "lucide-react"
-import { generateBranchCode } from "@/utils/code-generator"
 
 const formSchema = z.object({
   company_id: z.string({
@@ -25,7 +24,7 @@ const formSchema = z.object({
   email: z.string().email("Invalid email address").optional().or(z.literal("")),
   phone: z.string().optional(),
   is_remote: z.boolean().default(false),
-  branch_code: z.string().optional(), // Add this to the schema
+  branch_code: z.string().optional(),
 })
 
 type FormValues = z.infer<typeof formSchema>
@@ -35,6 +34,39 @@ interface AddBranchFormProps {
   onAddBranch: (
     branch: Omit<Branch, "id" | "created_at" | "updated_at">,
   ) => Promise<{ success: boolean; data?: any; error?: any }>
+}
+
+// Helper function to generate branch code via API
+async function generateBranchCodeViaAPI(companyCode: string, branchName: string): Promise<string> {
+  try {
+    const response = await fetch('/api/generate-codes/branch', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        companyCode,
+        branchName
+      })
+    })
+
+    if (!response.ok) {
+      throw new Error(`API returned ${response.status}`)
+    }
+
+    const data = await response.json()
+    
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to generate branch code')
+    }
+
+    return data.branchCode
+  } catch (error) {
+    console.error('Error calling branch code generation API:', error)
+    // Fallback to simple generation
+    const branchPrefix = branchName.replace(/[^a-zA-Z0-9]/g, "").substring(0, 3).toUpperCase()
+    return `${companyCode}${branchPrefix}`
+  }
 }
 
 export default function AddBranchForm({ companies, onAddBranch }: AddBranchFormProps) {
@@ -58,7 +90,6 @@ export default function AddBranchForm({ companies, onAddBranch }: AddBranchFormP
 
   const watchCompanyId = form.watch("company_id")
   const watchBranchName = form.watch("name")
-  const branchCode = form.watch("branch_code")
 
   // Update selected company when company_id changes
   useEffect(() => {
@@ -76,7 +107,7 @@ export default function AddBranchForm({ companies, onAddBranch }: AddBranchFormP
       if (selectedCompany?.company_code && watchBranchName && watchBranchName.length >= 2) {
         setIsGeneratingCode(true)
         try {
-          const code = await generateBranchCode(selectedCompany.company_code, watchBranchName)
+          const code = await generateBranchCodeViaAPI(selectedCompany.company_code, watchBranchName)
           form.setValue("branch_code", code)
         } catch (error) {
           console.error("Error generating branch code:", error)
@@ -203,44 +234,53 @@ export default function AddBranchForm({ companies, onAddBranch }: AddBranchFormP
                 <FormItem>
                   <FormLabel>Branch Name*</FormLabel>
                   <FormControl>
-                    <Input placeholder="Downtown Branch" {...field} disabled={noCompanies || noCompanyCode} />
+                    <Input placeholder="e.g., Downtown Office" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
 
-            {/* Branch code display - completely redesigned */}
-            <div>
-              <h4 className="text-sm font-medium mb-2">Branch Code</h4>
-              <div className="border rounded-md p-2 bg-muted/20">
-                {isGeneratingCode ? (
-                  <div className="flex items-center py-1">
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    <span className="text-sm">Generating...</span>
-                  </div>
-                ) : branchCode ? (
-                  <p className="text-sm py-1">{branchCode}</p>
-                ) : (
-                  <p className="text-sm text-muted-foreground py-1">Enter branch name to generate code</p>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Branch code is automatically generated and cannot be edited
-              </p>
-            </div>
+            <FormField
+              control={form.control}
+              name="branch_code"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Branch Code</FormLabel>
+                  <FormControl>
+                    <div className="relative">
+                      <Input 
+                        placeholder="Auto-generated" 
+                        {...field} 
+                        readOnly
+                        className="bg-muted"
+                      />
+                      {isGeneratingCode && (
+                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        </div>
+                      )}
+                    </div>
+                  </FormControl>
+                  <p className="text-xs text-muted-foreground">
+                    Automatically generated based on company code and branch name
+                  </p>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             <FormField
               control={form.control}
               name="address"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Branch Address*</FormLabel>
+                  <FormLabel>Address*</FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder="456 Branch St, City, Country"
+                      placeholder="Enter the full address of the branch"
+                      className="min-h-[80px]"
                       {...field}
-                      disabled={noCompanies || noCompanyCode}
                     />
                   </FormControl>
                   <FormMessage />
@@ -256,7 +296,7 @@ export default function AddBranchForm({ companies, onAddBranch }: AddBranchFormP
                   <FormItem>
                     <FormLabel>Email</FormLabel>
                     <FormControl>
-                      <Input placeholder="branch@company.com" {...field} disabled={noCompanies || noCompanyCode} />
+                      <Input type="email" placeholder="branch@company.com" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -270,7 +310,7 @@ export default function AddBranchForm({ companies, onAddBranch }: AddBranchFormP
                   <FormItem>
                     <FormLabel>Phone</FormLabel>
                     <FormControl>
-                      <Input placeholder="+1 (555) 123-4567" {...field} disabled={noCompanies || noCompanyCode} />
+                      <Input placeholder="+1 (555) 123-4567" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -282,34 +322,31 @@ export default function AddBranchForm({ companies, onAddBranch }: AddBranchFormP
               control={form.control}
               name="is_remote"
               render={({ field }) => (
-                <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                <FormItem className="flex flex-row items-start space-x-3 space-y-0">
                   <FormControl>
-                    <Checkbox
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                      disabled={noCompanies || noCompanyCode}
-                    />
+                    <Checkbox checked={field.value} onCheckedChange={field.onChange} />
                   </FormControl>
                   <div className="space-y-1 leading-none">
                     <FormLabel>Remote Branch</FormLabel>
-                    <p className="text-sm text-muted-foreground">
-                      Check this if this branch operates remotely without a physical location.
+                    <p className="text-xs text-muted-foreground">
+                      Check if this is a remote/virtual branch with no physical location
                     </p>
                   </div>
                 </FormItem>
               )}
             />
           </CardContent>
+
           <CardFooter>
-            <Button
-              type="submit"
-              disabled={isSubmitting || noCompanies || noCompanyCode || !branchCode || isGeneratingCode}
+            <Button 
+              type="submit" 
+              disabled={isSubmitting || noCompanies || noCompanyCode || isGeneratingCode}
               className="w-full"
             >
               {isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Adding...
+                  Adding Branch...
                 </>
               ) : (
                 "Add Branch"

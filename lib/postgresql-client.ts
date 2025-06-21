@@ -1,0 +1,52 @@
+import { Pool } from 'pg'
+
+// Centralized PostgreSQL connection pool
+export const pool = new Pool({
+  host: process.env.POSTGRES_HOST || 'localhost',
+  port: parseInt(process.env.POSTGRES_PORT || '5432'),
+  database: process.env.POSTGRES_DATABASE || 'ooak_future',
+  user: process.env.POSTGRES_USER || 'vikasalagarsamy',
+  password: process.env.POSTGRES_PASSWORD || '',
+  max: parseInt(process.env.POSTGRES_MAX_CONNECTIONS || '20'),
+  idleTimeoutMillis: parseInt(process.env.POSTGRES_IDLE_TIMEOUT || '30000'),
+  connectionTimeoutMillis: parseInt(process.env.POSTGRES_CONNECTION_TIMEOUT || '2000'),
+})
+
+// Helper function for single queries
+export async function query(text: string, params?: any[]) {
+  const client = await pool.connect()
+  try {
+    const result = await client.query(text, params)
+    return result
+  } finally {
+    client.release()
+  }
+}
+
+// Helper function for transactions
+export async function transaction(callback: (client: any) => Promise<any>) {
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const result = await callback(client)
+    await client.query('COMMIT')
+    return result
+  } catch (error) {
+    await client.query('ROLLBACK')
+    throw error
+  } finally {
+    client.release()
+  }
+}
+
+// Connection health check
+export async function healthCheck() {
+  try {
+    const result = await query('SELECT NOW() as current_time')
+    console.log('✅ PostgreSQL connection healthy:', result.rows[0].current_time)
+    return true
+  } catch (error) {
+    console.error('❌ PostgreSQL connection failed:', error.message)
+    return false
+  }
+}

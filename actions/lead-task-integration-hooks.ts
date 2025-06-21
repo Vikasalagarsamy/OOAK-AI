@@ -8,7 +8,7 @@ import type { LeadStatus } from '@/types/follow-up'
  * These functions are called from existing lead actions WITHOUT modifying core functionality
  */
 
-const integrationService = new LeadTaskIntegrationService()
+const integrationService = LeadTaskIntegrationService.getInstance()
 
 /**
  * Hook: Called when a lead is assigned to an employee
@@ -28,21 +28,36 @@ export async function triggerLeadAssignmentTasks(
     updated_at?: string
   },
   triggeredBy?: string
-) {
+): Promise<{
+  success: boolean
+  message: string
+  tasksGenerated?: number
+  insights?: any[]
+  error?: string
+}> {
   try {
-    console.log(`🎯 Lead assignment hook triggered for lead ${leadId}`)
-    
+    console.log(`🎯 Triggering lead assignment tasks for lead ${leadId}:`, {
+      leadData,
+      triggeredBy
+    })
+
     const event: LeadTaskTriggerEvent = {
       eventType: 'lead_assigned',
       leadId,
       leadData,
-      triggeredBy
+      triggeredBy,
+      previousStatus: 'UNASSIGNED'
     }
 
+    console.log(`📋 Created lead event:`, event)
+
     const result = await integrationService.processLeadEvent(event)
-    
+
+    console.log(`📋 Lead event processing result:`, result)
+
     if (result.success && result.tasksGenerated > 0) {
       console.log(`✅ Lead assignment: Generated ${result.tasksGenerated} tasks for ${leadData.client_name}`)
+      console.log(`📋 Generated tasks:`, result.tasks)
       return {
         success: true,
         message: `Generated ${result.tasksGenerated} automated tasks for lead follow-up`,
@@ -51,6 +66,11 @@ export async function triggerLeadAssignmentTasks(
       }
     } else {
       console.log(`ℹ️ Lead assignment: No tasks generated for ${leadData.client_name}`)
+      console.log(`📋 Result details:`, {
+        success: result.success,
+        error: result.error,
+        insights: result.businessInsights
+      })
       return {
         success: true,
         message: 'Lead assigned successfully (no additional tasks needed)',
@@ -60,6 +80,7 @@ export async function triggerLeadAssignmentTasks(
     }
   } catch (error: any) {
     console.error('❌ Lead assignment task generation failed:', error)
+    console.error('Stack trace:', error?.stack)
     return {
       success: false,
       message: 'Lead assigned but task automation failed',

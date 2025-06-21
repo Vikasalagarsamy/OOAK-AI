@@ -1,11 +1,13 @@
 "use client"
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Input } from "@/components/ui/input"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { 
   Brain, 
   TrendingUp, 
@@ -24,10 +26,14 @@ import {
   UserCheck,
   TrendingDown,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Send,
+  Loader2
 } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
 import { formatDistanceToNow } from 'date-fns'
+import { TestRealtimeButton } from '@/components/test-realtime-button'
+import { Separator } from "@/components/ui/separator"
 
 interface AIPrediction {
   quotation_id: number
@@ -103,6 +109,37 @@ export function AIInsightsDashboard() {
   const [teamPerformance, setTeamPerformance] = useState<TeamPerformanceData | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [activeTab, setActiveTab] = useState("overview")
+  
+  // AI Chat state
+  const [chatMessages, setChatMessages] = useState<Array<{
+    id: string
+    type: 'user' | 'ai'
+    content: string
+    timestamp: Date
+  }>>([
+    {
+      id: '1',
+      type: 'ai',
+      content: 'Ready to assist with your photography business, Vikas! I have full access to your client data, quotations, and team performance. Just ask me anything - like "what\'s my revenue this month" or "which clients need follow-up" or "show me Ramya\'s event details".',
+      timestamp: new Date()
+    }
+  ])
+  const [currentMessage, setCurrentMessage] = useState('')
+  const [isChatLoading, setIsChatLoading] = useState(false)
+  const chatEndRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [chatMessages, isChatLoading])
+
+  // Focus input after sending message
+  useEffect(() => {
+    if (!isChatLoading && inputRef.current) {
+      inputRef.current.focus()
+    }
+  }, [isChatLoading])
 
   // Only run once on mount to prevent infinite loops
   useEffect(() => {
@@ -133,8 +170,20 @@ export function AIInsightsDashboard() {
         console.log('📊 Team performance data received:', teamData)
         console.log('🔍 Management insights:', teamData.data?.management_insights)
         setTeamPerformance(teamData.data)
+        
+        // Show helpful message if no team data
+        if (teamData.message && teamData.message.includes('empty state')) {
+          console.log('ℹ️ No team performance data available - showing setup guidance')
+        }
       } else {
         console.error('❌ Team performance API error:', teamResponse.status, teamResponse.statusText)
+        // Set empty performance data to avoid crashes
+        setTeamPerformance({
+          team_overview: null,
+          individual_performance: [],
+          management_insights: [],
+          team_members: []
+        })
       }
     } catch (error) {
       console.error('Error loading AI insights:', error)
@@ -275,6 +324,56 @@ export function AIInsightsDashboard() {
     }
   }
 
+  const sendMessage = async () => {
+    if (!currentMessage.trim() || isChatLoading) return
+
+    const userMessage = {
+      id: Date.now().toString(),
+      type: 'user' as const,
+      content: currentMessage,
+      timestamp: new Date()
+    }
+
+    setChatMessages(prev => [...prev, userMessage])
+    setCurrentMessage('')
+    setIsChatLoading(true)
+
+    try {
+      const response = await fetch('/api/ai-simple-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: currentMessage,
+          conversationHistory: chatMessages.slice(-8) // Send last 8 messages for context
+        })
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        const aiMessage = {
+          id: (Date.now() + 1).toString(),
+          type: 'ai' as const,
+          content: data.message,
+          timestamp: new Date()
+        }
+        setChatMessages(prev => [...prev, aiMessage])
+      } else {
+        throw new Error('Failed to get AI response')
+      }
+    } catch (error) {
+      console.error('Chat error:', error)
+      const errorMessage = {
+        id: (Date.now() + 1).toString(),
+        type: 'ai' as const,
+        content: 'Sorry, I encountered an error. Please try again.',
+        timestamp: new Date()
+      }
+      setChatMessages(prev => [...prev, errorMessage])
+    } finally {
+      setIsChatLoading(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -301,10 +400,14 @@ export function AIInsightsDashboard() {
       </div>
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="overview" className="flex items-center gap-2">
             <Activity className="h-4 w-4" />
             Overview
+          </TabsTrigger>
+          <TabsTrigger value="ai-chat" className="flex items-center gap-2">
+            <MessageCircleQuestion className="h-4 w-4" />
+            AI Chat
           </TabsTrigger>
           <TabsTrigger value="team-performance" className="flex items-center gap-2">
             <Users className="h-4 w-4" />
@@ -321,6 +424,10 @@ export function AIInsightsDashboard() {
           <TabsTrigger value="forecasts" className="flex items-center gap-2">
             <TrendingUp className="h-4 w-4" />
             Forecasts
+          </TabsTrigger>
+          <TabsTrigger value="developers" className="flex items-center gap-2">
+            <Zap className="h-4 w-4" />
+            Developers Zone
           </TabsTrigger>
         </TabsList>
 
@@ -420,6 +527,139 @@ export function AIInsightsDashboard() {
                       (teamPerformance.team_overview.team_conversion_rate * 100).toFixed(1) : 'N/A'}%. 
                     {teamPerformance?.management_insights?.filter(i => i.insight_type === 'coaching_opportunity').length || 0} members need coaching support.
                   </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* AI Chat Tab */}
+        <TabsContent value="ai-chat" className="space-y-6">
+          <Card className="h-[750px] flex flex-col bg-gradient-to-br from-slate-50 to-blue-50 border-none shadow-xl">
+            <CardHeader className="flex-shrink-0 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-t-lg">
+              <CardTitle className="flex items-center gap-3">
+                <div className="p-2 bg-white/20 rounded-full">
+                  <MessageCircleQuestion className="h-5 w-5" />
+                </div>
+                <div className="flex-1">
+                  <div className="text-lg font-semibold">Your Business Partner AI</div>
+                  <div className="text-sm text-white/80 font-normal">
+                    Strategic advisor with full business intelligence • Local llama3.1:8b
+                  </div>
+                </div>
+                <Badge className="bg-green-500 text-white border-none px-3 py-1">
+                  <div className="w-2 h-2 bg-white rounded-full mr-2 animate-pulse"></div>
+                  Online
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="flex-1 flex flex-col p-0 bg-white">
+              <ScrollArea className="flex-1 p-6">
+                <div className="space-y-6">
+                  {chatMessages.map((message) => (
+                    <div
+                      key={message.id}
+                      className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'} group`}
+                    >
+                      <div className={`flex items-end gap-3 max-w-[75%] ${message.type === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                        {/* Avatar */}
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-semibold flex-shrink-0 ${
+                          message.type === 'user' 
+                            ? 'bg-gradient-to-br from-blue-500 to-purple-600' 
+                            : 'bg-gradient-to-br from-purple-500 to-pink-500'
+                        }`}>
+                          {message.type === 'user' ? 'You' : 'AI'}
+                        </div>
+                        
+                        {/* Message Bubble */}
+                        <div className={`relative rounded-2xl px-4 py-3 shadow-md ${
+                          message.type === 'user'
+                            ? 'bg-gradient-to-br from-blue-500 to-purple-600 text-white rounded-br-md'
+                            : 'bg-white border border-gray-200 text-gray-800 rounded-bl-md'
+                        }`}>
+                          <div className="text-sm font-medium leading-relaxed whitespace-pre-wrap">
+                            {message.content}
+                          </div>
+                          <div className={`text-xs mt-2 ${
+                            message.type === 'user' ? 'text-white/70' : 'text-gray-400'
+                          }`}>
+                            {formatDistanceToNow(message.timestamp, { addSuffix: true })}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  
+                  {isChatLoading && (
+                    <div className="flex justify-start group">
+                      <div className="flex items-end gap-3 max-w-[75%]">
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-sm font-semibold">
+                          AI
+                        </div>
+                        <div className="bg-white border border-gray-200 rounded-2xl rounded-bl-md px-4 py-3 shadow-md">
+                          <div className="flex items-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin text-purple-500" />
+                            <span className="text-sm text-gray-600">AI is crafting your response...</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Auto-scroll anchor */}
+                  <div ref={chatEndRef} />
+                </div>
+              </ScrollArea>
+              
+              {/* Input Area */}
+              <div className="flex-shrink-0 p-6 bg-gradient-to-r from-gray-50 to-blue-50 border-t border-gray-100">
+                <div className="flex gap-3 items-end">
+                  <div className="flex-1 relative">
+                    <Input
+                      ref={inputRef}
+                      value={currentMessage}
+                      onChange={(e) => setCurrentMessage(e.target.value)}
+                      placeholder="Ask me anything about our business... revenue, clients, strategy, opportunities 📈"
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault()
+                          sendMessage()
+                        }
+                      }}
+                      disabled={isChatLoading}
+                      className="pr-12 py-3 rounded-full border-2 border-purple-200 focus:border-purple-400 bg-white shadow-sm text-gray-800 placeholder:text-gray-500 font-medium"
+                    />
+                    {currentMessage.trim() && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        <Button 
+                          onClick={sendMessage} 
+                          disabled={!currentMessage.trim() || isChatLoading}
+                          size="sm"
+                          className="h-8 w-8 rounded-full bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 border-none shadow-lg"
+                        >
+                          <Send className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {[
+                    'What\'s our biggest opportunity right now?',
+                    'Should we follow up with Jothi about that ₹50k quote?', 
+                    'How\'s our cash flow looking this month?',
+                    'Which clients are we losing and why?',
+                    'What\'s our growth strategy for next quarter?'
+                  ].map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      onClick={() => setCurrentMessage(suggestion)}
+                      className="text-xs px-3 py-1.5 bg-white/80 hover:bg-white border border-purple-200 rounded-full text-purple-700 hover:text-purple-800 transition-all duration-200 hover:shadow-sm"
+                      disabled={isChatLoading}
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
                 </div>
               </div>
             </CardContent>
@@ -767,6 +1007,87 @@ export function AIInsightsDashboard() {
                 <Target className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                 <p className="text-muted-foreground">
                   Quotation-specific predictions will appear here when you analyze individual quotes.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Developers Zone Tab */}
+        <TabsContent value="developers" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Zap className="h-5 w-5 text-orange-600" />
+                🔧 Developer Testing Zone
+              </CardTitle>
+              <CardDescription>
+                Development and testing tools - Remove this section when ready for production
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Real-Time System Test */}
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                <h3 className="font-semibold text-blue-800 mb-2 flex items-center gap-2">
+                  ⚡ Real-Time System Test
+                </h3>
+                <p className="text-sm text-blue-700 mb-4">
+                  This section is for testing real-time notifications. Remove this section when ready for production.
+                </p>
+                <TestRealtimeButton />
+              </div>
+
+              {/* Real-Time Test */}
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                  <h4 className="font-medium text-blue-800">Real-Time Test:</h4>
+                </div>
+                <ul className="text-sm text-blue-700 space-y-1">
+                  <li>• Tests basic notification delivery system</li>
+                  <li>• 🟢 If real-time works: Badge updates instantly</li>
+                  <li>• 🔴 If real-time fails: Badge updates within 5 seconds (polling mode)</li>
+                </ul>
+              </div>
+
+              {/* Business Integration Test */}
+              <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                <h3 className="font-semibold text-green-800 mb-2 flex items-center gap-2">
+                  🏢 Business Integration Test
+                </h3>
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  <h4 className="font-medium text-green-800">Business Notification Test:</h4>
+                </div>
+                <ul className="text-sm text-green-700 space-y-1">
+                  <li>• 📊 Quotation created/approved notifications</li>
+                  <li>• 💰 Payment received alerts</li>
+                  <li>• 🤖 AI-powered low success probability warnings</li>
+                  <li>• ⚠️ Team performance anomaly alerts</li>
+                  <li>• 📅 Event deadline approaching notifications</li>
+                </ul>
+                <p className="text-xs text-green-600 mt-3 font-medium">
+                  This simulates real business events!
+                </p>
+              </div>
+
+              {/* Instructions */}
+              <div className="bg-amber-50 p-4 rounded-lg border border-amber-200">
+                <h3 className="font-semibold text-amber-800 mb-2">📋 Instructions:</h3>
+                <ol className="text-sm text-amber-700 space-y-1 list-decimal list-inside">
+                  <li>Click either test button above</li>
+                  <li>Check the browser console for detailed logs</li>
+                  <li>Watch the notification bell for badge updates</li>
+                  <li>Click the bell to see the different notification types</li>
+                  <li>Test "mark as read" functionality</li>
+                </ol>
+              </div>
+
+              {/* Production Ready Note */}
+              <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                <h3 className="font-semibold text-purple-800 mb-2">🚀 Production Ready:</h3>
+                <p className="text-sm text-purple-700">
+                  Remove this testing section when deploying!
                 </p>
               </div>
             </CardContent>

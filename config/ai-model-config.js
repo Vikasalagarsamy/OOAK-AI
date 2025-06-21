@@ -1,0 +1,213 @@
+/**
+ * UNIVERSAL AI MODEL CONFIGURATION
+ * ================================
+ * 
+ * SINGLE SOURCE OF TRUTH for ALL AI model configurations
+ * Supports local development and production GPU server deployment
+ * Easy model switching and non-technical configuration
+ */
+
+// ===========================================
+// AI MODEL CONFIGURATIONS
+// ===========================================
+export const AI_MODEL_CONFIG = {
+  // Current Active Configuration
+  ACTIVE: {
+    PRIMARY: 'local_ollama',      // Change this to switch models
+    FALLBACK: 'openai_gpt4',     // Fallback if primary fails
+    REMOTE_GPU_SERVER: null      // Set this for production deployment
+  },
+
+  // Local Development Models
+  LOCAL_MODELS: {
+    local_ollama: {
+      name: "Local Ollama (Development)",
+      provider: "ollama",
+      endpoint: "http://127.0.0.1:11434",
+      model: "qwen2.5:7b",
+      backup_model: "qwen2.5:7b",
+      timeout: 60000,
+      max_retries: 3,
+      temperature: 0.7,
+      max_tokens: 4000,
+      description: "Fast local model for development",
+      use_case: "Development and testing"
+    },
+    local_lmstudio: {
+      name: "LM Studio Local",
+      provider: "lmstudio", 
+      endpoint: "http://127.0.0.1:1234/v1",
+      model: "local-model",
+      timeout: 45000,
+      max_retries: 2,
+      temperature: 0.7,
+      max_tokens: 4000,
+      description: "LM Studio local deployment",
+      use_case: "Local GPU testing"
+    }
+  },
+
+  // Production GPU Server Models
+  REMOTE_MODELS: {
+    runpod_llama: {
+      name: "RunPod Llama 3.1 70B",
+      provider: "runpod",
+      endpoint: "https://api.runpod.ai/v2/{pod_id}/runsync",
+      model: "llama-3.1-70b-instruct",
+      api_key_env: "RUNPOD_API_KEY",
+      pod_id_env: "RUNPOD_POD_ID", 
+      timeout: 120000,
+      max_retries: 3,
+      temperature: 0.7,
+      max_tokens: 8000,
+      description: "High-performance 70B model on GPU",
+      use_case: "Production business intelligence"
+    },
+    runpod_qwen: {
+      name: "RunPod Qwen 2.5 72B",
+      provider: "runpod",
+      endpoint: "https://api.runpod.ai/v2/{pod_id}/runsync", 
+      model: "qwen2.5-72b-instruct",
+      api_key_env: "RUNPOD_API_KEY",
+      pod_id_env: "RUNPOD_POD_ID",
+      timeout: 120000,
+      max_retries: 3,
+      temperature: 0.7,
+      max_tokens: 8000,
+      description: "Advanced reasoning model on GPU",
+      use_case: "Complex business analysis"
+    },
+    custom_gpu_server: {
+      name: "Custom GPU Server",
+      provider: "custom",
+      endpoint: "", // To be configured
+      model: "",    // To be configured
+      api_key_env: "CUSTOM_GPU_API_KEY",
+      timeout: 90000,
+      max_retries: 3,
+      temperature: 0.7,
+      max_tokens: 6000,
+      description: "Your custom GPU deployment",
+      use_case: "Custom business requirements"
+    }
+  },
+
+  // External API Models (Fallback)
+  EXTERNAL_MODELS: {
+    openai_gpt4: {
+      name: "OpenAI GPT-4",
+      provider: "openai",
+      endpoint: "https://api.openai.com/v1",
+      model: "gpt-4",
+      api_key_env: "OPENAI_API_KEY",
+      timeout: 60000,
+      max_retries: 3,
+      temperature: 0.7,
+      max_tokens: 4000,
+      description: "OpenAI GPT-4 for reliable fallback",
+      use_case: "Reliable external backup"
+    },
+    anthropic_claude: {
+      name: "Anthropic Claude 3.5",
+      provider: "anthropic",
+      endpoint: "https://api.anthropic.com/v1",
+      model: "claude-3-5-sonnet-20241022",
+      api_key_env: "ANTHROPIC_API_KEY", 
+      timeout: 60000,
+      max_retries: 3,
+      temperature: 0.7,
+      max_tokens: 4000,
+      description: "Claude for complex reasoning",
+      use_case: "Advanced business analysis"
+    }
+  },
+
+  // Business Intelligence Specific Settings
+  BUSINESS_AI: {
+    confidence_threshold: 0.8,
+    max_context_length: 8000,
+    response_timeout: 30000,
+    enable_conversation_memory: true,
+    enable_source_citations: true,
+    enable_suggested_actions: true,
+    performance_monitoring: true
+  },
+
+  // Model Selection Rules (Automatic)
+  SELECTION_RULES: {
+    development: "local_ollama",
+    testing: "local_lmstudio", 
+    staging: "runpod_llama",
+    production: "runpod_qwen",
+    fallback: "openai_gpt4"
+  }
+}
+
+// Helper Functions
+export const getActiveModelConfig = () => {
+  const environment = process.env.NODE_ENV || 'development'
+  const activeModelId = AI_MODEL_CONFIG.ACTIVE.PRIMARY
+  
+  // Get model from appropriate category
+  const allModels = {
+    ...AI_MODEL_CONFIG.LOCAL_MODELS,
+    ...AI_MODEL_CONFIG.REMOTE_MODELS,
+    ...AI_MODEL_CONFIG.EXTERNAL_MODELS
+  }
+  
+  return allModels[activeModelId] || allModels[AI_MODEL_CONFIG.SELECTION_RULES[environment]]
+}
+
+export const getFallbackModelConfig = () => {
+  const fallbackModelId = AI_MODEL_CONFIG.ACTIVE.FALLBACK
+  const allModels = {
+    ...AI_MODEL_CONFIG.LOCAL_MODELS,
+    ...AI_MODEL_CONFIG.REMOTE_MODELS, 
+    ...AI_MODEL_CONFIG.EXTERNAL_MODELS
+  }
+  
+  return allModels[fallbackModelId]
+}
+
+export const switchToModel = (modelId) => {
+  AI_MODEL_CONFIG.ACTIVE.PRIMARY = modelId
+  console.log(`🔄 Switched to model: ${modelId}`)
+}
+
+export const switchToGPUServer = (serverEndpoint, model, apiKey) => {
+  AI_MODEL_CONFIG.REMOTE_MODELS.custom_gpu_server.endpoint = serverEndpoint
+  AI_MODEL_CONFIG.REMOTE_MODELS.custom_gpu_server.model = model
+  AI_MODEL_CONFIG.ACTIVE.PRIMARY = 'custom_gpu_server'
+  console.log(`🚀 Switched to GPU server: ${serverEndpoint}`)
+}
+
+export const validateModelConfig = (config) => {
+  const errors = []
+  
+  if (!config.endpoint) errors.push("Endpoint is required")
+  if (!config.model) errors.push("Model is required") 
+  if (!config.provider) errors.push("Provider is required")
+  
+  return {
+    isValid: errors.length === 0,
+    errors
+  }
+}
+
+export const listAvailableModels = () => {
+  const allModels = {
+    ...AI_MODEL_CONFIG.LOCAL_MODELS,
+    ...AI_MODEL_CONFIG.REMOTE_MODELS,
+    ...AI_MODEL_CONFIG.EXTERNAL_MODELS
+  }
+  
+  return Object.entries(allModels).map(([id, config]) => ({
+    id,
+    name: config.name,
+    provider: config.provider,
+    description: config.description,
+    use_case: config.use_case
+  }))
+}
+
+export default AI_MODEL_CONFIG 

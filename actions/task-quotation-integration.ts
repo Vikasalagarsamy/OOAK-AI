@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { query, transaction } from '@/lib/postgresql-client'
 
 interface QuotationFromTaskData {
   lead_id: number
@@ -22,7 +22,7 @@ interface QuotationFromTaskData {
 
 // Helper function to generate quotation number
 async function generateQuotationNumber(): Promise<string> {
-  const supabase = createClient()
+  console.log('📊 Generating new quotation number...')
   
   // Get current year and month
   const now = new Date()
@@ -31,18 +31,22 @@ async function generateQuotationNumber(): Promise<string> {
   
   // Get count of quotations this month
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-  const { count } = await supabase
-    .from('quotations')
-    .select('*', { count: 'exact', head: true })
-    .gte('created_at', startOfMonth.toISOString())
+  const countResult = await query(
+    'SELECT COUNT(*) as count FROM quotations WHERE created_at >= $1',
+    [startOfMonth.toISOString()]
+  )
   
-  const sequence = ((count || 0) + 1).toString().padStart(4, '0')
-  return `QT${year}${month}${sequence}`
+  const count = parseInt(countResult.rows[0]?.count || '0')
+  const sequence = (count + 1).toString().padStart(4, '0')
+  const quotationNumber = `QT-${year}${month}-${sequence}`
+  
+  console.log(`✅ Generated quotation number: ${quotationNumber}`)
+  return quotationNumber
 }
 
 // Helper function to generate unique slug
 async function generateQuotationSlug(quotationNumber: string): Promise<string> {
-  const supabase = createClient()
+  console.log(`🔄 Generating unique slug for quotation: ${quotationNumber}`)
   
   const baseSlug = quotationNumber.toLowerCase().replace(/[^a-z0-9]/g, '-')
   let attempts = 0
@@ -52,85 +56,93 @@ async function generateQuotationSlug(quotationNumber: string): Promise<string> {
     const randomSuffix = Math.random().toString(36).substring(2, 8)
     const slug = `${baseSlug}-${randomSuffix}`
     
-    const { data: existing } = await supabase
-      .from('quotations')
-      .select('id')
-      .eq('slug', slug)
-      .maybeSingle()
+    const existingResult = await query(
+      'SELECT id FROM quotations WHERE slug = $1 LIMIT 1',
+      [slug]
+    )
     
-    if (!existing) {
+    if (existingResult.rows.length === 0) {
+      console.log(`✅ Generated unique slug: ${slug}`)
       return slug
     }
     
     attempts++
   }
   
-  return `${baseSlug}-${Date.now()}`
+  const fallbackSlug = `${baseSlug}-${Date.now()}`
+  console.log(`⚠️ Using fallback slug: ${fallbackSlug}`)
+  return fallbackSlug
 }
 
 /**
- * Prepare quotation data from completed task and redirect to creation form
- * This integrates with the existing 3-step quotation creation flow
+ * Prepare quotation data from completed task and redirect to quotation creation page
+ * This follows the same workflow as the follow-up "generate quotation" functionality
  */
 export async function createQuotationFromTask(data: QuotationFromTaskData) {
   try {
-    const supabase = createClient()
-    
-    console.log('🔄 Preparing quotation data from task:', data.task_id)
+    console.log('🔄 Preparing quotation creation from task:', data.task_id)
     
     // 1. Get lead information
-    const { data: lead, error: leadError } = await supabase
-      .from('leads')
-      .select('*')
-      .eq('id', data.lead_id)
-      .single()
+    console.log('📋 Fetching lead information...')
+    const leadResult = await query(
+      'SELECT * FROM leads WHERE id = $1',
+      [data.lead_id]
+    )
     
-    if (leadError || !lead) {
-      throw new Error(`Lead not found: ${leadError?.message}`)
+    if (leadResult.rows.length === 0) {
+      throw new Error(`Lead not found with ID: ${data.lead_id}`)
     }
+    
+    const lead = leadResult.rows[0]
+    console.log(`✅ Found lead: ${lead.company_name || lead.name}`)
     
     // 2. Get task information
-    const { data: task, error: taskError } = await supabase
-      .from('ai_tasks')
-      .select('*')
-      .eq('id', data.task_id)
-      .single()
+    console.log('📋 Fetching task information...')
+    const taskResult = await query(
+      'SELECT * FROM ai_tasks WHERE id = $1',
+      [data.task_id]
+    )
     
-    if (taskError || !task) {
-      throw new Error(`Task not found: ${taskError?.message}`)
+    if (taskResult.rows.length === 0) {
+      throw new Error(`Task not found with ID: ${data.task_id}`)
     }
     
+    const task = taskResult.rows[0]
+    console.log(`✅ Found task: ${task.title}`)
+
     // 3. Update task to mark that quotation process was initiated
-    await supabase
-      .from('ai_tasks')
-      .update({
-        metadata: {
-          ...task.metadata,
-          quotation_initiated: true,
-          quotation_initiated_at: new Date().toISOString(),
-          quotation_context: {
-            client_requirements: data.context.client_requirements,
-            budget_range: data.context.budget_range,
-            project_scope: data.context.project_scope,
-            timeline_required: data.context.timeline,
-            urgency_level: data.context.urgency,
-            business_impact: data.context.business_impact,
-            estimated_value: data.context.estimated_value
-          }
-        }
-      })
-      .eq('id', data.task_id)
-    
-    // 4. Prepare URL for quotation creation form with pre-filled data
+    console.log('🔄 Updating task metadata...')
+    const updatedMetadata = {
+      ...(task.metadata || {}),
+      quotation_initiated: true,
+      quotation_initiated_at: new Date().toISOString(),
+      quotation_context: {
+        client_requirements: data.context.client_requirements,
+        budget_range: data.context.budget_range,
+        project_scope: data.context.project_scope,
+        timeline_required: data.context.timeline,
+        urgency_level: data.context.urgency,
+        business_impact: data.context.business_impact,
+        estimated_value: data.context.estimated_value
+      }
+    }
+
+    await query(
+      'UPDATE ai_tasks SET metadata = $1 WHERE id = $2',
+      [JSON.stringify(updatedMetadata), data.task_id]
+    )
+    console.log('✅ Task metadata updated successfully')
+
+    // 4. Prepare URL for quotation creation page with pre-filled data (same as follow-up workflow)
     const quotationFormUrl = new URL('/sales/quotations/generate', 'http://localhost:3000')
     
-    // Add lead and task context as URL parameters
+    // Add lead and task context as URL parameters (following existing pattern)
     quotationFormUrl.searchParams.set('leadId', data.lead_id.toString())
     quotationFormUrl.searchParams.set('taskId', data.task_id)
     quotationFormUrl.searchParams.set('clientName', data.client_name)
     quotationFormUrl.searchParams.set('source', 'task_completion')
     
-    // Encode AI context safely for the form (using URL encoding instead of base64)
+    // Encode AI context safely for the form
     const aiContext = {
       task_title: data.context.task_title,
       client_requirements: data.context.client_requirements,
@@ -143,7 +155,7 @@ export async function createQuotationFromTask(data: QuotationFromTaskData) {
       completion_notes: data.context.completion_notes
     }
     
-    // Use encodeURIComponent instead of btoa to handle Unicode characters safely
+    // Use encodeURIComponent for safe URL encoding
     try {
       quotationFormUrl.searchParams.set('aiContext', encodeURIComponent(JSON.stringify(aiContext)))
     } catch (error) {
@@ -159,36 +171,41 @@ export async function createQuotationFromTask(data: QuotationFromTaskData) {
       }
       quotationFormUrl.searchParams.set('aiContext', encodeURIComponent(JSON.stringify(fallbackContext)))
     }
-    
+
     // 5. Log the task-to-quotation initiation (if table exists)
+    console.log('📝 Logging task generation initiation...')
     try {
-      await supabase
-        .from('task_generation_log')
-        .insert({
-          lead_id: data.lead_id,
-          trigger_event: 'task_to_quotation_initiated',
-          business_rule_applied: 'task_completion_quotation_initiation',
-          task_id: parseInt(data.task_id),
-          success: true,
-          ai_reasoning: `Quotation creation initiated from completed task: ${data.context.task_title}`,
-          metadata: {
+      await query(
+        `INSERT INTO task_generation_log 
+         (lead_id, trigger_event, business_rule_applied, task_id, success, ai_reasoning, metadata) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          data.lead_id,
+          'task_to_quotation_initiated',
+          'task_completion_quotation_initiation',
+          parseInt(data.task_id),
+          true,
+          `Quotation creation initiated from completed task: ${data.context.task_title}`,
+          JSON.stringify({
             client_requirements: data.context.client_requirements,
             budget_range: data.context.budget_range,
             urgency: data.context.urgency,
             estimated_value: data.context.estimated_value,
             redirect_url: quotationFormUrl.pathname + quotationFormUrl.search
-          }
-        })
+          })
+        ]
+      )
+      console.log('✅ Task generation log entry created')
     } catch (logError) {
       console.warn('⚠️ Could not log task generation initiation:', logError)
     }
     
-    console.log('✅ Quotation creation prepared, redirecting to form')
+    console.log('✅ Quotation creation prepared, redirecting to comprehensive creation page')
     
     return {
       success: true,
       redirect_url: quotationFormUrl.pathname + quotationFormUrl.search,
-      message: 'Redirecting to quotation creation form with pre-filled data from task context.',
+      message: 'Redirecting to quotation creation page with pre-filled task context.',
       lead_id: data.lead_id,
       task_id: data.task_id,
       ai_context: aiContext
@@ -209,20 +226,29 @@ export async function createQuotationFromTask(data: QuotationFromTaskData) {
  */
 export async function getQuotationContextFromTask(taskId: string) {
   try {
-    const supabase = createClient()
+    console.log(`📋 Fetching quotation context for task: ${taskId}`)
     
-    const { data: task, error } = await supabase
-      .from('ai_tasks')
-      .select(`
-        *,
-        leads!inner(*)
-      `)
-      .eq('id', taskId)
-      .single()
+    const taskResult = await query(
+      `SELECT 
+        t.*,
+        l.id as lead_id,
+        l.company_name,
+        l.name as lead_name,
+        l.contact_person,
+        l.email,
+        l.phone
+       FROM ai_tasks t
+       INNER JOIN leads l ON t.lead_id = l.id
+       WHERE t.id = $1`,
+      [taskId]
+    )
     
-    if (error || !task) {
-      throw new Error(`Task not found: ${error?.message}`)
+    if (taskResult.rows.length === 0) {
+      throw new Error(`Task not found with ID: ${taskId}`)
     }
+    
+    const task = taskResult.rows[0]
+    console.log(`✅ Found task context: ${task.title}`)
     
     return {
       success: true,
@@ -234,7 +260,14 @@ export async function getQuotationContextFromTask(taskId: string) {
         completion_notes: task.metadata?.completion_notes,
         estimated_value: task.estimated_value,
         business_impact: task.business_impact,
-        lead_data: task.leads
+        lead_data: {
+          id: task.lead_id,
+          company_name: task.company_name,
+          name: task.lead_name,
+          contact_person: task.contact_person,
+          email: task.email,
+          phone: task.phone
+        }
       }
     }
     

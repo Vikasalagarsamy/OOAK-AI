@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/postgresql-client'
 
 export class BusinessNotificationService {
   
@@ -164,7 +164,7 @@ export class BusinessNotificationService {
     priority: string
     metadata: any
   }) {
-    const supabase = createClient()
+    // PostgreSQL direct query
     
     const notificationData = {
       id: `business_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -179,7 +179,7 @@ export class BusinessNotificationService {
     }
 
     try {
-      await supabase.from('notifications').insert(notificationData)
+      await query(`INSERT INTO notifications (id, user_id, type, title, message, priority, is_read, created_at, metadata) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, [notificationData.id, notificationData.user_id, notificationData.type, notificationData.title, notificationData.message, notificationData.priority, notificationData.is_read, notificationData.created_at, JSON.stringify(notificationData.metadata)])
       console.log(`✅ Business notification created: ${notification.title}`)
     } catch (error) {
       console.error(`❌ Failed to create business notification:`, error)

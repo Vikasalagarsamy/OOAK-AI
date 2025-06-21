@@ -2,10 +2,9 @@ import { FileSearch } from "lucide-react"
 
 interface AuditHeaderProps {
   title: string
-  description?: string
 }
 
-export function AuditHeader({ title, description }: AuditHeaderProps) {
+export function AuditHeader({ title }: AuditHeaderProps) {
   return (
     <div className="flex items-center justify-between mb-6">
       <div className="flex items-center gap-2">
@@ -14,7 +13,6 @@ export function AuditHeader({ title, description }: AuditHeaderProps) {
         </div>
         <div>
           <h1 className="text-2xl font-bold">{title}</h1>
-          {description && <p className="text-muted-foreground">{description}</p>}
         </div>
       </div>
     </div>

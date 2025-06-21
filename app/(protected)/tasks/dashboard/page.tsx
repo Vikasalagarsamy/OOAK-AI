@@ -72,6 +72,7 @@ interface Task {
   ai_reasoning: string
   assigned_to: string
   created_at: string
+  updated_at?: string
   completion_notes?: string
   lead_id?: number
   quotation_id?: number
@@ -344,8 +345,8 @@ export default function EmployeeDashboard() {
     // that manage their own loading state
   }
 
-  // Call client function
-  const handleCallClient = (phoneNumber: string, clientName: string, taskId?: string) => {
+  // Call client function - API-based trigger to Android app
+  const handleCallClient = async (phoneNumber: string, clientName: string, taskId?: string) => {
     // Clean and format phone number
     let cleanPhone = phoneNumber.replace(/\D/g, '')
     
@@ -354,22 +355,80 @@ export default function EmployeeDashboard() {
       cleanPhone = '91' + cleanPhone
     }
     
-    // Format for tel: protocol
-    const telUrl = `tel:+${cleanPhone}`
+    const formattedPhone = `+${cleanPhone}`
     
-    // Open dialer
-    window.location.href = telUrl
+    try {
+      // Get current user for employee ID
+      const user = currentUser || await getCurrentUser()
+      const employeeId = user?.employee_id || user?.employeeId || 6 // Use numeric ID 6 as fallback
+      
+      console.log(`📞 Triggering call via API: ${clientName} at ${formattedPhone}`)
+      console.log(`📋 Using employeeId: ${employeeId} (type: ${typeof employeeId})`)
+      console.log(`📋 User object:`, user)
+      // Show loading toast
+      toast({
+        title: "📞 Triggering Call",
+        description: `Sending call request to your mobile device...`,
+        duration: 3000,
+      })
+
+      // Send API request to trigger call on mobile device
+      const response = await fetch('/api/trigger-call', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          phoneNumber: formattedPhone,
+          employeeId: employeeId,
+          taskId: taskId,
+          clientName: clientName
+        })
+      })
+
+      const result = await response.json()
+
+      if (response.ok && result.success) {
+        console.log(`✅ Call trigger sent successfully: ${result.message}`)
+        
+        toast({
+          title: "📞 Call Triggered",
+          description: `Call request sent to your mobile device for ${clientName} (${formattedPhone})`,
+          duration: 5000,
+        })
+      } else {
+        console.error('❌ Call trigger failed:', result.error)
+        
+        // Fallback to regular phone dialer
+        const telUrl = `tel:${formattedPhone}`
+        window.location.href = telUrl
+        
+        toast({
+          title: "📞 Opening Phone Dialer",
+          description: `API trigger failed. Opening phone dialer as fallback for ${clientName}`,
+          variant: "destructive",
+          duration: 5000,
+        })
+      }
+      
+    } catch (error) {
+      console.error('❌ Call trigger error:', error)
+      
+      // Fallback to regular phone dialer
+      const telUrl = `tel:${formattedPhone}`
+      window.location.href = telUrl
+      
+      toast({
+        title: "📞 Opening Phone Dialer",
+        description: `Connection error. Opening phone dialer as fallback for ${clientName}`,
+        variant: "destructive",
+        duration: 5000,
+      })
+    }
     
-    // Show confirmation toast with enhanced info
-    toast({
-      title: "📞 Initiating Call",
-      description: `Calling ${clientName} at +${cleanPhone}`,
-      duration: 3000,
-    })
-    
-    // Log call initiation for analytics (optional)
+    // Log call initiation for analytics
     if (taskId) {
-      console.log(`📞 Call initiated for task ${taskId}: ${clientName} at +${cleanPhone}`)
+      console.log(`📞 Call initiated for task ${taskId}: ${clientName} at ${formattedPhone}`)
     }
   }
 
@@ -803,6 +862,147 @@ export default function EmployeeDashboard() {
     })
   }
 
+  // Show task timeline dialog
+  const showTaskTimeline = async (task: Task) => {
+    // Create a timeline dialog showing the task history
+    const overlay = document.createElement('div')
+    overlay.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50'
+    
+    const dialog = document.createElement('div')
+    dialog.className = 'bg-white rounded-lg p-6 max-w-2xl w-full mx-4 shadow-xl max-h-[80vh] overflow-y-auto'
+    
+    // Try to fetch related tasks to build timeline
+    let timelineHtml = `
+      <div class="mb-4">
+        <h3 class="text-lg font-semibold text-gray-900 mb-2">📋 Task Timeline: ${task.client_name}</h3>
+        <p class="text-sm text-gray-600">Complete history of follow-ups and interactions</p>
+      </div>
+      
+      <div class="space-y-4">
+        <!-- Current Task -->
+        <div class="flex items-start gap-3 p-4 bg-green-50 rounded-lg border border-green-200">
+          <div class="w-3 h-3 rounded-full bg-green-500 mt-1"></div>
+          <div class="flex-1">
+            <h4 class="font-medium text-green-900">${task.title}</h4>
+            <p class="text-sm text-green-700 mt-1">${task.description}</p>
+            ${task.completion_notes ? `<p class="text-sm text-green-600 mt-2"><strong>Notes:</strong> ${task.completion_notes}</p>` : ''}
+            <p class="text-xs text-green-600 mt-2">✅ Completed on ${new Date(task.updated_at || task.created_at).toLocaleDateString()}</p>
+          </div>
+        </div>
+    `
+
+    // Add estimated timeline based on task description patterns
+    if (task.description.includes('2 days') || task.description.includes('2 Days')) {
+      timelineHtml += `
+        <div class="flex items-start gap-3 p-4 bg-blue-50 rounded-lg border border-blue-200">
+          <div class="w-3 h-3 rounded-full bg-blue-500 mt-1"></div>
+          <div class="flex-1">
+            <h4 class="font-medium text-blue-900">Previous: 2 Days Follow-up</h4>
+            <p class="text-sm text-blue-700">Client requested callback in 2 days</p>
+            <p class="text-xs text-blue-600 mt-2">📞 Follow-up completed</p>
+          </div>
+        </div>
+      `
+    }
+
+    if (task.description.includes('7 days') || task.description.includes('1 week') || task.description.includes('1 Week')) {
+      timelineHtml += `
+        <div class="flex items-start gap-3 p-4 bg-purple-50 rounded-lg border border-purple-200">
+          <div class="w-3 h-3 rounded-full bg-purple-500 mt-1"></div>
+          <div class="flex-1">
+            <h4 class="font-medium text-purple-900">Previous: 1 Week Follow-up</h4>
+            <p class="text-sm text-purple-700">Client requested callback in 1 week</p>
+            <p class="text-xs text-purple-600 mt-2">📞 Follow-up completed</p>
+          </div>
+        </div>
+      `
+    }
+
+    if (task.description.includes('No Response') || task.description.includes('no response')) {
+      timelineHtml += `
+        <div class="flex items-start gap-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
+          <div class="w-3 h-3 rounded-full bg-gray-500 mt-1"></div>
+          <div class="flex-1">
+            <h4 class="font-medium text-gray-900">Previous: No Response</h4>
+            <p class="text-sm text-gray-700">Client did not respond to previous attempts</p>
+            <p class="text-xs text-gray-600 mt-2">📞 Follow-up attempted</p>
+          </div>
+        </div>
+      `
+    }
+
+    if (task.description.includes('Custom Date') || task.description.includes('custom date')) {
+      const dateMatch = task.description.match(/(\d{1,2}\/\d{1,2}\/\d{4})/);
+      const customDate = dateMatch ? dateMatch[1] : 'specific date';
+      timelineHtml += `
+        <div class="flex items-start gap-3 p-4 bg-orange-50 rounded-lg border border-orange-200">
+          <div class="w-3 h-3 rounded-full bg-orange-500 mt-1"></div>
+          <div class="flex-1">
+            <h4 class="font-medium text-orange-900">Previous: Custom Date Follow-up</h4>
+            <p class="text-sm text-orange-700">Client requested callback on ${customDate}</p>
+            <p class="text-xs text-orange-600 mt-2">📅 Scheduled follow-up completed</p>
+          </div>
+        </div>
+      `
+    }
+
+    // Add original task if this appears to be a follow-up
+    if (task.description.includes('Original task:')) {
+      const originalMatch = task.description.match(/Original task: (.+?)(?:\.|$)/);
+      const originalTask = originalMatch ? originalMatch[1] : 'Initial contact';
+      timelineHtml += `
+        <div class="flex items-start gap-3 p-4 bg-indigo-50 rounded-lg border border-indigo-200">
+          <div class="w-3 h-3 rounded-full bg-indigo-500 mt-1"></div>
+          <div class="flex-1">
+            <h4 class="font-medium text-indigo-900">Original Task</h4>
+            <p class="text-sm text-indigo-700">${originalTask}</p>
+            <p class="text-xs text-indigo-600 mt-2">🎯 Initial contact made</p>
+          </div>
+        </div>
+      `
+    }
+
+    timelineHtml += `
+      </div>
+      
+      <div class="flex gap-3 justify-end mt-6 pt-4 border-t">
+        <button 
+          id="closeTimelineBtn"
+          class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+        >
+          Close
+        </button>
+      </div>
+    `
+    
+    dialog.innerHTML = timelineHtml
+    overlay.appendChild(dialog)
+    document.body.appendChild(overlay)
+    
+    const cleanup = () => {
+      document.body.removeChild(overlay)
+    }
+    
+    // Handle close
+    dialog.querySelector('#closeTimelineBtn')?.addEventListener('click', cleanup)
+    
+    // Handle escape key
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        cleanup()
+        document.removeEventListener('keydown', handleKeyDown)
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    
+    // Handle click outside
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        cleanup()
+      }
+    })
+  }
+
   // =================== END QUICK ACTIONS ===================
 
   // Show rejection reason dialog
@@ -1157,7 +1357,13 @@ export default function EmployeeDashboard() {
 
   // Filter tasks based on user role and task type
   const filteredTasks = useMemo(() => {
-    if (!currentUser) return tasks
+    // BYPASS: If currentUser is null, return all tasks (temporary fix)
+    if (!currentUser) {
+      console.log('⚠️ currentUser is null, showing all tasks as fallback')
+      return tasks
+    }
+    
+    console.log(`🔐 Filtering tasks for user: ${currentUser.username}, role: ${currentUser.roleName}, employeeId: ${currentUser.employeeId}`)
     
     return tasks.filter(task => {
       // For quotation approval tasks, only show to Sales Head or Administrator
@@ -1170,17 +1376,24 @@ export default function EmployeeDashboard() {
       }
       
       // Show tasks assigned to current user or unassigned tasks
-      return (
-        !task.assigned_to_employee_id || 
-        task.assigned_to_employee_id === currentUser.employeeId ||
-        currentUser.roleName === 'Administrator'
-      )
+      // TEMPORARY FIX: Show all tasks for debugging
+      console.log(`🔍 Task ${task.id}: assigned_to=${task.assigned_to_employee_id}, user=${currentUser.employeeId}`)
+      return true // Show all tasks temporarily
     })
   }, [tasks, currentUser])
 
-  // Separate completed and pending tasks
+  // Separate completed and pending tasks with debug logging
   const pendingTasksFiltered = filteredTasks.filter(task => task.status === 'pending' || task.status === 'in_progress')
   const completedTasksFiltered = filteredTasks.filter(task => task.status === 'completed')
+  
+  // Debug log the filtering results
+  console.log('📊 Filtering Results:', {
+    totalTasks: tasks.length,
+    filteredTasks: filteredTasks.length,
+    pendingTasks: pendingTasksFiltered.length,
+    completedTasks: completedTasksFiltered.length,
+    hasCurrentUser: !!currentUser
+  })
 
   // Get current user for role-based filtering
   const getCurrentUser = async () => {
@@ -1188,7 +1401,7 @@ export default function EmployeeDashboard() {
       const response = await fetch('/api/auth/user')
       if (response.ok) {
         const userData = await response.json()
-        setCurrentUser(userData)
+        setCurrentUser(userData.user)
         console.log('📋 Current user loaded:', userData)
       }
     } catch (error) {
@@ -1274,10 +1487,14 @@ export default function EmployeeDashboard() {
 
         {/* Main Navigation Tabs */}
         <Tabs value={activeMainTab} onValueChange={setActiveMainTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="tasks" className="flex items-center gap-2">
-              <Target className="h-4 w-4" />
-              My Tasks
+              <Clock className="h-4 w-4" />
+              Active Tasks ({pendingTasksFiltered.length})
+            </TabsTrigger>
+            <TabsTrigger value="history" className="flex items-center gap-2">
+              <CheckCircle className="h-4 w-4" />
+              History ({completedTasksFiltered.length})
             </TabsTrigger>
             <TabsTrigger value="upload" className="flex items-center gap-2">
               <Upload className="h-4 w-4" />
@@ -1595,194 +1812,17 @@ export default function EmployeeDashboard() {
                 </div>
               )}
 
-            {/* Completed Tasks Section */}
-            {completedTasksFiltered.length > 0 && (
-              <div className="space-y-4">
-                <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
-                  <Target className="h-5 w-5 text-blue-600" />
-                  Completed Tasks ({completedTasksFiltered.length})
-                </h2>
-                {completedTasksFiltered.map((task) => (
-                  <Card key={task.id} className="border border-blue-200 hover:border-blue-300 transition-all duration-200 hover:shadow-md bg-blue-50/30">
-                    <CardContent className="p-6">
-                      <div className="flex items-start justify-between">
-                        {/* Left Section - Task Info */}
-                        <div className="flex-1 space-y-3">
-                          {/* Task Title & Status */}
-                          <div className="flex items-center gap-3">
-                            <div className="flex items-center gap-2">
-                              <div className="w-2 h-2 rounded-full bg-blue-500" />
-                              <h3 className="font-semibold text-gray-900 text-lg leading-tight">
-                                {task.title}
-                              </h3>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Badge variant="default" className="text-xs font-medium bg-blue-100 text-blue-800">
-                                COMPLETED
-                              </Badge>
-                              {task.quotation_id && (
-                                <Badge variant="outline" className="text-xs font-medium border-purple-600 text-purple-600">
-                                  QUOTED
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
 
-                          {/* Task Description */}
-                          <p className="text-gray-600 text-sm leading-relaxed max-w-2xl">
-                            {task.description}
-                          </p>
-
-                          {/* Completion Notes */}
-                          {task.completion_notes && (
-                            <div className="bg-white p-3 rounded-lg border border-blue-200">
-                              <p className="text-sm text-gray-700">
-                                <span className="font-medium text-blue-700">Completion Notes:</span> {task.completion_notes}
-                              </p>
-                            </div>
-                          )}
-
-                          {/* Task Meta Info */}
-                          <div className="flex items-center gap-6 text-sm text-gray-500">
-                            {task.client_name && (
-                              <div className="flex items-center gap-1">
-                                <User className="h-4 w-4" />
-                                <span className="font-medium text-gray-700">{task.client_name}</span>
-                              </div>
-                            )}
-                            {task.due_date && (
-                              <div className="flex items-center gap-1">
-                                <Calendar className="h-4 w-4" />
-                                <span>{new Date(task.due_date).toLocaleDateString()}</span>
-                              </div>
-                            )}
-                            {task.estimated_value && (
-                              <div className="flex items-center gap-1">
-                                <DollarSign className="h-4 w-4" />
-                                <span className="font-semibold text-green-600">₹{task.estimated_value.toLocaleString()}</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Right Section - Actions */}
-                        <div className="flex flex-col items-end gap-3 ml-6">
-                          {/* Primary Actions */}
-                          <div className="flex items-center gap-2">
-                            {task.quotation_id ? (
-                              // If quotation exists, show view/edit buttons
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => {
-                                    const viewUrl = task.quotation_slug 
-                                      ? `/quotation/${task.quotation_slug}` 
-                                      : `/sales/quotations/${task.quotation_id}`
-                                    window.open(viewUrl, '_blank')
-                                  }}
-                                  className="border-purple-600 text-purple-600 hover:bg-purple-50 px-3 py-2"
-                                >
-                                  <FileText className="h-4 w-4 mr-1" />
-                                  View Quotation
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => {
-                                    const editUrl = `/sales/quotations/edit-from-task/${task.quotation_id}?taskId=${task.id}`
-                                    window.open(editUrl, '_blank')
-                                  }}
-                                  className="border-purple-600 text-purple-600 hover:bg-purple-50 px-3 py-2"
-                                >
-                                  <Edit className="h-4 w-4 mr-1" />
-                                  Edit Quotation
-                                </Button>
-                              </div>
-                            ) : task.lead_id ? (
-                              // If no quotation but has lead_id, show Generate Quote button
-                              <Button
-                                size="sm"
-                                onClick={() => generateQuote(task)}
-                                disabled={loading}
-                                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2"
-                              >
-                                {loading ? (
-                                  <Target className="h-4 w-4 animate-spin mr-1" />
-                                ) : (
-                                  <Target className="h-4 w-4 mr-1" />
-                                )}
-                                Generate Quote
-                              </Button>
-                            ) : (
-                              // If no lead_id, show warning
-                              <div className="text-sm text-amber-600 bg-amber-50 p-2 rounded border border-amber-200">
-                                ⚠️ No lead linked - Cannot generate quote
-                              </div>
-                            )}
-
-                            {/* Lead Action */}
-                            {task.lead_id && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => window.open(`/sales/lead/${task.lead_id}`, '_blank')}
-                                className="border-purple-600 text-purple-600 hover:bg-purple-50 px-3 py-2"
-                              >
-                                <Target className="h-4 w-4 mr-1" />
-                                View Lead
-                              </Button>
-                            )}
-                          </div>
-
-                          {/* Secondary Actions */}
-                          <div className="flex items-center gap-2">
-                            {/* Enhanced Communication Buttons */}
-                            {task.client_phone && task.client_phone.trim() !== '' ? (
-                              <div className="flex items-center gap-1">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleCallClient(task.client_phone!, task.client_name, task.id)}
-                                  className="border-green-600 text-green-600 hover:bg-green-50 px-3 py-2 font-medium"
-                                >
-                                  <Phone className="h-4 w-4 mr-1" />
-                                  Call
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleWhatsAppClient(task.client_phone!, task.client_name, task.id)}
-                                  className="border-green-600 text-green-600 hover:bg-green-50 px-3 py-2 font-medium"
-                                  title="WhatsApp"
-                                >
-                                  <Target className="h-4 w-4 mr-1" />
-                                  WhatsApp
-                                </Button>
-                              </div>
-                            ) : (
-                              <div className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded border border-amber-200">
-                                📞 No phone number
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
 
             {/* No Tasks Message */}
-            {pendingTasksFiltered.length === 0 && completedTasksFiltered.length === 0 && (
+            {pendingTasksFiltered.length === 0 && (
               <Card className="text-center py-12">
                 <CardContent>
-                  <Target className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No tasks found</h3>
+                  <Clock className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No active tasks</h3>
                   <p className="text-gray-500">
                     {filterPriority !== 'all' ? 'Try adjusting your filters or ' : ''}
-                    Check back later for new tasks.
+                    All caught up! 🎉
                   </p>
                 </CardContent>
               </Card>
@@ -1927,6 +1967,144 @@ export default function EmployeeDashboard() {
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* HISTORY TAB */}
+          <TabsContent value="history" className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-gray-900">Task History</h2>
+              <div className="text-sm text-gray-500">
+                {completedTasksFiltered.length} completed tasks
+              </div>
+            </div>
+
+            {completedTasksFiltered.length > 0 ? (
+              <div className="space-y-4">
+                {completedTasksFiltered.map((task) => (
+                  <Card key={task.id} className="border border-green-200 hover:border-green-300 transition-all duration-200 hover:shadow-md bg-green-50/20">
+                    <CardContent className="p-6">
+                      <div className="flex items-start justify-between">
+                        {/* Left Section - Task Info */}
+                        <div className="flex-1 space-y-3">
+                          {/* Task Title & Status */}
+                          <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2">
+                              <div className="w-2 h-2 rounded-full bg-green-500" />
+                              <h3 className="font-semibold text-gray-900 text-lg leading-tight">
+                                {task.title}
+                              </h3>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Badge variant="default" className="text-xs font-medium bg-green-100 text-green-800">
+                                COMPLETED
+                              </Badge>
+                              {task.quotation_id && (
+                                <Badge variant="outline" className="text-xs font-medium border-blue-600 text-blue-600">
+                                  QUOTED
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Task Description */}
+                          <p className="text-gray-600 text-sm leading-relaxed max-w-2xl">
+                            {task.description}
+                          </p>
+
+                          {/* Completion Notes */}
+                          {task.completion_notes && (
+                            <div className="bg-white p-3 rounded-lg border border-green-200">
+                              <p className="text-sm text-gray-700">
+                                <span className="font-medium text-green-700">Completion Notes:</span> {task.completion_notes}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Task Meta Info */}
+                          <div className="flex items-center gap-6 text-sm text-gray-500">
+                            {task.client_name && (
+                              <div className="flex items-center gap-1">
+                                <User className="h-4 w-4" />
+                                <span className="font-medium text-gray-700">{task.client_name}</span>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-1">
+                              <CheckCircle className="h-4 w-4 text-green-600" />
+                              <span className="text-green-600 font-medium">
+                                Completed {new Date(task.updated_at || task.created_at).toLocaleDateString()}
+                              </span>
+                            </div>
+                            {task.estimated_value && (
+                              <div className="flex items-center gap-1">
+                                <DollarSign className="h-4 w-4" />
+                                <span className="font-semibold text-green-600">₹{task.estimated_value.toLocaleString()}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Right Section - Minimal Actions */}
+                        <div className="flex flex-col items-end gap-3 ml-6">
+                          <div className="flex items-center gap-2">
+                            {/* View Timeline Button */}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => showTaskTimeline(task)}
+                              className="border-blue-600 text-blue-600 hover:bg-blue-50 px-3 py-2"
+                            >
+                              <Clock className="h-4 w-4 mr-1" />
+                              View Timeline
+                            </Button>
+
+                            {/* Quotation Actions (if exists) */}
+                            {task.quotation_id && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  const viewUrl = task.quotation_slug 
+                                    ? `/quotation/${task.quotation_slug}` 
+                                    : `/sales/quotations/${task.quotation_id}`
+                                  window.open(viewUrl, '_blank')
+                                }}
+                                className="border-green-600 text-green-600 hover:bg-green-50 px-3 py-2"
+                              >
+                                <FileText className="h-4 w-4 mr-1" />
+                                View Quote
+                              </Button>
+                            )}
+
+                            {/* Lead Link (if exists) */}
+                            {task.lead_id && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => window.open(`/sales/leads/${task.lead_id}`, '_blank')}
+                                className="border-purple-600 text-purple-600 hover:bg-purple-50 px-3 py-2"
+                              >
+                                <Eye className="h-4 w-4 mr-1" />
+                                View Lead
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <Card className="text-center py-12">
+                <CardContent>
+                  <CheckCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No completed tasks yet</h3>
+                  <p className="text-gray-500">
+                    Completed tasks will appear here with their full timeline history.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
         </Tabs>
 

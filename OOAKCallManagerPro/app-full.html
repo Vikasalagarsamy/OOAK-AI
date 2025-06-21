@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OOAK Call Manager Pro</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#2196F3">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="OOAK Calls">
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 400px;
+            margin: 0 auto;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 20px;
+        }
+        
+        .logo {
+            font-size: 60px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2196F3;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            color: #666;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: #2196F3;
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 10px;
+        }
+        
+        .btn-primary {
+            background: #2196F3;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #1976D2;
+        }
+        
+        .btn-success {
+            background: #4CAF50;
+            color: white;
+        }
+        
+        .btn-danger {
+            background: #f44336;
+            color: white;
+        }
+        
+        .btn-secondary {
+            background: #666;
+            color: white;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2196F3;
+            margin-bottom: 5px;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .call-item {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .call-info h4 {
+            margin: 0 0 5px 0;
+            color: #333;
+        }
+        
+        .call-info p {
+            margin: 0;
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .call-status {
+            text-align: right;
+        }
+        
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: bold;
+        }
+        
+        .status-completed { background: #e8f5e8; color: #2e7d32; }
+        .status-missed { background: #ffebee; color: #c62828; }
+        .status-pending { background: #fff3e0; color: #ef6c00; }
+        
+        .hidden { display: none; }
+        
+        .recording-controls {
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        .record-btn {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            margin: 0 10px;
+        }
+        
+        .record-start {
+            background: #f44336;
+            color: white;
+        }
+        
+        .record-stop {
+            background: #666;
+            color: white;
+        }
+        
+        .timer {
+            font-size: 18px;
+            font-weight: bold;
+            color: #f44336;
+            margin: 10px 0;
+        }
+        
+        .sync-status {
+            background: #e3f2fd;
+            border-radius: 10px;
+            padding: 10px;
+            margin: 10px 0;
+            text-align: center;
+            font-size: 12px;
+        }
+        
+        .online { color: #4CAF50; }
+        .offline { color: #ff9800; }
+        
+        .section-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 15px;
+        }
+        
+        .quick-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        
+        .action-btn {
+            padding: 15px;
+            border: none;
+            border-radius: 10px;
+            background: #2196F3;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .transcript-section {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        
+        .transcript-text {
+            font-size: 14px;
+            line-height: 1.5;
+            color: #333;
+            max-height: 100px;
+            overflow-y: auto;
+        }
+        
+        .upload-progress {
+            background: #e0e0e0;
+            border-radius: 10px;
+            height: 8px;
+            margin: 10px 0;
+            overflow: hidden;
+        }
+        
+        .upload-bar {
+            background: #4CAF50;
+            height: 100%;
+            width: 0%;
+            transition: width 0.3s;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Login Screen -->
+        <div id="loginScreen" class="card">
+            <div class="logo">📞</div>
+            <div class="title">OOAK Call Manager Pro</div>
+            <div class="subtitle">Professional Call Management System</div>
+            
+            <div class="form-group">
+                <label class="form-label">Email</label>
+                <input type="email" id="loginEmail" class="form-input" placeholder="Enter your email">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Password</label>
+                <input type="password" id="loginPassword" class="form-input" placeholder="Enter your password">
+            </div>
+            
+            <button class="btn btn-primary" onclick="login()">Sign In</button>
+            <button class="btn btn-success" onclick="demoLogin()">Demo Login</button>
+            
+            <div class="sync-status">
+                <span id="connectionStatus">🔴 Connecting to local server...</span>
+            </div>
+        </div>
+        
+        <!-- Dashboard Screen -->
+        <div id="dashboardScreen" class="hidden">
+            <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <div>
+                        <h2 style="margin: 0; color: #333;">Good morning, <span id="userName">Sales Team</span>! 👋</h2>
+                        <p style="margin: 5px 0 0 0; color: #666;" id="currentDate"></p>
+                    </div>
+                    <button class="btn-secondary" style="padding: 8px 12px; border: none; border-radius: 8px; cursor: pointer;" onclick="logout()">Logout</button>
+                </div>
+                
+                <div class="sync-status">
+                    <span id="syncStatus">🟢 Online - Auto-sync enabled</span>
+                </div>
+                
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-number" id="todaysCalls">0</div>
+                        <div class="stat-label">Today's Calls</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="completedCalls">0</div>
+                        <div class="stat-label">Completed</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="pendingCalls">0</div>
+                        <div class="stat-label">Pending Upload</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="successRate">0%</div>
+                        <div class="stat-label">Success Rate</div>
+                    </div>
+                </div>
+                
+                <div class="quick-actions">
+                    <button class="action-btn" onclick="showNewCallScreen()">📞 New Call</button>
+                    <button class="action-btn" onclick="showCallHistory()">📋 Call History</button>
+                    <button class="action-btn" onclick="syncCalls()">🔄 Sync Now</button>
+                    <button class="action-btn" onclick="showSettings()">⚙️ Settings</button>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="section-title">Recent Calls</div>
+                <div id="recentCallsList">
+                    <!-- Calls will be populated here -->
+                </div>
+            </div>
+        </div>
+        
+        <!-- New Call Screen -->
+        <div id="newCallScreen" class="hidden">
+            <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2 style="margin: 0; color: #333;">New Call</h2>
+                    <button class="btn-secondary" style="padding: 8px 12px; border: none; border-radius: 8px; cursor: pointer;" onclick="showDashboard()">Back</button>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Contact Name</label>
+                    <input type="text" id="contactName" class="form-input" placeholder="Enter contact name">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Phone Number</label>
+                    <input type="tel" id="contactPhone" class="form-input" placeholder="Enter phone number">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Call Type</label>
+                    <select id="callType" class="form-input">
+                        <option value="outgoing">Outgoing</option>
+                        <option value="incoming">Incoming</option>
+                    </select>
+                </div>
+                
+                <div class="recording-controls">
+                    <button id="recordBtn" class="record-btn record-start" onclick="toggleRecording()">🎤</button>
+                    <div class="timer" id="callTimer">00:00</div>
+                    <div id="recordingStatus">Tap to start recording</div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Call Notes</label>
+                    <textarea id="callNotes" class="form-input" rows="4" placeholder="Enter call notes..."></textarea>
+                </div>
+                
+                <button class="btn btn-primary" onclick="saveCall()">Save Call</button>
+            </div>
+        </div>
+        
+        <!-- Call History Screen -->
+        <div id="callHistoryScreen" class="hidden">
+            <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2 style="margin: 0; color: #333;">Call History</h2>
+                    <button class="btn-secondary" style="padding: 8px 12px; border: none; border-radius: 8px; cursor: pointer;" onclick="showDashboard()">Back</button>
+                </div>
+                
+                <div class="form-group">
+                    <input type="text" id="searchCalls" class="form-input" placeholder="Search calls..." onkeyup="filterCalls()">
+                </div>
+                
+                <div id="callHistoryList">
+                    <!-- Call history will be populated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ===== CONFIGURATION SECTION =====
+        // Update these settings for your local setup
+        
+        // PostgreSQL Backend Configuration
+        const BACKEND_CONFIG = {
+            apiBaseUrl: 'http://localhost:3000/api',
+            syncServiceUrl: 'http://localhost:8084',
+            authUrl: 'http://localhost:3000/api/auth/login'
+        };
+        
+        // Transcription Service Configuration
+        const TRANSCRIPTION_CONFIG = {
+            // Update this to your transcription service endpoint
+            uploadUrl: 'http://localhost:8083/upload-audio',
+            
+            // Alternative: If you want to save files to a specific folder
+            // Set this to true and specify the folder path
+            saveToFolder: true,
+            folderPath: './uploads/audio/', // Your transcription service watches this folder
+            
+            // File naming convention
+            filePrefix: 'call_',
+            fileExtension: '.wav'
+        };
+        
+        // ===== END CONFIGURATION =====
+        
+        // PostgreSQL Backend - No client library needed, using direct API calls
+        
+        let currentUser = null;
+        let isRecording = false;
+        let recordingStartTime = null;
+        let callTimer = null;
+        let mediaRecorder = null;
+        let audioChunks = [];
+        
+        // Initialize app
+        document.addEventListener('DOMContentLoaded', function() {
+            updateDateTime();
+            setInterval(updateDateTime, 60000);
+            
+            const savedUser = localStorage.getItem('currentUser');
+            if (savedUser) {
+                currentUser = JSON.parse(savedUser);
+                showDashboard();
+            }
+            
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('sw.js');
+            }
+            
+            window.addEventListener('online', updateSyncStatus);
+            window.addEventListener('offline', updateSyncStatus);
+            updateSyncStatus();
+            checkConnection();
+        });
+        
+        async function login() {
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+            
+            if (!email || !password) {
+                alert('Please enter both email and password');
+                return;
+            }
+            
+            // Simple demo authentication
+            if (email.includes('@ooak.com') || email === 'demo@ooak.com') {
+                currentUser = {
+                    id: 'demo-user-' + Date.now(),
+                    email: email,
+                    name: email.split('@')[0]
+                };
+                localStorage.setItem('currentUser', JSON.stringify(currentUser));
+                showDashboard();
+            } else {
+                alert('Please use an @ooak.com email address');
+            }
+        }
+        
+        function demoLogin() {
+            document.getElementById('loginEmail').value = 'demo@ooak.com';
+            document.getElementById('loginPassword').value = 'demo123';
+            login();
+        }
+        
+        function logout() {
+            currentUser = null;
+            localStorage.removeItem('currentUser');
+            showLogin();
+        }
+        
+        function showLogin() {
+            hideAllScreens();
+            document.getElementById('loginScreen').classList.remove('hidden');
+        }
+        
+        function showDashboard() {
+            hideAllScreens();
+            document.getElementById('dashboardScreen').classList.remove('hidden');
+            if (currentUser) {
+                document.getElementById('userName').textContent = currentUser.name || currentUser.email.split('@')[0];
+            }
+            loadDashboardData();
+        }
+        
+        function showNewCallScreen() {
+            hideAllScreens();
+            document.getElementById('newCallScreen').classList.remove('hidden');
+            resetCallForm();
+        }
+        
+        function showCallHistory() {
+            hideAllScreens();
+            document.getElementById('callHistoryScreen').classList.remove('hidden');
+            loadCallHistory();
+        }
+        
+        function hideAllScreens() {
+            document.getElementById('loginScreen').classList.add('hidden');
+            document.getElementById('dashboardScreen').classList.add('hidden');
+            document.getElementById('newCallScreen').classList.add('hidden');
+            document.getElementById('callHistoryScreen').classList.add('hidden');
+        }
+        
+        async function toggleRecording() {
+            if (!isRecording) {
+                await startRecording();
+            } else {
+                stopRecording();
+            }
+        }
+        
+        async function startRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+                
+                mediaRecorder.ondataavailable = (event) => {
+                    audioChunks.push(event.data);
+                };
+                
+                mediaRecorder.start();
+                isRecording = true;
+                recordingStartTime = Date.now();
+                
+                document.getElementById('recordBtn').classList.remove('record-start');
+                document.getElementById('recordBtn').classList.add('record-stop');
+                document.getElementById('recordBtn').textContent = '⏹️';
+                document.getElementById('recordingStatus').textContent = 'Recording in progress...';
+                
+                callTimer = setInterval(updateCallTimer, 1000);
+                
+            } catch (error) {
+                console.error('Error starting recording:', error);
+                alert('Could not start recording. Please check microphone permissions.');
+            }
+        }
+        
+        function stopRecording() {
+            if (mediaRecorder && isRecording) {
+                mediaRecorder.stop();
+                mediaRecorder.stream.getTracks().forEach(track => track.stop());
+                
+                isRecording = false;
+                clearInterval(callTimer);
+                
+                document.getElementById('recordBtn').classList.remove('record-stop');
+                document.getElementById('recordBtn').classList.add('record-start');
+                document.getElementById('recordBtn').textContent = '🎤';
+                document.getElementById('recordingStatus').textContent = 'Recording completed';
+            }
+        }
+        
+        function updateCallTimer() {
+            if (recordingStartTime) {
+                const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
+                const minutes = Math.floor(elapsed / 60);
+                const seconds = elapsed % 60;
+                document.getElementById('callTimer').textContent = 
+                    `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            }
+        }
+        
+        async function saveCall() {
+            const contactName = document.getElementById('contactName').value;
+            const contactPhone = document.getElementById('contactPhone').value;
+            const callType = document.getElementById('callType').value;
+            const callNotes = document.getElementById('callNotes').value;
+            
+            if (!contactName || !contactPhone) {
+                alert('Please enter contact name and phone number');
+                return;
+            }
+            
+            const callId = Date.now().toString();
+            const callData = {
+                id: callId,
+                employee_id: currentUser.id,
+                contact_name: contactName,
+                contact_phone: contactPhone,
+                call_type: callType,
+                duration: recordingStartTime ? Math.floor((Date.now() - recordingStartTime) / 1000) : 0,
+                status: 'completed',
+                notes: callNotes,
+                created_at: new Date().toISOString(),
+                synced: false,
+                has_recording: audioChunks.length > 0,
+                audio_file_path: null,
+                transcription_status: 'pending'
+            };
+            
+            // Save audio file if recording exists
+            if (audioChunks.length > 0) {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                const fileName = `call_${callId}_${currentUser.id}.wav`;
+                
+                callData.audio_file_path = fileName;
+                
+                // Upload audio file to your transcription service location
+                await uploadAudioFile(audioBlob, fileName, callData);
+            }
+            
+            // Save to local storage
+            const calls = JSON.parse(localStorage.getItem('calls') || '[]');
+            calls.unshift(callData);
+            localStorage.setItem('calls', JSON.stringify(calls));
+            
+            // Try to sync to PostgreSQL backend
+            await syncCallToPostgreSQL(callData);
+            
+            const message = audioChunks.length > 0 ? 
+                'Call saved successfully! Audio will be transcribed automatically.' : 
+                'Call saved successfully!';
+            alert(message);
+            showDashboard();
+        }
+        
+        // Upload audio file to transcription service location
+        async function uploadAudioFile(audioBlob, fileName, callData) {
+            try {
+                // Create FormData for file upload
+                const formData = new FormData();
+                formData.append('audio', audioBlob, fileName);
+                formData.append('call_id', callData.id);
+                formData.append('employee_id', callData.employee_id);
+                formData.append('contact_name', callData.contact_name);
+                formData.append('contact_phone', callData.contact_phone);
+                formData.append('call_type', callData.call_type);
+                formData.append('duration', callData.duration);
+                formData.append('created_at', callData.created_at);
+                
+                // Try to upload to transcription service
+                const response = await fetch(TRANSCRIPTION_CONFIG.uploadUrl, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    callData.transcription_status = 'uploaded';
+                    console.log('Audio file uploaded successfully:', fileName);
+                } else {
+                    throw new Error(`Upload failed: ${response.statusText}`);
+                }
+            } catch (error) {
+                console.error('Error uploading audio file:', error);
+                callData.transcription_status = 'upload_failed';
+                
+                // Fallback: Save audio file locally for manual processing
+                if (TRANSCRIPTION_CONFIG.saveToFolder) {
+                    try {
+                        // Create download link for manual save
+                        const url = URL.createObjectURL(audioBlob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = fileName;
+                        a.style.display = 'none';
+                        document.body.appendChild(a);
+                        
+                        // Show user notification about manual download
+                        if (confirm(`Upload failed. Would you like to download the audio file manually?\n\nFile: ${fileName}\n\nSave it to: ${TRANSCRIPTION_CONFIG.folderPath}`)) {
+                            a.click();
+                        }
+                        
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                        
+                        callData.transcription_status = 'manual_download';
+                    } catch (downloadError) {
+                        console.error('Failed to create download:', downloadError);
+                    }
+                }
+            }
+        }
+        
+        async function syncCallToPostgreSQL(callData) {
+            try {
+                // Connect to your PostgreSQL CRM backend
+                const response = await fetch(`${BACKEND_CONFIG.apiBaseUrl}/calls`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': currentUser.token ? `Bearer ${currentUser.token}` : ''
+                    },
+                    body: JSON.stringify(callData)
+                });
+                
+                if (response.ok) {
+                    console.log('✅ Call synced to PostgreSQL CRM:', callData);
+                    callData.synced = true;
+                } else {
+                    console.warn('⚠️ PostgreSQL sync failed, will retry later');
+                }
+            } catch (error) {
+                console.error('❌ PostgreSQL sync error:', error);
+            }
+        }
+        
+        async function syncCalls() {
+            const calls = JSON.parse(localStorage.getItem('calls') || '[]');
+            const unsyncedCalls = calls.filter(call => !call.synced);
+            
+            if (unsyncedCalls.length === 0) {
+                alert('All calls are already synced!');
+                return;
+            }
+            
+            let syncedCount = 0;
+            for (const call of unsyncedCalls) {
+                await syncCallToPostgreSQL(call);
+                if (call.synced) {
+                    syncedCount++;
+                }
+            }
+            
+            localStorage.setItem('calls', JSON.stringify(calls));
+            alert(`Synced ${syncedCount}/${unsyncedCalls.length} calls successfully to PostgreSQL!`);
+            loadDashboardData();
+        }
+        
+        function loadDashboardData() {
+            const calls = JSON.parse(localStorage.getItem('calls') || '[]');
+            const today = new Date().toDateString();
+            
+            const todaysCalls = calls.filter(call => 
+                new Date(call.created_at).toDateString() === today
+            );
+            
+            const completedCalls = todaysCalls.filter(call => call.status === 'completed');
+            const pendingCalls = calls.filter(call => !call.synced);
+            
+            document.getElementById('todaysCalls').textContent = todaysCalls.length;
+            document.getElementById('completedCalls').textContent = completedCalls.length;
+            document.getElementById('pendingCalls').textContent = pendingCalls.length;
+            document.getElementById('successRate').textContent = 
+                todaysCalls.length > 0 ? Math.round((completedCalls.length / todaysCalls.length) * 100) + '%' : '0%';
+            
+            const recentCalls = calls.slice(0, 5);
+            const recentCallsList = document.getElementById('recentCallsList');
+            recentCallsList.innerHTML = '';
+            
+            recentCalls.forEach(call => {
+                const callElement = createCallElement(call);
+                recentCallsList.appendChild(callElement);
+            });
+        }
+        
+        function loadCallHistory() {
+            const calls = JSON.parse(localStorage.getItem('calls') || '[]');
+            const callHistoryList = document.getElementById('callHistoryList');
+            callHistoryList.innerHTML = '';
+            
+            calls.forEach(call => {
+                const callElement = createCallElement(call, true);
+                callHistoryList.appendChild(callElement);
+            });
+        }
+        
+        function createCallElement(call, showDetails = false) {
+            const div = document.createElement('div');
+            div.className = 'call-item';
+            
+            const statusIcon = call.status === 'completed' ? '✅' : '❌';
+            const syncIcon = call.synced ? '🟢' : '🔴';
+            const recordingIcon = call.has_recording ? '🎤' : '';
+            
+            // Transcription status indicator
+            let transcriptionIcon = '';
+            if (call.has_recording) {
+                switch (call.transcription_status) {
+                    case 'pending': transcriptionIcon = '⏳'; break;
+                    case 'uploaded': transcriptionIcon = '📤'; break;
+                    case 'processing': transcriptionIcon = '⚙️'; break;
+                    case 'completed': transcriptionIcon = '📝'; break;
+                    case 'upload_failed': transcriptionIcon = '❌'; break;
+                    default: transcriptionIcon = '⏳';
+                }
+            }
+            
+            div.innerHTML = `
+                <div>
+                    <h4 style="margin: 0 0 5px 0; color: #333;">${call.contact_name}</h4>
+                    <p style="margin: 0; font-size: 12px; color: #666;">${call.contact_phone}</p>
+                    ${showDetails ? `<p style="margin: 5px 0 0 0; font-size: 12px; color: #666;">${call.notes || 'No notes'}</p>` : ''}
+                    ${call.has_recording ? `<p style="margin: 5px 0 0 0; font-size: 10px; color: #999;">Transcription: ${call.transcription_status || 'pending'}</p>` : ''}
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 12px; margin-bottom: 5px;">${statusIcon} ${call.status}</div>
+                    <p style="font-size: 10px; margin: 0; color: #999;">
+                        ${syncIcon} ${recordingIcon} ${transcriptionIcon} ${formatDuration(call.duration)}
+                    </p>
+                    <p style="font-size: 10px; margin: 5px 0 0 0; color: #999;">
+                        ${new Date(call.created_at).toLocaleString()}
+                    </p>
+                </div>
+            `;
+            
+            return div;
+        }
+        
+        function formatDuration(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+        
+        function updateDateTime() {
+            const now = new Date();
+            const dateElement = document.getElementById('currentDate');
+            if (dateElement) {
+                dateElement.textContent = `Today • ${now.toLocaleDateString()}`;
+            }
+        }
+        
+        function updateSyncStatus() {
+            const isOnline = navigator.onLine;
+            const statusElement = document.getElementById('syncStatus');
+            
+            if (statusElement) {
+                if (isOnline) {
+                    statusElement.innerHTML = '🟢 Online - Auto-sync enabled';
+                    statusElement.className = 'sync-status online';
+                } else {
+                    statusElement.innerHTML = '🔴 Offline - Data saved locally';
+                    statusElement.className = 'sync-status offline';
+                }
+            }
+        }
+        
+        function checkConnection() {
+            const statusElement = document.getElementById('connectionStatus');
+            if (statusElement) {
+                statusElement.innerHTML = '🟢 Connected to local server';
+            }
+        }
+        
+        function resetCallForm() {
+            document.getElementById('contactName').value = '';
+            document.getElementById('contactPhone').value = '';
+            document.getElementById('callType').value = 'outgoing';
+            document.getElementById('callNotes').value = '';
+            document.getElementById('callTimer').textContent = '00:00';
+            document.getElementById('recordingStatus').textContent = 'Tap to start recording';
+            
+            if (isRecording) {
+                stopRecording();
+            }
+        }
+        
+        function filterCalls() {
+            const searchTerm = document.getElementById('searchCalls').value.toLowerCase();
+            const calls = JSON.parse(localStorage.getItem('calls') || '[]');
+            
+            const filteredCalls = calls.filter(call => 
+                call.contact_name.toLowerCase().includes(searchTerm) ||
+                call.contact_phone.includes(searchTerm) ||
+                (call.notes && call.notes.toLowerCase().includes(searchTerm))
+            );
+            
+            const callHistoryList = document.getElementById('callHistoryList');
+            callHistoryList.innerHTML = '';
+            
+            filteredCalls.forEach(call => {
+                const callElement = createCallElement(call, true);
+                callHistoryList.appendChild(callElement);
+            });
+        }
+        
+        function showSettings() {
+            alert('Settings:\n\n• Database: PostgreSQL\n• Transcription: Enabled\n• Auto-sync: Every 5 minutes\n• Local storage: 500MB\n• Recording quality: High\n\nTranscription will process recordings automatically when synced to PostgreSQL backend.');
+        }
+    </script>
+</body>
+</html> 

@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { useToast } from "@/components/ui/use-toast"
-import { supabase } from "@/lib/supabase"
+import { query } from "@/lib/postgresql-client"
 import type { Client } from "@/types/client"
 import { logActivity } from "@/services/activity-service"
 
@@ -84,7 +84,7 @@ export function EditClientDialog({ open, onOpenChange, client, onClientUpdated }
 
   const fetchCompanies = async () => {
     try {
-      const { data, error } = await supabase.from("companies").select("id, name").order("name")
+      const result = await query("SELECT id, name FROM companies ORDER BY name", []); const data = result.rows; const error = null
 
       if (error) {
         throw error
@@ -196,12 +196,28 @@ export function EditClientDialog({ open, onOpenChange, client, onClientUpdated }
         status: formData.status,
       }
 
-      // Update client
-      const { data, error } = await supabase.from("clients").update(clientData).eq("id", client.id).select()
+      // Update client using PostgreSQL
+      const result = await query(
+        `UPDATE clients SET 
+          name = $1, company_id = $2, contact_person = $3, email = $4, 
+          country_code = $5, phone = $6, is_whatsapp = $7, has_separate_whatsapp = $8, 
+          whatsapp_country_code = $9, whatsapp_number = $10, address = $11, city = $12, 
+          state = $13, postal_code = $14, country = $15, category = $16, status = $17 
+         WHERE id = $18 
+         RETURNING *`,
+        [
+          clientData.name, clientData.company_id, clientData.contact_person, clientData.email,
+          clientData.country_code, clientData.phone, clientData.is_whatsapp, clientData.has_separate_whatsapp,
+          clientData.whatsapp_country_code, clientData.whatsapp_number, clientData.address, clientData.city,
+          clientData.state, clientData.postal_code, clientData.country, clientData.category, clientData.status,
+          client.id
+        ]
+      )
+      
+      const data = result.rows
+      const error = null
 
-      if (error) {
-        throw error
-      }
+      console.log('✅ Client updated successfully:', clientData.name)
 
       // Log the activity
       await logActivity({

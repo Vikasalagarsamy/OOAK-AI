@@ -1,141 +1,121 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentUser } from '@/actions/auth-actions'
-import { createClient } from '@/lib/supabase/server'
-import type { Notification } from '@/types/notifications'
+import { NextRequest, NextResponse } from "next/server"
+import { pool } from '@/lib/postgresql-client'
+import { cookies } from 'next/headers'
+import { jwtVerify } from 'jose'
+
+// Direct PostgreSQL connection
+// Using centralized PostgreSQL client
 
 export async function GET(request: NextRequest) {
   try {
-    const currentUser = await getCurrentUser()
-    if (!currentUser) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const { searchParams } = new URL(request.url)
-    const userIdParam = searchParams.get('user_id')
+    console.log('🐘 Getting notifications data from PostgreSQL...')
     
-    // Convert to number to match database schema
-    const userId = userIdParam ? 
-      (typeof userIdParam === 'string' ? parseInt(userIdParam) : userIdParam) :
-      (typeof currentUser.id === 'string' ? parseInt(currentUser.id) : currentUser.id)
-      
-    console.log('🔍 GET /api/notifications - userId:', userId, 'type:', typeof userId)
+    // Check for JWT token in cookies (same as working auth/status API)
+    const cookieStore = await cookies()
+    const authToken = cookieStore.get('auth_token')?.value
     
-    const limit = parseInt(searchParams.get('limit') || '100')
-    const unreadOnly = searchParams.get('unread_only') === 'true'
+    if (authToken) {
+      try {
+        console.log('✅ Found JWT token, verifying...')
+        const secret = process.env.JWT_SECRET || "fallback-secret-only-for-development"
+        const secretKey = new TextEncoder().encode(secret)
+        
+        const { payload } = await jwtVerify(authToken, secretKey, {
+          algorithms: ["HS256"],
+        })
+        
+        console.log('✅ JWT token verified for user:', payload.username, 'userId:', payload.sub)
+        
+        if (!payload.sub) {
+          console.log('❌ No user ID in JWT payload')
+          return NextResponse.json({ error: 'User ID not found' }, { status: 404 })
+        }
 
-    const supabase = createClient()
+        const client = await pool.connect()
+        
+        // Get notifications and unread count in a single optimized query
+        // Fixed column names to match PostgreSQL schema
+        const query = `
+          WITH notifications_data AS (
+            SELECT *
+            FROM notifications 
+            WHERE employee_id = $1 OR employee_id IS NULL
+            ORDER BY created_at DESC
+            LIMIT 50
+          ),
+          unread_count AS (
+            SELECT COUNT(*) as count
+            FROM notifications 
+            WHERE (employee_id = $1 OR employee_id IS NULL) AND is_read = false
+          )
+          SELECT 
+            COALESCE(
+              JSON_AGG(
+                JSON_BUILD_OBJECT(
+                  'id', n.id,
+                  'employee_id', n.employee_id,
+                  'title', n.title,
+                  'message', n.message,
+                  'type', n.type,
+                  'is_read', n.is_read,
+                  'created_at', n.created_at,
+                  'priority', n.priority,
+                  'quotation_id', n.quotation_id,
+                  'action_url', n.action_url,
+                  'action_label', n.action_label
+                ) ORDER BY n.created_at DESC
+              ) FILTER (WHERE n.id IS NOT NULL),
+              '[]'::json
+            ) as notifications,
+            uc.count as unread_count
+          FROM notifications_data n
+          CROSS JOIN unread_count uc
+          GROUP BY uc.count
+        `
 
-    // Get notifications query
-    let query = supabase
-      .from('notifications')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(limit)
+        const result = await client.query(query, [payload.sub])
+        client.release()
 
-    if (unreadOnly) {
-      query = query.eq('is_read', false)
+        const data = result.rows[0]
+        const notifications = data?.notifications || []
+        const unreadCount = parseInt(data?.unread_count || '0')
+
+        console.log(`✅ Notifications data from PostgreSQL: ${notifications.length} notifications (${unreadCount} unread)`)
+        
+        return NextResponse.json({
+          success: true,
+          notifications: notifications,
+          unread_count: unreadCount,
+          total: notifications.length,
+          metadata: {
+            source: "Direct PostgreSQL",
+            timestamp: new Date().toISOString()
+          }
+        })
+        
+      } catch (jwtError: any) {
+        console.log('❌ JWT verification failed:', jwtError.message)
+        return NextResponse.json({ 
+          success: false,
+          error: 'Invalid authentication token',
+          details: jwtError.message 
+        }, { status: 401 })
+      }
     }
+    
+    // If no JWT token found
+    console.log('❌ No JWT token found in cookies')
+    return NextResponse.json({ 
+      success: false,
+      error: 'Not authenticated - no token' 
+    }, { status: 401 })
 
-    const { data: notifications, error: notificationsError } = await query
-
-    if (notificationsError) {
-      console.error('🔍 GET /api/notifications - Error fetching notifications:', notificationsError)
-      return NextResponse.json(
-        { error: 'Failed to fetch notifications' },
-        { status: 500 }
-      )
-    }
-
-    // Get unread count
-    const { count: unreadCount, error: countError } = await supabase
-      .from('notifications')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .eq('is_read', false)
-
-    if (countError) {
-      console.error('🔍 GET /api/notifications - Error fetching unread count:', countError)
-    }
-
-    console.log('🔍 GET /api/notifications - Found', notifications?.length || 0, 'notifications, unread:', unreadCount)
-
-    return NextResponse.json({
-      notifications: notifications || [],
-      unread_count: unreadCount || 0,
-      total: (notifications || []).length
-    })
-
-  } catch (error) {
-    console.error('🔍 GET /api/notifications - Exception:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch notifications' },
-      { status: 500 }
-    )
+  } catch (error: any) {
+    console.error("❌ Notifications API error:", error)
+    return NextResponse.json({ 
+      success: false,
+      error: 'Internal server error',
+      details: error.message
+    }, { status: 500 })
   }
 }
-
-export async function POST(request: NextRequest) {
-  try {
-    const currentUser = await getCurrentUser()
-    if (!currentUser) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const body = await request.json()
-    const {
-      user_id,
-      type,
-      priority = 'medium',
-      title,
-      message,
-      quotation_id,
-      action_url,
-      action_label,
-      expires_at,
-      metadata
-    } = body
-
-    const supabase = createClient()
-
-    // Create notification
-    const notificationId = `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-    
-    const { data: notification, error } = await supabase
-      .from('notifications')
-      .insert({
-        id: notificationId,
-        user_id,
-        type,
-        priority,
-        title,
-        message,
-        quotation_id,
-        is_read: false,
-        created_at: new Date().toISOString(),
-        expires_at,
-        action_url,
-        action_label,
-        metadata
-      })
-      .select()
-      .single()
-
-    if (error) {
-      console.error('Error creating notification:', error)
-      return NextResponse.json(
-        { error: 'Failed to create notification' },
-        { status: 500 }
-      )
-    }
-
-    return NextResponse.json({ notification }, { status: 201 })
-
-  } catch (error) {
-    console.error('Error creating notification:', error)
-    return NextResponse.json(
-      { error: 'Failed to create notification' },
-      { status: 500 }
-    )
-  }
-} 

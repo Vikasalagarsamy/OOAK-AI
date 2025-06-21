@@ -1,4 +1,4 @@
-import { createClient } from "./supabase-server"
+import { createClient } from "./postgresql-client"
 
 // Use this in API routes and server actions to get a client with cookie support
 export function getSupabaseServerClient() {
@@ -13,7 +13,7 @@ export function getSupabaseServerClient() {
 
 // Create a client without cookies for fallback
 function createSupabaseClientWithoutCookies() {
-  const { createClient } = require("@supabase/supabase-js")
+  // PostgreSQL replacement - no longer needed
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL || "", process.env.SUPABASE_ANON_KEY || "")
 }
 

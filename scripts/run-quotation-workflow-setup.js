@@ -1,6 +1,57 @@
+// 🚨 MIGRATED FROM SUPABASE TO POSTGRESQL
+// Migration Date: 2025-06-20T09:51:57.544Z
+// Original file backed up as: scripts/run-quotation-workflow-setup.js.backup
+
+
+// PostgreSQL connection pool
+const pool = new Pool({
+  host: process.env.POSTGRES_HOST || 'localhost',
+  port: process.env.POSTGRES_PORT || 5432,
+  database: process.env.POSTGRES_DATABASE || 'ooak_future',
+  user: process.env.POSTGRES_USER || 'postgres',
+  password: process.env.POSTGRES_PASSWORD || 'password',
+  ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false,
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+});
+
+
+// Query helper function
+async function query(text, params = []) {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(text, params);
+    return { data: result.rows, error: null };
+  } catch (error) {
+    console.error('❌ PostgreSQL Query Error:', error.message);
+    return { data: null, error: error.message };
+  } finally {
+    client.release();
+  }
+}
+
+// Transaction helper function  
+async function transaction(callback) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await callback(client);
+    await client.query('COMMIT');
+    return { data: result, error: null };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ PostgreSQL Transaction Error:', error.message);
+    return { data: null, error: error.message };
+  } finally {
+    client.release();
+  }
+}
+
+// Original content starts here:
 #!/usr/bin/env node
 
-const { createClient } = require('@supabase/supabase-js')
+const { Pool } = require('pg');)
 const fs = require('fs')
 const path = require('path')
 
@@ -16,7 +67,7 @@ if (!supabaseUrl || !supabaseKey) {
 async function runWorkflowSetup() {
   console.log('Setting up quotation workflow database schema...')
   
-  const supabase = createClient(supabaseUrl, supabaseKey)
+  // PostgreSQL connection - see pool configuration below
 
   try {
     // Read the SQL file
@@ -38,9 +89,9 @@ async function runWorkflowSetup() {
         console.log(`Executing statement ${i + 1}/${statements.length}`)
         
         // Use rpc for complex statements like CREATE TABLE, ALTER TABLE, etc.
-        const { data, error } = await supabase.rpc('exec_sql', { 
+        const { data, error } = await supabasequery('SELECT exec_sql( 
           sql_query: statement + ';' 
-        }).single()
+        )').single()
 
         if (error) {
           // Try direct query for simpler statements

@@ -1,4 +1,4 @@
-import { MenuDebugView } from "@/components/admin/menu-debug-view"
+import { MenuDebugView } from "@/components/menu-system/menu-debug-view"
 import { EmergencyMenuReset } from "@/components/admin/emergency-menu-reset"
 
 export default function MenuDiagnosticsPage() {

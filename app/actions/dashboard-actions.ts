@@ -1,5 +1,5 @@
 "use server"
-import { createClient } from "@/lib/supabase"
+import { createClient } from "@/lib/postgresql-unified"
 import { safeQuery } from "@/lib/db-utils"
 
 export async function getDashboardStats() {
@@ -15,8 +15,8 @@ async function getDepartmentCount() {
   return safeQuery(
     ["departments"],
     async () => {
-      const supabase = createClient()
-      const { count, error } = await supabase.from("departments").select("*", { count: "exact", head: true })
+      const { query, transaction } = createClient()
+      const { count, error } = await query(`SELECT ${params} FROM ${table}`)
 
       if (error) throw error
       return count || 0
@@ -29,8 +29,8 @@ async function getDesignationCount() {
   return safeQuery(
     ["designations"],
     async () => {
-      const supabase = createClient()
-      const { count, error } = await supabase.from("designations").select("*", { count: "exact", head: true })
+      const { query, transaction } = createClient()
+      const { count, error } = await query(`SELECT ${params} FROM ${table}`)
 
       if (error) throw error
       return count || 0

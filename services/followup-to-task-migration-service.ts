@@ -1,4 +1,8 @@
-import { createClient } from '@/lib/supabase'
+// 🎯 MIGRATED: Followup to Task Migration Service - PostgreSQL Version
+// Original: services/followup-to-task-migration-service.ts (Supabase)
+// Migrated: Direct PostgreSQL queries for followup migration
+
+import { query, transaction } from "@/lib/postgresql-client"
 import { SimpleTaskService, SimpleTask } from './simple-task-service'
 import { TaskNotificationService } from './task-notification-service'
 
@@ -44,7 +48,6 @@ export interface LegacyFollowup {
 }
 
 export class FollowupToTaskMigrationService {
-  private supabase = createClient()
   private taskService = new SimpleTaskService()
   private notificationService = new TaskNotificationService()
 
@@ -53,7 +56,7 @@ export class FollowupToTaskMigrationService {
    */
   async migrateAllFollowupsToTasks(): Promise<FollowupMigrationResult> {
     try {
-      console.log('🔄 Starting Followup to Task Migration...')
+      console.log('🔄 Starting Followup to Task Migration with PostgreSQL...')
 
       // 1. Get all existing followups with lead data
       const followups = await this.getAllFollowupsWithLeads()
@@ -179,27 +182,54 @@ export class FollowupToTaskMigrationService {
   }
 
   /**
-   * Get all followups with lead data
+   * Get all followups with lead data using PostgreSQL
    */
   private async getAllFollowupsWithLeads(): Promise<LegacyFollowup[]> {
     try {
-      const { data: followups, error } = await this.supabase
-        .from('lead_followups')
-        .select(`
-          *,
-          lead:leads(
-            client_name,
-            company_name,
-            status,
-            estimated_value
-          )
-        `)
-        .order('created_at', { ascending: false })
+      console.log('📋 Fetching followups with lead data from PostgreSQL...')
 
-      if (error) throw error
-      return followups || []
+      const result = await query(`
+        SELECT 
+          f.*,
+          l.client_name,
+          l.company_name,
+          l.status as lead_status,
+          l.estimated_value
+        FROM lead_followups f
+        LEFT JOIN leads l ON f.lead_id = l.id
+        ORDER BY f.created_at DESC
+      `)
+
+      // Transform the result to match the interface structure
+      const followups: LegacyFollowup[] = result.rows.map(row => ({
+        id: row.id,
+        lead_id: row.lead_id,
+        contact_method: row.contact_method,
+        scheduled_at: row.scheduled_at,
+        status: row.status,
+        priority: row.priority,
+        notes: row.notes,
+        interaction_summary: row.interaction_summary,
+        outcome: row.outcome,
+        duration_minutes: row.duration_minutes,
+        follow_up_required: row.follow_up_required,
+        next_follow_up_date: row.next_follow_up_date,
+        created_by: row.created_by,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        completed_at: row.completed_at,
+        lead: {
+          client_name: row.client_name,
+          company_name: row.company_name,
+          status: row.lead_status,
+          estimated_value: row.estimated_value
+        }
+      }))
+
+      console.log(`✅ Found ${followups.length} followups with lead data`)
+      return followups
     } catch (error) {
-      console.error('Failed to fetch followups:', error)
+      console.error('❌ Failed to fetch followups from PostgreSQL:', error)
       return []
     }
   }

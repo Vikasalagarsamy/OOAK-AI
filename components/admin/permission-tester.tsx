@@ -1,10 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { createClient } from "@/lib/supabase-browser"
+import { query } from "@/lib/postgresql-client"
 import { toast } from "@/components/ui/use-toast"
 import { Check, X } from "lucide-react"
 
@@ -19,33 +19,43 @@ export function PermissionTester() {
   const [loadingUsers, setLoadingUsers] = useState(true)
   const [loadingPaths, setLoadingPaths] = useState(true)
 
-  const supabase = createClient()
-
   // Load users and paths when component mounts
-  useState(() => {
+  useEffect(() => {
     async function loadData() {
       try {
+        console.log('🔍 Loading users and menu paths...')
+        
         setLoadingUsers(true)
-        const { data: users, error: usersError } = await supabase
-          .from("user_accounts")
-          .select("id, username, email")
-          .eq("is_active", true)
-          .order("username")
+        const usersResult = await query(`
+          SELECT id, username, email 
+          FROM user_accounts 
+          WHERE is_active = true 
+          ORDER BY username
+        `)
 
-        if (usersError) throw usersError
-        setAvailableUsers(users || [])
+        if (!usersResult.success) {
+          throw new Error(`Failed to load users: ${usersResult.error}`)
+        }
+
+        setAvailableUsers(usersResult.data || [])
+        console.log(`✅ Loaded ${usersResult.data?.length || 0} users`)
 
         setLoadingPaths(true)
-        const { data: paths, error: pathsError } = await supabase
-          .from("menu_items")
-          .select("id, path, name")
-          .not("path", "is", null)
-          .order("name")
+        const pathsResult = await query(`
+          SELECT id, path, name 
+          FROM menu_items 
+          WHERE path IS NOT NULL 
+          ORDER BY name
+        `)
 
-        if (pathsError) throw pathsError
-        setAvailablePaths(paths || [])
-      } catch (error) {
-        console.error("Error loading data:", error)
+        if (!pathsResult.success) {
+          throw new Error(`Failed to load menu paths: ${pathsResult.error}`)
+        }
+
+        setAvailablePaths(pathsResult.data || [])
+        console.log(`✅ Loaded ${pathsResult.data?.length || 0} menu paths`)
+      } catch (error: any) {
+        console.error("❌ Error loading data:", error)
         toast({
           title: "Error",
           description: "Failed to load users or paths",
@@ -72,23 +82,42 @@ export function PermissionTester() {
 
     setLoading(true)
     try {
-      const { data, error } = await supabase.rpc("check_user_menu_permission", {
-        p_user_id: userId,
-        p_menu_path: menuPath,
-        p_permission: permission,
-      })
+      console.log(`🔍 Testing ${permission} permission for user ${userId} on path ${menuPath}`)
 
-      if (error) throw error
+      // Check user permission using PostgreSQL query
+      const result = await query(`
+        SELECT 
+          CASE 
+            WHEN $3 = 'view' THEN rmp.can_view
+            WHEN $3 = 'add' THEN rmp.can_add
+            WHEN $3 = 'edit' THEN rmp.can_edit
+            WHEN $3 = 'delete' THEN rmp.can_delete
+            ELSE false
+          END as has_permission
+        FROM user_accounts ua
+        JOIN roles r ON ua.role_id = r.id
+        JOIN role_menu_permissions rmp ON r.id = rmp.role_id
+        JOIN menu_items mi ON rmp.menu_item_id = mi.id
+        WHERE ua.id = $1 AND mi.path = $2 AND ua.is_active = true
+      `, [Number.parseInt(userId), menuPath, permission])
 
-      setResult(data)
+      if (!result.success) {
+        throw new Error(`Failed to test permission: ${result.error}`)
+      }
+
+      const hasPermission = result.data?.[0]?.has_permission || false
+      setResult(hasPermission)
+
       toast({
         title: "Test completed",
-        description: data
+        description: hasPermission
           ? `User has ${permission} permission for ${menuPath}`
           : `User does NOT have ${permission} permission for ${menuPath}`,
       })
-    } catch (error) {
-      console.error("Error testing permission:", error)
+
+      console.log(`✅ Permission test result: ${hasPermission}`)
+    } catch (error: any) {
+      console.error("❌ Error testing permission:", error)
       toast({
         title: "Error",
         description: "Failed to test permission",
@@ -120,7 +149,7 @@ export function PermissionTester() {
                     <div className="p-2 text-center">Loading users...</div>
                   ) : (
                     availableUsers.map((user) => (
-                      <SelectItem key={user.id} value={user.id}>
+                      <SelectItem key={user.id} value={user.id.toString()}>
                         {user.username} ({user.email})
                       </SelectItem>
                     ))

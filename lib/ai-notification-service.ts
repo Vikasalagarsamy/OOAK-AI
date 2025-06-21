@@ -1,4 +1,5 @@
-import { createClient } from '@supabase/supabase-js';
+import { query } from '@/lib/postgresql-client';
+import { getUserIdForDatabase } from '@/lib/uuid-helpers';
 
 interface UserBehaviorData {
   user_id: string;
@@ -39,11 +40,6 @@ interface SmartNotificationRequest {
 }
 
 class AINotificationService {
-  private supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-
   /**
    * 🧠 Smart Timing Engine
    * Determines optimal delivery time based on user behavior patterns
@@ -272,34 +268,35 @@ class AINotificationService {
     const pendingNotifications = await this.getPendingNotifications(request.user_id);
     const grouping = await this.intelligentGrouping(request.user_id, pendingNotifications);
     
-    // Create enhanced notification
-    const { data: notification, error } = await this.supabase
-      .from('notifications')
-      .insert({
-        user_id: request.user_id,
-        type: request.type,
-        title: personalization.personalized_title,
-        message: personalization.personalized_message,
-        priority: request.priority,
-        scheduled_for: timing.optimal_time,
-        metadata: {
-          ...request.metadata,
-          ai_enhanced: true,
-          timing_confidence: timing.confidence_score,
-          timing_reasoning: timing.reasoning,
-          personalization_score: personalization.estimated_engagement,
-          delivery_channels: personalization.delivery_channel,
-          urgency_level: personalization.urgency_level
-        },
-        is_read: false,
-        created_at: new Date().toISOString()
-      })
-      .select()
-      .single();
+    // Create enhanced notification with PostgreSQL
+    console.log(`🤖 Creating AI-enhanced notification for user ${request.user_id}`)
     
-    if (error) {
-      throw new Error(`Failed to create smart notification: ${error.message}`);
-    }
+    const result = await query(`
+      INSERT INTO notifications (
+        user_id, type, title, message, priority, scheduled_for, metadata, is_read, created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      RETURNING id
+    `, [
+      parseInt(request.user_id.toString()), // Use integer for notifications table
+      request.type,
+      personalization.personalized_title,
+      personalization.personalized_message,
+      request.priority,
+      timing.optimal_time,
+      JSON.stringify({
+        ...request.metadata,
+        ai_enhanced: true,
+        timing_confidence: timing.confidence_score,
+        timing_reasoning: timing.reasoning,
+        personalization_score: personalization.estimated_engagement,
+        delivery_channels: personalization.delivery_channel,
+        urgency_level: personalization.urgency_level
+      }),
+      false,
+      new Date().toISOString()
+    ])
+    
+    const notification = result.rows[0]
     
     // Log AI decision for learning
     await this.logAIDecision(notification.id, {
@@ -307,6 +304,8 @@ class AINotificationService {
       personalization_applied: personalization,
       grouping_analysis: grouping
     });
+    
+    console.log(`✅ AI-enhanced notification created: ${notification.id}`)
     
     return {
       notification_id: notification.id,
@@ -322,23 +321,33 @@ class AINotificationService {
 
   // Private helper methods
   private async getUserBehaviorData(userId: string): Promise<UserBehaviorData> {
-    const { data } = await this.supabase
-      .from('user_behavior_analytics')
-      .select('*')
-      .eq('user_id', userId)
-      .single();
-    
-    return data || this.getDefaultBehaviorData(userId);
+    try {
+      const result = await query(`
+        SELECT * FROM user_behavior_analytics 
+        WHERE user_id = $1
+      `, [getUserIdForDatabase(userId)])
+      
+      const data = result.rows[0]
+      return data || this.getDefaultBehaviorData(userId);
+    } catch (error) {
+      console.error('❌ Error fetching user behavior data:', error)
+      return this.getDefaultBehaviorData(userId);
+    }
   }
 
   private async getNotificationPatterns(type: string): Promise<NotificationPattern> {
-    const { data } = await this.supabase
-      .from('notification_patterns')
-      .select('*')
-      .eq('type', type)
-      .single();
-    
-    return data || this.getDefaultPattern(type);
+    try {
+      const result = await query(`
+        SELECT * FROM notification_patterns 
+        WHERE type = $1
+      `, [type])
+      
+      const data = result.rows[0]
+      return data || this.getDefaultPattern(type);
+    } catch (error) {
+      console.error('❌ Error fetching notification patterns:', error)
+      return this.getDefaultPattern(type);
+    }
   }
 
   private findOptimalHour(userHours: number[], typeHours: number[]): number {
@@ -533,26 +542,36 @@ class AINotificationService {
     };
   }
 
-  // Additional helper methods would be implemented here...
+  // Additional helper methods
   private async getUserPreferences(userId: string): Promise<any> {
-    const { data } = await this.supabase
-      .from('user_preferences')
-      .select('*')
-      .eq('user_id', userId)
-      .single();
-    
-    return data || { include_name: false, channel_preferences: ['in_app'] };
+    try {
+      const result = await query(`
+        SELECT * FROM user_preferences 
+        WHERE user_id = $1
+      `, [getUserIdForDatabase(userId)])
+      
+      const data = result.rows[0]
+      return data || { include_name: false, channel_preferences: ['in_app'] };
+    } catch (error) {
+      console.error('❌ Error fetching user preferences:', error)
+      return { include_name: false, channel_preferences: ['in_app'] };
+    }
   }
 
   private async getUserHistoricalData(userId: string): Promise<any[]> {
-    const { data } = await this.supabase
-      .from('user_activity_history')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(100);
-    
-    return data || [];
+    try {
+      const result = await query(`
+        SELECT * FROM user_activity_history 
+        WHERE user_id = $1 
+        ORDER BY created_at DESC 
+        LIMIT 100
+      `, [getUserIdForDatabase(userId)])
+      
+      return result.rows || [];
+    } catch (error) {
+      console.error('❌ Error fetching user historical data:', error)
+      return [];
+    }
   }
 
   private analyzeNotificationRelationships(notifications: any[]): any[] {
@@ -575,48 +594,70 @@ class AINotificationService {
   }
 
   private async getPendingNotifications(userId: string): Promise<any[]> {
-    const { data } = await this.supabase
-      .from('notifications')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('is_read', false)
-      .order('created_at', { ascending: false });
-    
-    return data || [];
+    try {
+      const result = await query(`
+        SELECT * FROM notifications 
+        WHERE user_id = $1 AND is_read = false 
+        ORDER BY created_at DESC
+      `, [parseInt(userId.toString())]) // Use integer for notifications table
+      
+      return result.rows || [];
+    } catch (error) {
+      console.error('❌ Error fetching pending notifications:', error)
+      return [];
+    }
   }
 
   private async createBasicNotification(request: SmartNotificationRequest): Promise<any> {
-    const { data } = await this.supabase
-      .from('notifications')
-      .insert({
-        user_id: request.user_id,
-        type: request.type,
-        title: request.title,
-        message: request.message,
-        priority: request.priority,
-        metadata: request.metadata,
-        is_read: false,
-        created_at: new Date().toISOString()
-      })
-      .select()
-      .single();
-    
-    return {
-      notification_id: data.id,
-      scheduled_time: new Date(),
-      personalization_applied: false,
-      ai_enhancements: {}
-    };
+    try {
+      console.log(`📝 Creating basic notification for user ${request.user_id}`)
+      
+      const result = await query(`
+        INSERT INTO notifications (
+          user_id, type, title, message, priority, metadata, is_read, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        RETURNING id
+      `, [
+        parseInt(request.user_id.toString()), // Use integer for notifications table
+        request.type,
+        request.title,
+        request.message,
+        request.priority,
+        JSON.stringify(request.metadata),
+        false,
+        new Date().toISOString()
+      ])
+      
+      const data = result.rows[0]
+      console.log(`✅ Basic notification created: ${data.id}`)
+      
+      return {
+        notification_id: data.id,
+        scheduled_time: new Date(),
+        personalization_applied: false,
+        ai_enhancements: {}
+      };
+    } catch (error) {
+      console.error('❌ Error creating basic notification:', error)
+      throw error;
+    }
   }
 
   private async logAIDecision(notificationId: string, decision: any): Promise<void> {
-    await this.supabase
-      .from('ai_decision_log')
-      .insert({
-        notification_id: notificationId,
-        decision_data: decision,
-        created_at: new Date().toISOString()
-      });
+    try {
+      await query(`
+        INSERT INTO ai_decision_log (notification_id, decision_data, created_at) 
+        VALUES ($1, $2, $3)
+      `, [
+        notificationId,
+        JSON.stringify(decision),
+        new Date().toISOString()
+      ])
+      
+      console.log(`🔬 AI decision logged for notification ${notificationId}`)
+    } catch (error) {
+      console.error('❌ Error logging AI decision:', error)
+    }
   }
 }
 

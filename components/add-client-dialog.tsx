@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { useToast } from "@/components/ui/use-toast"
-import { supabase } from "@/lib/supabase"
+import { query } from "@/lib/postgresql-client"
 import type { Client } from "@/types/client"
 import { logActivity } from "@/services/activity-service"
 import { generateClientCode, ensureUniqueClientCode } from "@/utils/client-code-generator"
@@ -84,25 +84,25 @@ export function AddClientDialog({ open, onOpenChange, onClientAdded }: AddClient
 
   const fetchCompanies = async () => {
     try {
-      console.log("Fetching companies...")
-      const { data, error } = await supabase.from("companies").select("id, name").order("name")
+      console.log("📋 Fetching companies...")
+      
+      // Use PostgreSQL query instead of Supabase
+      const companiesResult = await query(
+        "SELECT id, name FROM companies ORDER BY name",
+        []
+      )
 
-      if (error) {
-        throw error
-      }
-
-      console.log("Companies fetched:", data)
+      console.log("✅ Companies fetched:", companiesResult.rows)
 
       // Map the data to match the expected structure
-      const formattedData =
-        data?.map((company) => ({
-          id: company.id,
-          name: company.name,
-        })) || []
+      const formattedData = companiesResult.rows.map((company) => ({
+        id: company.id,
+        name: company.name,
+      }))
 
       setCompanies(formattedData)
     } catch (error) {
-      console.error("Error fetching companies:", error)
+      console.error("❌ Error fetching companies:", error)
       toast({
         title: "Error",
         description: `Error fetching companies: ${error instanceof Error ? error.message : String(error)}`,
@@ -185,46 +185,49 @@ export function AddClientDialog({ open, onOpenChange, onClientAdded }: AddClient
       const baseCode = await generateClientCode(companyId)
       const clientCode = await ensureUniqueClientCode(baseCode)
 
-      // Prepare client data
-      const clientData = {
-        client_code: clientCode,
-        name: formData.name,
-        company_id: companyId,
-        contact_person: formData.contact_person,
-        email: formData.email,
-        country_code: formData.country_code,
-        phone: formData.phone,
-        is_whatsapp: formData.is_whatsapp,
-        has_separate_whatsapp: formData.is_whatsapp && formData.whatsapp_option === "different",
-        whatsapp_country_code:
+      // Insert new client using PostgreSQL
+      console.log("💾 Inserting new client...")
+      const insertResult = await query(
+        `INSERT INTO clients (
+          client_code, name, company_id, contact_person, email, country_code, phone,
+          is_whatsapp, has_separate_whatsapp, whatsapp_country_code, whatsapp_number,
+          address, city, state, postal_code, country, category, status
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        RETURNING *`,
+        [
+          clientCode,
+          formData.name,
+          companyId,
+          formData.contact_person,
+          formData.email,
+          formData.country_code,
+          formData.phone,
+          formData.is_whatsapp,
+          formData.is_whatsapp && formData.whatsapp_option === "different",
           formData.is_whatsapp && formData.whatsapp_option === "different" ? formData.whatsapp_country_code : null,
-        whatsapp_number:
           formData.is_whatsapp && formData.whatsapp_option === "different" ? formData.whatsapp_number : null,
-        address: formData.address,
-        city: formData.city,
-        state: formData.state,
-        postal_code: formData.postal_code,
-        country: formData.country,
-        category: formData.category,
-        status: formData.status,
+          formData.address,
+          formData.city,
+          formData.state,
+          formData.postal_code,
+          formData.country,
+          formData.category,
+          formData.status
+        ]
+      )
+
+      if (insertResult.rows.length === 0) {
+        throw new Error("Failed to create client")
       }
 
-      // Insert new client
-      const { data, error } = await supabase.from("clients").insert(clientData).select()
-
-      if (error) {
-        throw error
-      }
-
-      // Get the company name for display
-      const company = companies.find((c) => c.id === companyId)
+      const newClient = insertResult.rows[0]
 
       // Log the activity
       try {
         await logActivity({
           actionType: "create",
           entityType: "client",
-          entityId: data[0].id.toString(),
+          entityId: newClient.id.toString(),
           entityName: formData.name,
           description: `New client ${formData.name} (${clientCode}) was created`,
           userName: "Current User", // Replace with actual user name when available
@@ -240,13 +243,7 @@ export function AddClientDialog({ open, onOpenChange, onClientAdded }: AddClient
       })
 
       // Call the onClientAdded callback with the new client
-      if (data && data.length > 0) {
-        const newClient = {
-          ...data[0],
-          company_name: company?.name || "Unknown",
-        }
-        onClientAdded(newClient)
-      }
+      onClientAdded(newClient)
 
       // Reset form
       setFormData({

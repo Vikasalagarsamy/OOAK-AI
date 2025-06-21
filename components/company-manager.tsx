@@ -8,7 +8,6 @@ import AddBranchForm from "./add-branch-form"
 import EditCompanyModal from "./edit-company-modal"
 import EditBranchModal from "./edit-branch-modal"
 import type { Company, Branch } from "@/types/company"
-import { supabase } from "@/lib/supabase"
 import { Loader2 } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 
@@ -27,20 +26,20 @@ export default function CompanyManager() {
       try {
         setLoading(true)
 
-        // Fetch companies
-        const { data: companiesData, error: companiesError } = await supabase.from("companies").select("*")
+        // Fetch companies via API
+        const companiesResponse = await fetch('/api/companies')
+        const companiesData = await companiesResponse.json()
+        
+        // Fetch branches via API
+        const branchesResponse = await fetch('/api/branches')
+        const branchesData = await branchesResponse.json()
 
-        if (companiesError) throw companiesError
-
-        // Fetch branches
-        const { data: branchesData, error: branchesError } = await supabase.from("branches").select("*")
-
-        if (branchesError) throw branchesError
-
-        setCompanies(companiesData || [])
-        setBranches(branchesData || [])
+        setCompanies(companiesData.companies || [])
+        setBranches(branchesData.branches || [])
+        
+        console.log(`✅ Loaded ${companiesData.companies?.length || 0} companies and ${branchesData.branches?.length || 0} branches`)
       } catch (error) {
-        console.error("Error fetching data:", error)
+        console.error("❌ Error fetching data:", error)
         toast({
           title: "Error",
           description: "Failed to load data. Please refresh the page.",
@@ -56,68 +55,96 @@ export default function CompanyManager() {
 
   const addCompany = async (company: Omit<Company, "id" | "created_at" | "updated_at">) => {
     try {
-      const { data, error } = await supabase.from("companies").insert([company]).select()
+      const response = await fetch('/api/companies', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(company)
+      })
 
-      if (error) throw error
+      const result = await response.json()
 
-      if (data && data.length > 0) {
-        setCompanies([...companies, data[0]])
+      if (result.success && result.company) {
+        setCompanies([...companies, result.company])
+        console.log('✅ Company added successfully:', result.company.name)
       }
 
-      return { success: true, data }
+      return result
     } catch (error) {
-      console.error("Error adding company:", error)
+      console.error("❌ Error adding company:", error)
       return { success: false, error }
     }
   }
 
   const updateCompany = async (id: number, updates: Partial<Company>) => {
     try {
-      const { data, error } = await supabase.from("companies").update(updates).eq("id", id).select()
+      const response = await fetch('/api/companies/update', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ id, updates })
+      })
 
-      if (error) throw error
+      const result = await response.json()
 
-      if (data && data.length > 0) {
-        setCompanies(companies.map((company) => (company.id === id ? { ...company, ...data[0] } : company)))
+      if (result.success && result.data && result.data.length > 0) {
+        setCompanies(companies.map((company) => (company.id === id ? { ...company, ...result.data[0] } : company)))
+        console.log('✅ Company updated successfully:', result.data[0].name)
       }
 
-      return { success: true, data }
+      return result
     } catch (error) {
-      console.error("Error updating company:", error)
+      console.error("❌ Error updating company:", error)
       return { success: false, error }
     }
   }
 
   const addBranch = async (branch: Omit<Branch, "id" | "created_at" | "updated_at">) => {
     try {
-      const { data, error } = await supabase.from("branches").insert([branch]).select()
+      const response = await fetch('/api/branches', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(branch)
+      })
 
-      if (error) throw error
+      const result = await response.json()
 
-      if (data && data.length > 0) {
-        setBranches([...branches, data[0]])
+      if (result.success && result.branch) {
+        setBranches([...branches, result.branch])
+        console.log('✅ Branch added successfully:', result.branch.name)
       }
 
-      return { success: true, data }
+      return result
     } catch (error) {
-      console.error("Error adding branch:", error)
+      console.error("❌ Error adding branch:", error)
       return { success: false, error }
     }
   }
 
   const updateBranch = async (id: number, updates: Partial<Branch>) => {
     try {
-      const { data, error } = await supabase.from("branches").update(updates).eq("id", id).select()
+      const response = await fetch('/api/branches/update', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ id, updates })
+      })
 
-      if (error) throw error
+      const result = await response.json()
 
-      if (data && data.length > 0) {
-        setBranches(branches.map((branch) => (branch.id === id ? { ...branch, ...data[0] } : branch)))
+      if (result.success && result.data && result.data.length > 0) {
+        setBranches(branches.map((branch) => (branch.id === id ? { ...branch, ...result.data[0] } : branch)))
+        console.log('✅ Branch updated successfully:', result.data[0].name)
       }
 
-      return { success: true, data }
+      return result
     } catch (error) {
-      console.error("Error updating branch:", error)
+      console.error("❌ Error updating branch:", error)
       return { success: false, error }
     }
   }
@@ -163,7 +190,7 @@ export default function CompanyManager() {
         </TabsContent>
       </Tabs>
 
-      {/* Edit Modals */}
+      {/* Edit Company Modal */}
       {editingCompany && (
         <EditCompanyModal
           company={editingCompany}
@@ -173,6 +200,7 @@ export default function CompanyManager() {
         />
       )}
 
+      {/* Edit Branch Modal */}
       {editingBranch && (
         <EditBranchModal
           branch={editingBranch}

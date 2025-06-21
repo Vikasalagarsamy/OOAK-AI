@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
-import { createClient } from "@/lib/supabase-client"
+import { createClient } from "@/lib/postgresql-client-unified"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -49,7 +49,7 @@ export default function WorkflowHistoryPage() {
 
   const fetchQuotations = async () => {
     try {
-      const supabase = createClient()
+      const { query, transaction } = createClient()
       const { data, error } = await supabase
         .from('quotations')
         .select('id, quotation_number, client_name, bride_name, groom_name, total_amount, workflow_status, created_at, created_by')

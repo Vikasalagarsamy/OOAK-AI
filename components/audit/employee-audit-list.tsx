@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { supabase } from "@/lib/supabase"
+import { query } from "@/lib/postgresql-client"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -30,48 +30,42 @@ export function EmployeeAuditList() {
     setError(null)
 
     try {
-      // First fetch employees
-      const { data: employeesData, error: employeesError } = await supabase
-        .from("employees")
-        .select("id, full_name, email, department, designation")
-        .order("full_name")
+      console.log('🔍 Fetching employee audit data...')
 
-      if (employeesError) throw employeesError
+      // Get employees with their audit statistics in a single optimized query
+      const result = await query(`
+        SELECT 
+          e.id,
+          e.full_name,
+          e.email,
+          e.department,
+          e.designation,
+          COUNT(a.id) as activity_count,
+          MAX(a.timestamp) as last_activity
+        FROM employees e
+        LEFT JOIN audit_security.audit_trail a ON e.id::text = a.entity_id AND a.entity_type = 'employees'
+        GROUP BY e.id, e.full_name, e.email, e.department, e.designation
+        ORDER BY e.full_name
+      `)
 
-      // Then fetch audit data for each employee
-      const employeesWithAudit = await Promise.all(
-        (employeesData || []).map(async (employee) => {
-          // Count activities
-          const { count, error: countError } = await supabase
-            .from("audit_security.audit_trail")
-            .select("*", { count: "exact", head: true })
-            .eq("entity_id", employee.id)
-            .eq("entity_type", "employees")
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to fetch employee audit data')
+      }
 
-          if (countError) throw countError
+      const employeesWithAudit = (result.data || []).map(employee => ({
+        id: employee.id.toString(),
+        full_name: employee.full_name || 'Unknown',
+        email: employee.email || '',
+        department: employee.department || '',
+        designation: employee.designation || '',
+        activity_count: parseInt(employee.activity_count) || 0,
+        last_activity: employee.last_activity || null,
+      }))
 
-          // Get last activity
-          const { data: lastActivity, error: lastActivityError } = await supabase
-            .from("audit_security.audit_trail")
-            .select("timestamp")
-            .eq("entity_id", employee.id)
-            .eq("entity_type", "employees")
-            .order("timestamp", { ascending: false })
-            .limit(1)
-
-          if (lastActivityError) throw lastActivityError
-
-          return {
-            ...employee,
-            activity_count: count || 0,
-            last_activity: lastActivity?.[0]?.timestamp || null,
-          }
-        }),
-      )
-
+      console.log(`✅ Loaded ${employeesWithAudit.length} employees with audit data`)
       setEmployees(employeesWithAudit)
     } catch (err: any) {
-      console.error("Error fetching employee audit data:", err)
+      console.error("❌ Error fetching employee audit data:", err)
       setError(err.message || "Failed to fetch employee data")
     } finally {
       setLoading(false)

@@ -14,20 +14,31 @@ export function useEnhancedMenu() {
     setError(null)
 
     try {
-      const response = await fetch("/api/enhanced-menu")
+      console.log("Fetching enhanced menu...")
+      const response = await fetch("/api/enhanced-menu", {
+        headers: {
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+        credentials: "include", // Important: include credentials for auth
+      })
 
       if (!response.ok) {
+        console.error("Menu fetch failed:", response.status, response.statusText)
         throw new Error(`Error fetching menu: ${response.statusText}`)
       }
 
       const data = await response.json()
+      console.log("Menu data received:", data)
 
       // Check if the response has the expected structure
       if (data && Array.isArray(data.items)) {
+        console.log("Setting menu items from data.items:", data.items.length, "items")
         setMenuItems(data.items)
         setIsAuthenticated(data.isAuthenticated !== false)
       } else if (Array.isArray(data)) {
-        // Handle case where the API returns an array directly
+        console.log("Setting menu items from direct array:", data.length, "items")
         setMenuItems(data)
         setIsAuthenticated(true)
       } else {
@@ -45,10 +56,12 @@ export function useEnhancedMenu() {
   }, [])
 
   const refreshMenu = useCallback(() => {
-    fetchMenu()
+    console.log("Refreshing menu...")
+    return fetchMenu()
   }, [fetchMenu])
 
   useEffect(() => {
+    console.log("Initial menu fetch...")
     fetchMenu()
   }, [fetchMenu])
 

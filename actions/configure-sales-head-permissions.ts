@@ -1,13 +1,13 @@
 "use server"
 
-import { createClient } from "@/lib/supabase"
+import { query, transaction } from "@/lib/postgresql-client"
 import { revalidatePath } from "next/cache"
 import fs from "fs"
 import path from "path"
 
 export async function configureSalesHeadPermissions() {
   try {
-    const supabase = createClient()
+    console.log("🔧 Configuring Sales Head permissions using PostgreSQL...")
 
     // Read the SQL file
     const sqlFilePath = path.join(process.cwd(), "sql", "configure-sales-head-permissions.sql")
@@ -23,21 +23,14 @@ export async function configureSalesHeadPermissions() {
       }
     }
 
-    // Execute the SQL
-    const { error } = await supabase.rpc("exec_sql", { sql_query: sqlContent })
-
-    if (error) {
-      console.error("Error executing SQL:", error)
-      return {
-        success: false,
-        error: `Failed to configure Sales Head permissions: ${error.message}`,
-      }
-    }
+    // Execute the SQL directly using PostgreSQL
+    await query(sqlContent)
 
     // Revalidate relevant paths
     revalidatePath("/admin/role-permissions")
     revalidatePath("/admin/test-rbac")
 
+    console.log("✅ Sales Head permissions configured successfully")
     return {
       success: true,
       message: "Sales Head permissions configured successfully",

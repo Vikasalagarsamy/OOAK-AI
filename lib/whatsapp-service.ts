@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { query, transaction } from '@/lib/postgresql-client'
 
 interface WhatsAppConfig {
   businessPhoneNumberId: string
@@ -27,30 +27,34 @@ interface WhatsAppTemplate {
 
 export class WhatsAppService {
   private config: WhatsAppConfig | null = null
-  private supabase = createClient()
 
   async getConfig(): Promise<WhatsAppConfig | null> {
     if (this.config) return this.config
 
-    const { data, error } = await this.supabase
-      .from('whatsapp_config')
-      .select('*')
-      .eq('is_active', true)
-      .single()
+    try {
+      const result = await query(
+        'SELECT business_phone_number_id, access_token, webhook_verify_token, webhook_url FROM whatsapp_config WHERE is_active = $1 LIMIT 1',
+        [true]
+      )
 
-    if (error || !data) {
-      console.error('WhatsApp config not found:', error)
+      if (!result.rows.length) {
+        console.error('WhatsApp config not found')
+        return null
+      }
+
+      const data = result.rows[0]
+      this.config = {
+        businessPhoneNumberId: data.business_phone_number_id,
+        accessToken: data.access_token,
+        webhookVerifyToken: data.webhook_verify_token,
+        webhookUrl: data.webhook_url
+      }
+
+      return this.config
+    } catch (error) {
+      console.error('❌ Error fetching WhatsApp config:', error)
       return null
     }
-
-    this.config = {
-      businessPhoneNumberId: data.business_phone_number_id,
-      accessToken: data.access_token,
-      webhookVerifyToken: data.webhook_verify_token,
-      webhookUrl: data.webhook_url
-    }
-
-    return this.config
   }
 
   async sendMessage(message: WhatsAppMessage): Promise<{ success: boolean, messageId?: string, error?: string }> {
@@ -106,7 +110,7 @@ export class WhatsAppService {
       }
 
     } catch (error) {
-      console.error('WhatsApp send error:', error)
+      console.error('❌ WhatsApp send error:', error)
       return { success: false, error: 'Failed to send WhatsApp message' }
     }
   }
@@ -152,16 +156,17 @@ export class WhatsAppService {
   private async getAITimingRecommendation(userId: number): Promise<{ confidence: number, reasoning: string }> {
     try {
       // Get user behavior patterns
-      const { data: profile } = await this.supabase
-        .from('user_ai_profiles')
-        .select('engagement_patterns, response_time_patterns')
-        .eq('user_id', userId)
-        .single()
+      const result = await query(
+        'SELECT engagement_patterns, response_time_patterns FROM user_ai_profiles WHERE user_id = $1',
+        [userId]
+      )
 
-      if (!profile) {
+      if (!result.rows.length) {
         return { confidence: 0.5, reasoning: 'No user profile data available' }
       }
 
+      const profile = result.rows[0]
+      
       // Simulate AI timing analysis
       const currentHour = new Date().getHours()
       const engagementPatterns = profile.engagement_patterns || {}
@@ -173,6 +178,7 @@ export class WhatsAppService {
       }
 
     } catch (error) {
+      console.error('❌ Error analyzing timing patterns:', error)
       return { confidence: 0.5, reasoning: 'Error analyzing timing patterns' }
     }
   }
@@ -184,13 +190,12 @@ export class WhatsAppService {
     length: string
   }> {
     try {
-      const { data: profile } = await this.supabase
-        .from('user_ai_profiles')
-        .select('personality_type, communication_style, preferred_content_length, content_preferences')
-        .eq('user_id', userId)
-        .single()
+      const result = await query(
+        'SELECT personality_type, communication_style, preferred_content_length, content_preferences FROM user_ai_profiles WHERE user_id = $1',
+        [userId]
+      )
 
-      if (!profile) {
+      if (!result.rows.length) {
         return {
           confidence: 0.5,
           style: 'formal',
@@ -198,6 +203,8 @@ export class WhatsAppService {
           length: 'medium'
         }
       }
+
+      const profile = result.rows[0]
 
       return {
         confidence: 0.85,
@@ -207,6 +214,7 @@ export class WhatsAppService {
       }
 
     } catch (error) {
+      console.error('❌ Error getting personalization recommendations:', error)
       return {
         confidence: 0.5,
         style: 'formal',
@@ -246,23 +254,27 @@ export class WhatsAppService {
 
   private async storeMessage(message: WhatsAppMessage, messageId: string): Promise<void> {
     try {
-      await this.supabase
-        .from('whatsapp_messages')
-        .insert({
-          user_id: message.userId,
-          phone_number: message.phoneNumber,
-          template_id: message.templateId,
-          message_content: message.messageContent,
-          message_id: messageId,
-          notification_id: message.notificationId,
-          ai_timing_score: message.aiTimingScore,
-          ai_personalization_score: message.aiPersonalizationScore,
-          status: 'sent',
-          sent_at: new Date().toISOString()
-        })
+      await query(
+        `INSERT INTO whatsapp_messages (
+          user_id, phone_number, template_id, message_content, message_id, 
+          notification_id, ai_timing_score, ai_personalization_score, status, sent_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [
+          message.userId,
+          message.phoneNumber,
+          message.templateId,
+          message.messageContent,
+          messageId,
+          message.notificationId,
+          message.aiTimingScore,
+          message.aiPersonalizationScore,
+          'sent',
+          new Date().toISOString()
+        ]
+      )
 
     } catch (error) {
-      console.error('Error storing WhatsApp message:', error)
+      console.error('❌ Error storing WhatsApp message:', error)
     }
   }
 
@@ -274,36 +286,39 @@ export class WhatsAppService {
     aiScores: { timing: number, personalization: number }
   }): Promise<void> {
     try {
-      await this.supabase
-        .from('user_engagement_analytics')
-        .insert({
-          user_id: data.userId,
-          notification_id: data.notificationId,
-          engagement_type: data.engagementType,
-          channel: data.channel,
-          context_data: {
+      await query(
+        `INSERT INTO user_engagement_analytics (
+          user_id, notification_id, engagement_type, channel, context_data, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          data.userId,
+          data.notificationId,
+          data.engagementType,
+          data.channel,
+          JSON.stringify({
             ai_timing_score: data.aiScores.timing,
             ai_personalization_score: data.aiScores.personalization
-          }
-        })
+          }),
+          new Date().toISOString()
+        ]
+      )
 
     } catch (error) {
-      console.error('Error tracking engagement:', error)
+      console.error('❌ Error tracking engagement:', error)
     }
   }
 
   // Template management
   async getTemplate(templateName: string): Promise<WhatsAppTemplate | null> {
     try {
-      const { data, error } = await this.supabase
-        .from('whatsapp_templates')
-        .select('*')
-        .eq('template_name', templateName)
-        .eq('status', 'approved')
-        .single()
+      const result = await query(
+        'SELECT template_name, template_type, template_content, variables, language_code FROM whatsapp_templates WHERE template_name = $1 AND status = $2',
+        [templateName, 'approved']
+      )
 
-      if (error || !data) return null
+      if (!result.rows.length) return null
 
+      const data = result.rows[0]
       return {
         templateName: data.template_name,
         templateType: data.template_type,
@@ -313,30 +328,31 @@ export class WhatsAppService {
       }
 
     } catch (error) {
-      console.error('Error getting template:', error)
+      console.error('❌ Error getting template:', error)
       return null
     }
   }
 
   async createTemplate(template: WhatsAppTemplate): Promise<{ success: boolean, error?: string }> {
     try {
-      const { error } = await this.supabase
-        .from('whatsapp_templates')
-        .insert({
-          template_name: template.templateName,
-          template_type: template.templateType,
-          template_content: template.templateContent,
-          variables: template.variables,
-          language_code: template.languageCode || 'en'
-        })
-
-      if (error) {
-        return { success: false, error: error.message }
-      }
+      await query(
+        `INSERT INTO whatsapp_templates (
+          template_name, template_type, template_content, variables, language_code, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          template.templateName,
+          template.templateType,
+          template.templateContent,
+          JSON.stringify(template.variables),
+          template.languageCode || 'en',
+          new Date().toISOString()
+        ]
+      )
 
       return { success: true }
 
     } catch (error) {
+      console.error('❌ Error creating template:', error)
       return { success: false, error: 'Failed to create template' }
     }
   }
@@ -353,27 +369,29 @@ export class WhatsAppService {
       }
 
     } catch (error) {
-      console.error('Error handling WhatsApp webhook:', error)
+      console.error('❌ Error handling WhatsApp webhook:', error)
     }
   }
 
   private async updateMessageStatus(messageId: string, status: string, timestamp: string): Promise<void> {
     try {
-      const updateData: any = { status }
+      let updateQuery = 'UPDATE whatsapp_messages SET status = $1'
+      let params = [status, messageId]
 
       if (status === 'delivered') {
-        updateData.delivered_at = new Date(parseInt(timestamp) * 1000).toISOString()
+        updateQuery += ', delivered_at = $3'
+        params.splice(2, 0, new Date(parseInt(timestamp) * 1000).toISOString())
       } else if (status === 'read') {
-        updateData.read_at = new Date(parseInt(timestamp) * 1000).toISOString()
+        updateQuery += ', read_at = $3'
+        params.splice(2, 0, new Date(parseInt(timestamp) * 1000).toISOString())
       }
 
-      await this.supabase
-        .from('whatsapp_messages')
-        .update(updateData)
-        .eq('message_id', messageId)
+      updateQuery += ' WHERE message_id = $2'
+
+      await query(updateQuery, params)
 
     } catch (error) {
-      console.error('Error updating message status:', error)
+      console.error('❌ Error updating message status:', error)
     }
   }
 }

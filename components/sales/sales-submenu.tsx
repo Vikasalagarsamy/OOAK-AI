@@ -38,7 +38,7 @@ const menuItems = [
   },
   {
     title: "Quotation",
-    href: "/sales/quotations",
+    href: "/sales/quotation",
     icon: <FileText className="h-4 w-4" />,
   },
   {
@@ -57,7 +57,7 @@ export function SalesSubmenu() {
   const pathname = usePathname()
 
   return (
-    <div className="flex flex-wrap gap-2">
+    <nav className="flex flex-wrap gap-2" aria-label="Sales navigation">
       {menuItems.map((item) => (
         <Link
           key={item.href}
@@ -66,11 +66,12 @@ export function SalesSubmenu() {
             "flex items-center px-3 py-2 text-sm rounded-md hover:bg-muted transition-colors",
             pathname === item.href && "bg-muted font-medium",
           )}
+          aria-current={pathname === item.href ? "page" : undefined}
         >
           {item.icon}
           <span className="ml-2">{item.title}</span>
         </Link>
       ))}
-    </div>
+    </nav>
   )
 }

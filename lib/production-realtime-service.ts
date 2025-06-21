@@ -1,7 +1,6 @@
 "use client"
 
-import { createClient } from '@/lib/supabase/client'
-import type { RealtimeChannel } from '@supabase/supabase-js'
+import { query } from '@/lib/postgresql-client'
 import { EnhancedNotificationService } from './enhanced-notification-service'
 
 interface ConnectionHealth {
@@ -12,7 +11,7 @@ interface ConnectionHealth {
 }
 
 interface SubscriptionManager {
-  channels: Map<string, RealtimeChannel>
+  channels: Map<string, any>
   health: ConnectionHealth
   callbacks: Map<string, Function[]>
   config: {
@@ -86,38 +85,74 @@ export class ProductionRealtimeService {
   }
 
   private async subscribeToNotifications(): Promise<void> {
-    const supabase = createClient()
-    
     // Remove existing subscription if any
     if (this.subscriptionManager.channels.has('notifications')) {
-      const existingChannel = this.subscriptionManager.channels.get('notifications')
-      await supabase.removeChannel(existingChannel!)
       this.subscriptionManager.channels.delete('notifications')
     }
     
-    // Create new subscription with enhanced configuration
-    const channel = supabase
-      .channel('notifications_production', {
-        config: {
-          presence: { key: `user_${Date.now()}` },
-          broadcast: { self: true },
-          private: false
-        }
-      })
-      .on('postgres_changes', 
-        { 
-          event: '*', 
-          schema: 'public', 
-          table: 'notifications'
-        }, 
-        (payload) => this.handleNotificationChange(payload)
-      )
-      .on('system', {}, (payload) => this.handleSystemEvent(payload))
-      .subscribe(async (status, error) => {
-        await this.handleSubscriptionStatus(status, error)
-      })
+    // For PostgreSQL-based real-time, we'll use polling mechanism
+    console.log('📡 Setting up PostgreSQL-based notification polling')
     
-    this.subscriptionManager.channels.set('notifications', channel)
+    // Start immediate polling for notifications
+    this.startNotificationPolling()
+    
+    // Mark as subscribed
+    this.subscriptionManager.channels.set('notifications', {
+      type: 'polling',
+      active: true,
+      created: new Date()
+    })
+  }
+
+  private startNotificationPolling(): void {
+    // Poll every 2 seconds for real-time feel
+    const pollingInterval = setInterval(async () => {
+      try {
+        await this.pollForNotifications()
+        
+        // Update health status
+        this.subscriptionManager.health.lastHeartbeat = new Date()
+        this.subscriptionManager.health.errorCount = 0
+        
+      } catch (error) {
+        console.error('❌ Polling error:', error)
+        this.subscriptionManager.health.errorCount++
+        
+        if (this.subscriptionManager.health.errorCount >= this.subscriptionManager.config.maxErrorsBeforeFallback) {
+          this.fallbackToPolling()
+        }
+      }
+    }, 2000)
+    
+    // Store interval for cleanup
+    this.subscriptionManager.channels.set('polling_interval', pollingInterval)
+  }
+
+  private async pollForNotifications(): Promise<void> {
+    try {
+      // Get latest notifications that haven't been processed
+      const data = await query(`
+        SELECT * FROM notifications 
+        WHERE created_at > NOW() - INTERVAL '30 seconds'
+        ORDER BY created_at DESC
+        LIMIT 10
+      `)
+      
+      if (data.rows && data.rows.length > 0) {
+        // Process each notification
+        for (const notification of data.rows) {
+          this.handleNotificationChange({
+            eventType: 'INSERT',
+            new: notification,
+            source: 'polling'
+          })
+        }
+      }
+      
+    } catch (error) {
+      console.error('❌ Failed to poll notifications:', error)
+      throw error
+    }
   }
 
   // 📡 EVENT HANDLING
@@ -149,8 +184,8 @@ export class ProductionRealtimeService {
   private handleSystemEvent(payload: any): void {
     console.log('🔧 System event:', payload)
     
-    if (payload.type === 'system' && payload.event === 'phx_error') {
-      this.handleConnectionError(new Error('Phoenix error received'))
+    if (payload.type === 'system' && payload.event === 'polling_error') {
+      this.handleConnectionError(new Error('Polling error received'))
     }
   }
 
@@ -184,14 +219,14 @@ export class ProductionRealtimeService {
   private fallbackToPolling(): void {
     if (this.fallbackPollingTimer) return // Already polling
     
-    console.log('🔄 Falling back to polling mode due to connection issues')
+    console.log('🔄 Falling back to extended polling mode due to connection issues')
     
     this.fallbackPollingTimer = setInterval(async () => {
       try {
-        console.log('📊 Polling for notification updates...')
+        console.log('📊 Extended polling for notification updates...')
         await this.pollForUpdates()
       } catch (error) {
-        console.error('❌ Polling error:', error)
+        console.error('❌ Extended polling error:', error)
       }
     }, 5000) // Poll every 5 seconds
   }
@@ -205,25 +240,23 @@ export class ProductionRealtimeService {
   }
 
   private async pollForUpdates(): Promise<void> {
-    const supabase = createClient()
-    
     try {
       // Get latest notifications
-      const { data: notifications, error } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('is_read', false)
-        .order('created_at', { ascending: false })
-        .limit(10)
+      const data = await query(`
+        SELECT * FROM notifications 
+        WHERE is_read = false 
+        ORDER BY created_at DESC 
+        LIMIT 10
+      `)
       
-      if (error) throw error
-      
-      // Trigger update event
-      this.triggerCallbacks('notification_change', {
-        eventType: 'polling_update',
-        new: notifications,
-        source: 'polling'
-      })
+      if (data.rows && data.rows.length > 0) {
+        // Trigger update event
+        this.triggerCallbacks('notification_change', {
+          eventType: 'polling_update',
+          new: data.rows,
+          source: 'polling'
+        })
+      }
       
     } catch (error) {
       console.error('❌ Polling failed:', error)
@@ -381,11 +414,10 @@ export class ProductionRealtimeService {
     
     this.stopFallbackPolling()
     
-    // Close all channels
-    const supabase = createClient()
-    for (const [name, channel] of this.subscriptionManager.channels) {
-      await supabase.removeChannel(channel)
-      console.log(`🗑️ Removed channel: ${name}`)
+    // Clear polling interval
+    const pollingInterval = this.subscriptionManager.channels.get('polling_interval')
+    if (pollingInterval) {
+      clearInterval(pollingInterval)
     }
     
     this.subscriptionManager.channels.clear()

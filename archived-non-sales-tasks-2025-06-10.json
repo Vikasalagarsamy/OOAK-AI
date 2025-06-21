@@ -1,0 +1,92 @@
+{
+  "archived_date": "2025-06-10T04:31:17.092Z",
+  "reason": "Sales-only AI tasks cleanup",
+  "total_tasks_archived": 3,
+  "sales_tasks_kept": 5,
+  "archived_tasks": [
+    {
+      "id": 13,
+      "task_title": "Review and finalize contract terms",
+      "task_description": "Complete legal review of contract clauses and payment terms.",
+      "priority": "high",
+      "status": "pending",
+      "due_date": "2025-06-10T03:12:09.626944+00:00",
+      "category": "document_review",
+      "assigned_to": "Legal Team",
+      "assigned_by": "AI System",
+      "metadata": {
+        "review_type": "legal",
+        "document_type": "contract",
+        "client_waiting": true,
+        "business_impact": "Contract Finalization: Deal closure pending"
+      },
+      "completed_at": null,
+      "created_at": "2025-06-10T03:42:09.623805+00:00",
+      "updated_at": "2025-06-10T03:42:09.623805+00:00",
+      "client_name": null,
+      "business_impact": null,
+      "ai_reasoning": null,
+      "estimated_value": null,
+      "lead_id": null,
+      "quotation_id": null,
+      "actual_hours": null,
+      "quality_rating": null
+    },
+    {
+      "id": 14,
+      "task_title": "Conduct CRM training session",
+      "task_description": "Train team members on new CRM features and best practices.",
+      "priority": "low",
+      "status": "pending",
+      "due_date": "2025-06-17T09:12:09.627248+00:00",
+      "category": "training",
+      "assigned_to": "HR Manager",
+      "assigned_by": "AI System",
+      "metadata": {
+        "training_type": "crm",
+        "duration_hours": 2,
+        "business_impact": "Team Productivity: Improved efficiency",
+        "attendees_expected": 15
+      },
+      "completed_at": null,
+      "created_at": "2025-06-10T03:42:09.623805+00:00",
+      "updated_at": "2025-06-10T03:42:09.623805+00:00",
+      "client_name": null,
+      "business_impact": null,
+      "ai_reasoning": null,
+      "estimated_value": null,
+      "lead_id": null,
+      "quotation_id": null,
+      "actual_hours": null,
+      "quality_rating": null
+    },
+    {
+      "id": 15,
+      "task_title": "Database optimization and backup",
+      "task_description": "Perform scheduled database maintenance and backup procedures.",
+      "priority": "medium",
+      "status": "in_progress",
+      "due_date": "2025-06-10T21:12:09.627535+00:00",
+      "category": "system_maintenance",
+      "assigned_to": "IT Support",
+      "assigned_by": "AI System",
+      "metadata": {
+        "backup_required": true,
+        "business_impact": "System Performance: Improved reliability",
+        "maintenance_type": "database",
+        "estimated_downtime": 30
+      },
+      "completed_at": null,
+      "created_at": "2025-06-10T03:42:09.623805+00:00",
+      "updated_at": "2025-06-10T03:42:09.623805+00:00",
+      "client_name": null,
+      "business_impact": null,
+      "ai_reasoning": null,
+      "estimated_value": null,
+      "lead_id": null,
+      "quotation_id": null,
+      "actual_hours": null,
+      "quality_rating": null
+    }
+  ]
+}

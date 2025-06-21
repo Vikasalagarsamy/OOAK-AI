@@ -1,8 +1,8 @@
-import { createClient } from "@/lib/supabase/server"
+import { createClient } from "@/lib/postgresql-client"
 import { NextResponse } from "next/server"
 
 export async function POST() {
-  const supabase = createClient()
+  const { query, transaction } = createClient()
 
   try {
     // First check if both columns exist
@@ -19,7 +19,7 @@ export async function POST() {
 
     if (columnsError) {
       // Try an alternative approach
-      const { data, error } = await supabase.from("lead_followups").select("id").limit(1)
+      const { data, error } = await query(`SELECT ${params} FROM ${table}`).limit(1)
 
       // If we can't even check the columns, return success to avoid blocking
       if (error) {

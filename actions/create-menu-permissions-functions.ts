@@ -1,10 +1,10 @@
 "use server"
 
-import { createClient } from "@/lib/supabase"
+import { query, transaction } from "@/lib/postgresql-client"
 
 export async function createMenuPermissionsFunctions() {
   try {
-    const supabase = createClient()
+    console.log("🔧 Creating menu permissions functions using PostgreSQL...")
 
     // SQL for get_user_menu_permissions function
     const getUserMenuPermissionsSQL = `
@@ -97,13 +97,17 @@ export async function createMenuPermissionsFunctions() {
     $$ LANGUAGE plpgsql;
     `
 
-    // Execute the SQL to create the functions
-    const { error: error1 } = await supabase.rpc("exec_sql", { sql: getUserMenuPermissionsSQL })
-    if (error1) throw new Error(`Error creating get_user_menu_permissions function: ${error1.message}`)
+    // Execute both SQL functions using transaction for atomicity
+    await transaction(async (client) => {
+      await client.query(getUserMenuPermissionsSQL)
+      await client.query(checkUserMenuPermissionSQL)
+      
+      // Grant execute permissions
+      await client.query("GRANT EXECUTE ON FUNCTION get_user_menu_permissions(INTEGER) TO authenticated")
+      await client.query("GRANT EXECUTE ON FUNCTION check_user_menu_permission(INTEGER, TEXT, TEXT) TO authenticated")
+    })
 
-    const { error: error2 } = await supabase.rpc("exec_sql", { sql: checkUserMenuPermissionSQL })
-    if (error2) throw new Error(`Error creating check_user_menu_permission function: ${error2.message}`)
-
+    console.log("✅ Menu permissions functions created successfully")
     return { success: true }
   } catch (error: any) {
     console.error("Error creating menu permissions functions:", error)

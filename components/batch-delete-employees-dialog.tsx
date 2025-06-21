@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/components/ui/use-toast"
-import { supabase } from "@/lib/supabase"
+import { query } from "@/lib/postgresql-client"
 import type { Employee } from "@/types/employee"
 import { logActivity } from "@/services/activity-service"
 
@@ -69,12 +69,17 @@ export function BatchDeleteEmployeesDialog({
           batch.map(async (employee) => {
             try {
               // Try to delete the employee
-              const { error } = await supabase.from("employees").delete().eq("id", employee.id)
+              console.log(`🗑️ Deleting employee: ${employee.first_name} ${employee.last_name} (ID: ${employee.id})`)
+              
+              const result = await query(
+                'DELETE FROM employees WHERE id = $1',
+                [employee.id]
+              )
 
-              if (error) {
+              if (!result.success) {
                 failedDeletes.push({
                   employee,
-                  reason: error.message || "Unknown error",
+                  reason: result.error || "Unknown error",
                 })
               } else {
                 successfulDeletes.push(employee)

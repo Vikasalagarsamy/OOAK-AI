@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/components/ui/use-toast"
 import { Loader2 } from "lucide-react"
-import { supabase } from "@/lib/supabase"
+// Removed direct PostgreSQL import - using API endpoint instead
 import type { Company } from "@/types/company"
 import { logActivity } from "@/services/activity-service"
 
@@ -69,7 +69,7 @@ export default function EditCompanyModal({ company, open, onOpenChange, onUpdate
     },
   })
 
-  // Check if company code is unique
+  // Check if company code is unique via API
   const checkCompanyCode = async (code: string) => {
     if (!code || code === company.company_code) {
       setIsCodeUnique(true)
@@ -77,13 +77,18 @@ export default function EditCompanyModal({ company, open, onOpenChange, onUpdate
     }
 
     try {
-      const { data, error } = await supabase.from("companies").select("id").eq("company_code", code).maybeSingle()
+      console.log('🔍 Checking company code uniqueness:', code)
+      
+      const response = await fetch(`/api/companies/check-code?code=${encodeURIComponent(code)}`)
+      const result = await response.json()
 
-      if (error) throw error
-
-      setIsCodeUnique(!data)
+      const isUnique = result.success && !result.exists
+      setIsCodeUnique(isUnique)
+      
+      console.log(`${isUnique ? '✅' : '❌'} Company code ${code} is ${isUnique ? 'unique' : 'already in use'}`)
     } catch (error) {
-      console.error("Error checking company code:", error)
+      console.error("❌ Error checking company code:", error)
+      setIsCodeUnique(false)
     }
   }
 
@@ -163,6 +168,28 @@ export default function EditCompanyModal({ company, open, onOpenChange, onUpdate
             </div>
 
             <div className="space-y-2">
+              <label htmlFor="company_code" className="text-sm font-medium">
+                Company Code *
+              </label>
+              <Input
+                id="company_code"
+                placeholder="Company code"
+                {...register("company_code", {
+                  onChange: (e) => checkCompanyCode(e.target.value)
+                })}
+                className={`${errors.company_code ? "border-red-500" : ""} ${
+                  !isCodeUnique ? "border-red-500" : ""
+                }`}
+              />
+              {errors.company_code && (
+                <p className="text-sm text-red-500">{errors.company_code.message}</p>
+              )}
+              {!isCodeUnique && (
+                <p className="text-sm text-red-500">Company code already exists. Please use a different one.</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
               <label htmlFor="address" className="text-sm font-medium">
                 Address *
               </label>
@@ -204,7 +231,7 @@ export default function EditCompanyModal({ company, open, onOpenChange, onUpdate
               </label>
               <Input
                 id="website"
-                placeholder="https://example.com"
+                placeholder="https://company.com"
                 {...register("website")}
                 className={errors.website ? "border-red-500" : ""}
               />
@@ -216,18 +243,14 @@ export default function EditCompanyModal({ company, open, onOpenChange, onUpdate
                 <label htmlFor="tax_id" className="text-sm font-medium">
                   Tax ID
                 </label>
-                <Input id="tax_id" placeholder="Enter tax ID" {...register("tax_id")} />
+                <Input id="tax_id" placeholder="Tax identification number" {...register("tax_id")} />
               </div>
 
               <div className="space-y-2">
                 <label htmlFor="registration_number" className="text-sm font-medium">
                   Registration Number
                 </label>
-                <Input
-                  id="registration_number"
-                  placeholder="Enter registration number"
-                  {...register("registration_number")}
-                />
+                <Input id="registration_number" placeholder="Business registration number" {...register("registration_number")} />
               </div>
             </div>
 
@@ -237,34 +260,20 @@ export default function EditCompanyModal({ company, open, onOpenChange, onUpdate
               </label>
               <Input id="founded_date" type="date" {...register("founded_date")} />
             </div>
-
-            <div className="space-y-2">
-              <label htmlFor="company_code" className="text-sm font-medium">
-                Company Code *
-              </label>
-              <Input
-                id="company_code"
-                placeholder="Company code"
-                {...register("company_code")}
-                className={!isCodeUnique || errors.company_code ? "border-red-500" : ""}
-                onBlur={(e) => checkCompanyCode(e.target.value)}
-              />
-              {errors.company_code && <p className="text-red-500 text-xs">{errors.company_code.message}</p>}
-              {!isCodeUnique && <p className="text-red-500 text-xs">This company code is already in use</p>}
-            </div>
           </div>
+
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting || !isCodeUnique}>
               {isSubmitting ? (
-                <span className="flex items-center">
+                <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Saving...
-                </span>
+                  Updating...
+                </>
               ) : (
-                "Save Changes"
+                "Update Company"
               )}
             </Button>
           </DialogFooter>

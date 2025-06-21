@@ -1,29 +1,29 @@
 "use server"
 
-import { createClient } from "@/lib/supabase"
+import { query, transaction } from "@/lib/postgresql-client"
 import { getRecentActivities } from "./activity-service"
 
 export async function getDashboardStats() {
   try {
-    const supabase = createClient()
+    console.log('📊 Fetching dashboard stats via PostgreSQL...')
 
     // Use Promise.allSettled for better error handling and timeout
     const promises = [
-      // Get basic counts with timeout
+      // Direct PostgreSQL queries instead of Supabase
       Promise.race([
-        supabase.from("companies").select("id, created_at", { count: "exact" }),
+        query('SELECT COUNT(*) as count, created_at FROM companies GROUP BY created_at ORDER BY created_at DESC'),
         new Promise((_, reject) => setTimeout(() => reject(new Error("Companies timeout")), 1500))
       ]),
       Promise.race([
-        supabase.from("branches").select("id, created_at", { count: "exact" }),
+        query('SELECT COUNT(*) as count, created_at FROM branches GROUP BY created_at ORDER BY created_at DESC'),
         new Promise((_, reject) => setTimeout(() => reject(new Error("Branches timeout")), 1500))
       ]),
       Promise.race([
-        supabase.from("employees").select("id, created_at", { count: "exact" }),
+        query('SELECT COUNT(*) as count, created_at FROM employees GROUP BY created_at ORDER BY created_at DESC'),
         new Promise((_, reject) => setTimeout(() => reject(new Error("Employees timeout")), 1500))
       ]),
       Promise.race([
-        supabase.from("clients").select("id, created_at", { count: "exact" }),
+        query('SELECT COUNT(*) as count, created_at FROM clients GROUP BY created_at ORDER BY created_at DESC LIMIT 100'),
         new Promise((_, reject) => setTimeout(() => reject(new Error("Clients timeout")), 1500))
       ])
     ]
@@ -31,36 +31,36 @@ export async function getDashboardStats() {
     const results = await Promise.allSettled(promises)
 
     // Process results with fallbacks
-    const companiesData: any[] = []
-    const branchesData: any[] = []
-    const employeesData: any[] = []
-    const clientsData: any[] = []
+    let companiesData: any[] = []
+    let branchesData: any[] = []
+    let employeesData: any[] = []
+    let clientsData: any[] = []
 
     if (results[0].status === 'fulfilled') {
       const result = results[0].value as any
-      if (result?.data && Array.isArray(result.data)) {
-        companiesData.push(...result.data)
+      if (result?.rows && Array.isArray(result.rows)) {
+        companiesData = result.rows
       }
     }
 
     if (results[1].status === 'fulfilled') {
       const result = results[1].value as any
-      if (result?.data && Array.isArray(result.data)) {
-        branchesData.push(...result.data)
+      if (result?.rows && Array.isArray(result.rows)) {
+        branchesData = result.rows
       }
     }
 
     if (results[2].status === 'fulfilled') {
       const result = results[2].value as any
-      if (result?.data && Array.isArray(result.data)) {
-        employeesData.push(...result.data)
+      if (result?.rows && Array.isArray(result.rows)) {
+        employeesData = result.rows
       }
     }
 
     if (results[3].status === 'fulfilled') {
       const result = results[3].value as any
-      if (result?.data && Array.isArray(result.data)) {
-        clientsData.push(...result.data)
+      if (result?.rows && Array.isArray(result.rows)) {
+        clientsData = result.rows
       }
     }
 
@@ -93,37 +93,75 @@ export async function getDashboardStats() {
       }
     }
 
-    // Default employee distribution - used as fallback or when queries fail
-    const defaultEmployeesByDepartment = [
-      { department: "Engineering", count: 24 },
-      { department: "Marketing", count: 13 },
-      { department: "Sales", count: 18 },
-      { department: "Finance", count: 8 },
-      { department: "HR", count: 5 },
-    ]
+    // Get detailed breakdowns with direct PostgreSQL
+    let employeesByDepartment = []
+    let branchesByCompany = []
 
-    // Default branch distribution
-    const defaultBranchesByCompany = [
-      { company: "Acme Corp", count: 5 },
-      { company: "TechCorp", count: 3 },
-      { company: "Global Industries", count: 7 },
-      { company: "Startup Inc", count: 1 },
-      { company: "Enterprise Ltd", count: 4 },
-    ]
+    try {
+      // Get employee distribution by role/department
+      const empDeptResult = await query(`
+        SELECT 
+          r.name as department,
+          COUNT(e.id) as count
+        FROM employees e
+        LEFT JOIN roles r ON e.role_id = r.id
+        WHERE e.status = 'active'
+        GROUP BY r.name
+        ORDER BY count DESC
+        LIMIT 10
+      `)
+      employeesByDepartment = empDeptResult.rows
 
-    // Use defaults for faster loading - detailed breakdowns can be loaded later
-    const employeesByDepartment = defaultEmployeesByDepartment
-    const branchesByCompany = defaultBranchesByCompany
+      // Get branch distribution by company
+      const branchCompResult = await query(`
+        SELECT 
+          c.name as company,
+          COUNT(b.id) as count
+        FROM branches b
+        LEFT JOIN companies c ON b.company_id = c.id
+        GROUP BY c.name
+        ORDER BY count DESC
+        LIMIT 10
+      `)
+      branchesByCompany = branchCompResult.rows
+    } catch (error) {
+      console.error('Error fetching detailed breakdowns:', error)
+      // Use defaults
+      employeesByDepartment = [
+        { department: "Admin", count: 12 },
+        { department: "Sales", count: 8 },
+        { department: "Support", count: 5 },
+      ]
+      branchesByCompany = [
+        { company: "Main Company", count: 3 },
+        { company: "Partner Corp", count: 2 },
+      ]
+    }
 
-    // Generate sample employee growth data (using defaults for faster loading)
-    const employeeGrowth = [
-      { month: "Jan", count: 45 },
-      { month: "Feb", count: 52 },
-      { month: "Mar", count: 58 },
-      { month: "Apr", count: 61 },
-      { month: "May", count: 65 },
-      { month: "Jun", count: 68 },
-    ]
+    // Generate employee growth data from actual database
+    let employeeGrowth = []
+    try {
+      const growthResult = await query(`
+        SELECT 
+          TO_CHAR(created_at, 'Mon') as month,
+          COUNT(*) as count
+        FROM employees 
+        WHERE created_at >= NOW() - INTERVAL '6 months'
+        GROUP BY DATE_TRUNC('month', created_at), TO_CHAR(created_at, 'Mon')
+        ORDER BY DATE_TRUNC('month', created_at)
+      `)
+      employeeGrowth = growthResult.rows
+    } catch (error) {
+      console.error('Error fetching growth data:', error)
+      employeeGrowth = [
+        { month: "Jan", count: 45 },
+        { month: "Feb", count: 52 },
+        { month: "Mar", count: 58 },
+        { month: "Apr", count: 61 },
+        { month: "May", count: 65 },
+        { month: "Jun", count: 68 },
+      ]
+    }
 
     // Get recent activities with timeout
     let recentActivities: any[] = []
@@ -137,6 +175,8 @@ export async function getDashboardStats() {
       console.error("Error fetching recent activities:", error)
       recentActivities = generateMockActivities()
     }
+
+    console.log('✅ Dashboard stats fetched successfully via PostgreSQL')
 
     return {
       success: true,
@@ -164,7 +204,7 @@ export async function getDashboardStats() {
       recentActivities,
     }
   } catch (error) {
-    console.error("Error in getDashboardStats:", error)
+    console.error("Error in getDashboardStats (PostgreSQL):", error)
     
     // Return reasonable defaults on any error
     return {
@@ -176,18 +216,13 @@ export async function getDashboardStats() {
         clients: { count: 24, trend: { isPositive: true, value: 22 } },
       },
       employeesByDepartment: [
-        { department: "Engineering", count: 24 },
-        { department: "Marketing", count: 13 },
-        { department: "Sales", count: 18 },
-        { department: "Finance", count: 8 },
-        { department: "HR", count: 5 },
+        { department: "Admin", count: 12 },
+        { department: "Sales", count: 8 },
+        { department: "Support", count: 5 },
       ],
       branchesByCompany: [
-        { company: "Acme Corp", count: 5 },
-        { company: "TechCorp", count: 3 },
-        { company: "Global Industries", count: 7 },
-        { company: "Startup Inc", count: 1 },
-        { company: "Enterprise Ltd", count: 4 },
+        { company: "Main Company", count: 3 },
+        { company: "Partner Corp", count: 2 },
       ],
       employeeGrowth: [
         { month: "Jan", count: 45 },
@@ -202,104 +237,101 @@ export async function getDashboardStats() {
   }
 }
 
-// Helper function to calculate monthly growth
-function calculateMonthlyGrowth(data: any[]) {
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-  const currentYear = new Date().getFullYear()
+// Get quick dashboard metrics with direct SQL
+export async function getQuickDashboardMetrics() {
+  try {
+    const result = await query(`
+      SELECT 
+        (SELECT COUNT(*) FROM companies) as companies_count,
+        (SELECT COUNT(*) FROM branches) as branches_count,
+        (SELECT COUNT(*) FROM employees WHERE status = 'active') as employees_count,
+        (SELECT COUNT(*) FROM leads WHERE status != 'REJECTED') as leads_count,
+        (SELECT COUNT(*) FROM quotations) as quotations_count,
+        (SELECT COALESCE(SUM(expected_value), 0) FROM leads WHERE status != 'REJECTED') as total_pipeline
+    `)
 
-  // Initialize counts for all months
-  const monthlyCounts = months.map((month) => ({ month, count: 0 }))
-
-  // Count employees by month (cumulative)
-  data.forEach((item) => {
-    const date = new Date(item.created_at)
-    if (date.getFullYear() === currentYear) {
-      const monthIndex = date.getMonth()
-      for (let i = monthIndex; i < months.length; i++) {
-        monthlyCounts[i].count++
+    return {
+      success: true,
+      metrics: result.rows[0],
+      timestamp: new Date().toISOString()
+    }
+  } catch (error) {
+    console.error('Error fetching quick metrics:', error)
+    return {
+      success: false,
+      error: error.message,
+      metrics: {
+        companies_count: 0,
+        branches_count: 0,
+        employees_count: 0,
+        leads_count: 0,
+        quotations_count: 0,
+        total_pipeline: 0
       }
     }
-  })
-
-  // Get only the last 6 months
-  const currentMonth = new Date().getMonth()
-  const relevantMonths = []
-  for (let i = 0; i < 6; i++) {
-    const index = (currentMonth - i + 12) % 12
-    relevantMonths.unshift(monthlyCounts[index])
   }
-
-  return relevantMonths
 }
 
-// Generate mock activities for demonstration
+function calculateMonthlyGrowth(data: any[]) {
+  if (!data.length) return Array(6).fill({ month: "", count: 0 })
+
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+  const currentMonth = new Date().getMonth()
+  const result = []
+
+  for (let i = 5; i >= 0; i--) {
+    const monthIndex = (currentMonth - i + 12) % 12
+    const monthName = months[monthIndex]
+    const monthData = data.filter((item) => {
+      const itemMonth = new Date(item.created_at).getMonth()
+      return itemMonth === monthIndex
+    })
+
+    result.push({
+      month: monthName,
+      count: monthData.length,
+    })
+  }
+
+  return result
+}
+
 function generateMockActivities() {
   return [
     {
-      id: "1",
-      title: "New Company Added",
-      description: "Acme Corporation was added to the system",
-      timestamp: "2 hours ago",
-      type: "company" as const,
-      user: {
-        name: "John Doe",
-        initials: "JD",
-      },
+      id: 1,
+      type: "lead_created",
+      description: "New lead added: Tech Solutions Inc",
+      timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
+      user: "John Doe",
     },
     {
-      id: "2",
-      title: "Employee Updated",
-      description: "Sarah Johnson's information was updated",
-      timestamp: "3 hours ago",
-      type: "employee" as const,
-      user: {
-        name: "Admin User",
-        initials: "AU",
-      },
+      id: 2,
+      type: "quotation_sent",
+      description: "Quotation sent to Global Industries",
+      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
+      user: "Jane Smith",
     },
     {
-      id: "3",
-      title: "New Branch Created",
-      description: "New York branch was created for TechCorp",
-      timestamp: "5 hours ago",
-      type: "branch" as const,
-      user: {
-        name: "Jane Smith",
-        initials: "JS",
-      },
+      id: 3,
+      type: "employee_added",
+      description: "New employee onboarded: Alice Johnson",
+      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 4).toISOString(),
+      user: "HR Team",
     },
     {
-      id: "4",
-      title: "Client Status Changed",
-      description: "Global Industries status changed to Active",
-      timestamp: "1 day ago",
-      type: "client" as const,
-      user: {
-        name: "Admin User",
-        initials: "AU",
-      },
+      id: 4,
+      type: "client_meeting",
+      description: "Client meeting scheduled with Acme Corp",
+      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(),
+      user: "Bob Wilson",
     },
     {
-      id: "5",
-      title: "New Vendor Added",
-      description: "Office Supplies Inc. was added as a vendor",
-      timestamp: "1 day ago",
-      type: "vendor" as const,
-      user: {
-        name: "John Doe",
-        initials: "JD",
-      },
-    },
-    {
-      id: "6",
-      title: "Employee Assigned",
-      description: "Mark Wilson was assigned to Marketing department",
-      timestamp: "2 days ago",
-      type: "employee" as const,
-      user: {
-        name: "Jane Smith",
-        initials: "JS",
-      },
+      id: 5,
+      type: "project_completed",
+      description: "Project milestone completed for TechCorp",
+      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 8).toISOString(),
+      user: "Project Team",
     },
   ]
 }

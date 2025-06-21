@@ -87,7 +87,7 @@ export default function NavigationPage() {
                     <li>• Revenue Tracking</li>
                     <li>• Performance Analytics</li>
                   </ul>
-                  <a href="/admin/task-management" className="inline-block mt-4 bg-purple-500 text-white px-4 py-2 rounded-lg hover:bg-purple-600 transition">
+                  <a href="/tasks/admin" className="inline-block mt-4 bg-purple-500 text-white px-4 py-2 rounded-lg hover:bg-purple-600 transition">
                     Access Admin Panel →
                   </a>
                 </div>

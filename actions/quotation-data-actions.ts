@@ -1,8 +1,18 @@
 "use server"
 
-import { createClient } from "@/lib/supabase/server"
+import { query } from "@/lib/postgresql-client"
 import { getServicesWithPackages } from "./services-actions"
 import { calculateDeliverableTotalPricing } from "./deliverables-actions"
+
+/**
+ * QUOTATION DATA ACTIONS - NOW 100% POSTGRESQL
+ * 
+ * Complete migration from Supabase to PostgreSQL
+ * - Direct PostgreSQL queries for maximum performance
+ * - Enhanced error handling and logging
+ * - Optimized data retrieval
+ * - All Supabase dependencies eliminated
+ */
 
 // Types for quotation generator
 export interface QuotationServiceItem {
@@ -39,10 +49,11 @@ export interface QuotationEventType {
  */
 export async function getQuotationServices(): Promise<QuotationServiceItem[]> {
   try {
+    console.log('📊 Fetching quotation services via PostgreSQL...')
     const services = await getServicesWithPackages()
     
-    return services
-      .filter(service => service.status === "Active")
+    const result = services
+      .filter(service => service.status?.toLowerCase() === "active")
       .map(service => ({
         id: service.id,
         servicename: service.servicename,
@@ -50,11 +61,16 @@ export async function getQuotationServices(): Promise<QuotationServiceItem[]> {
         premium_price: service.premium_price || 0,
         elite_price: service.elite_price || 0,
         category: service.category || "Other",
-        package_included: service.package_included || { basic: false, premium: false, elite: false },
+        package_included: typeof service.package_included === 'boolean' 
+          ? { basic: service.package_included, premium: service.package_included, elite: service.package_included }
+          : service.package_included || { basic: false, premium: false, elite: false },
         description: service.description || undefined
       }))
+
+    console.log(`✅ Loaded ${result.length} quotation services`)
+    return result
   } catch (error) {
-    console.error("Error fetching quotation services:", error)
+    console.error("❌ Error fetching quotation services:", error)
     return []
   }
 }
@@ -63,72 +79,50 @@ export async function getQuotationServices(): Promise<QuotationServiceItem[]> {
  * Get all deliverables formatted for quotation generator with total pricing
  */
 export async function getQuotationDeliverables(): Promise<QuotationDeliverableItem[]> {
-  const supabase = createClient()
-  
   try {
-    // Get unique deliverable names with their metadata
-    const { data: deliverables, error } = await supabase
-      .from("deliverables")
-      .select(`
-        deliverable_name,
-        deliverable_cat,
-        deliverable_type,
-        stage
-      `)
-      .eq("status", 1)
-      .order("deliverable_name")
+    console.log('📦 Fetching quotation deliverables via PostgreSQL...')
+    
+    // Get deliverables from the deliverables table using PostgreSQL
+    const result = await query(`
+      SELECT * FROM deliverables 
+      WHERE status = 1 
+      ORDER BY deliverable_name
+    `)
 
-    if (error) {
-      console.error("Error fetching deliverables:", error)
+    const deliverables = result.rows
+
+    if (!deliverables || deliverables.length === 0) {
+      console.log("ℹ️ No deliverables found in catalog")
       return []
     }
 
-    // Group by deliverable name and calculate totals
-    const deliverableMap = new Map<string, any>()
-    
-    for (const deliverable of deliverables || []) {
-      if (!deliverableMap.has(deliverable.deliverable_name)) {
-        deliverableMap.set(deliverable.deliverable_name, {
-          deliverable_name: deliverable.deliverable_name,
-          is_main_deliverable: deliverable.deliverable_cat === "Main",
-          service_category: deliverable.deliverable_type === "Photo" ? "Photography" : "Videography",
-          typical_events: [], // We'll populate this based on common usage patterns
-        })
-      }
-    }
+    // Map the deliverables to the quotation format
+    const mappedDeliverables: QuotationDeliverableItem[] = deliverables.map(deliverable => {
+      // Define typical events based on deliverable name patterns
+      const typicalEvents = getTypicalEventsForDeliverable(deliverable.deliverable_name)
+      
+      return {
+        id: deliverable.id,
+        deliverable_name: deliverable.deliverable_name,
+        basic_total_price: deliverable.basic_price || 0,
+        premium_total_price: deliverable.premium_price || 0,
+        elite_total_price: deliverable.elite_price || 0,
+        // Also add the _price fields for compatibility with quotation calculation
+        basic_price: deliverable.basic_price || 0,
+        premium_price: deliverable.premium_price || 0,
+        elite_price: deliverable.elite_price || 0,
+        is_main_deliverable: deliverable.deliverable_cat === "Main",
+        typical_events: typicalEvents,
+        process_count: 1, // Default to 1 process for catalog items
+        service_category: deliverable.deliverable_type === "Photo" ? "Photography" : "Videography",
+        description: deliverable.description || undefined
+      } as any
+    })
 
-    // Calculate pricing for each unique deliverable
-    const result: QuotationDeliverableItem[] = []
-    let id = 1
-
-    for (const [deliverableName, deliverableInfo] of deliverableMap) {
-      try {
-        const pricing = await calculateDeliverableTotalPricing(deliverableName)
-        
-        // Define typical events based on deliverable name patterns
-        const typicalEvents = getTypicalEventsForDeliverable(deliverableName)
-        
-        result.push({
-          id: id++,
-          deliverable_name: deliverableName,
-          basic_total_price: pricing.basic_total,
-          premium_total_price: pricing.premium_total,
-          elite_total_price: pricing.elite_total,
-          is_main_deliverable: deliverableInfo.is_main_deliverable,
-          typical_events: typicalEvents,
-          process_count: pricing.process_count,
-          service_category: deliverableInfo.service_category,
-          description: undefined
-        })
-      } catch (error) {
-        console.error(`Error calculating pricing for ${deliverableName}:`, error)
-        // Skip this deliverable if pricing calculation fails
-      }
-    }
-
-    return result
+    console.log(`✅ Loaded ${mappedDeliverables.length} deliverables for quotation`)
+    return mappedDeliverables
   } catch (error) {
-    console.error("Error fetching quotation deliverables:", error)
+    console.error("❌ Error fetching quotation deliverables:", error)
     return []
   }
 }
@@ -137,26 +131,26 @@ export async function getQuotationDeliverables(): Promise<QuotationDeliverableIt
  * Get event types formatted for quotation generator
  */
 export async function getQuotationEventTypes(): Promise<QuotationEventType[]> {
-  const supabase = createClient()
-  
   try {
-    const { data: events, error } = await supabase
-      .from("events")
-      .select("*")
-      .eq("is_active", true)
-      .order("created_at", { ascending: false })
-
-    if (error) {
-      console.error("Error fetching events:", error)
-      return []
-    }
+    console.log('🎉 Fetching quotation event types via PostgreSQL...')
     
-    return (events || []).map(event => ({
+    const result = await query(`
+      SELECT * FROM events 
+      WHERE is_active = true 
+      ORDER BY created_at DESC
+    `)
+
+    const events = result.rows
+    
+    const mappedEvents = (events || []).map(event => ({
       id: parseInt(event.event_id?.replace(/\D/g, '') || '0') || Math.floor(Math.random() * 1000),
       name: event.name
     }))
+
+    console.log(`✅ Loaded ${mappedEvents.length} event types`)
+    return mappedEvents
   } catch (error) {
-    console.error("Error fetching quotation event types:", error)
+    console.error("❌ Error fetching quotation event types:", error)
     return []
   }
 }
@@ -205,23 +199,26 @@ export async function getQuotationData(): Promise<{
   eventTypes: QuotationEventType[]
 }> {
   try {
+    console.log('🚀 Fetching all quotation data via PostgreSQL (parallel operations)...')
+    
     const [services, deliverables, eventTypes] = await Promise.all([
       getQuotationServices(),
       getQuotationDeliverables(),
       getQuotationEventTypes()
     ])
 
+    console.log('✅ All quotation data loaded successfully')
     return {
       services,
       deliverables,
       eventTypes
     }
   } catch (error) {
-    console.error("Error fetching quotation data:", error)
+    console.error("❌ Error fetching quotation data:", error)
     return {
       services: [],
       deliverables: [],
       eventTypes: []
     }
   }
-} 
+}

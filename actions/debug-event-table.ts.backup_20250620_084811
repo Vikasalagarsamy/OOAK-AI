@@ -1,0 +1,109 @@
+"use server"
+
+import { createClient } from "@/lib/supabase/server"
+import { cookies } from "next/headers"
+import { query } from "@/lib/supabase/server"
+
+// Get the table information for events table
+export async function getEventsTableInfo() {
+  try {
+    console.log('🔍 Fetching events table info via PostgreSQL...')
+    
+    // Direct PostgreSQL query to get column information
+    const result = await query(`
+      SELECT 
+        column_name,
+        data_type,
+        character_maximum_length,
+        is_nullable
+      FROM 
+        information_schema.columns 
+      WHERE 
+        table_name = $1
+        AND table_schema = 'public'
+      ORDER BY ordinal_position
+    `, ['events'])
+
+    console.log(`✅ Retrieved ${result.rows.length} columns for events table`)
+    return result.rows
+  } catch (error: any) {
+    console.error("❌ Error fetching events table info:", error)
+    return { error: error.message }
+  }
+}
+
+// Function to create the get_column_info function in the database
+export async function createColumnInfoFunction() {
+  const supabase = createClient(cookies())
+
+  try {
+    // Create a PostgreSQL function to get column information
+    const { error } = await supabase.rpc("exec_sql", {
+      sql: `
+        CREATE OR REPLACE FUNCTION get_column_info(table_name TEXT)
+        RETURNS TABLE(
+          column_name TEXT,
+          data_type TEXT,
+          character_maximum_length INTEGER,
+          is_nullable TEXT
+        ) AS $$
+        BEGIN
+          RETURN QUERY
+          SELECT 
+            c.column_name::TEXT,
+            c.data_type::TEXT,
+            c.character_maximum_length,
+            c.is_nullable::TEXT
+          FROM 
+            information_schema.columns c
+          WHERE 
+            c.table_name = table_name
+            AND c.table_schema = 'public';
+        END;
+        $$ LANGUAGE plpgsql;
+      `,
+    })
+
+    if (error) {
+      console.error("Error creating function:", error)
+      throw new Error(`Failed to create function: ${error.message}`)
+    }
+
+    return { success: true }
+  } catch (error: any) {
+    console.error("Exception in createColumnInfoFunction:", error)
+    return { error: error.message }
+  }
+}
+
+// Test inserting a simple, short ID
+export async function testInsertShortId() {
+  const supabase = createClient(cookies())
+
+  try {
+    // Try inserting with a very short ID
+    const event_id = "TEST123"
+
+    const { data, error } = await supabase
+      .from("events")
+      .insert([
+        {
+          event_id,
+          name: "Test Event",
+          is_active: true,
+        },
+      ])
+      .select()
+      .single()
+
+    if (error) {
+      console.error("Error in test insert:", error)
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, data }
+  } catch (error: any) {
+    console.error("Exception in testInsertShortId:", error)
+    return { success: false, error: error.message }
+  }
+}

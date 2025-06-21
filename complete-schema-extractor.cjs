@@ -1,0 +1,240 @@
+// 🚨 MIGRATED FROM SUPABASE TO POSTGRESQL
+// Migration Date: 2025-06-20T09:38:43.923Z
+// Original file backed up as: complete-schema-extractor.cjs.backup
+
+
+// PostgreSQL connection pool
+const pool = new Pool({
+  host: process.env.POSTGRES_HOST || 'localhost',
+  port: process.env.POSTGRES_PORT || 5432,
+  database: process.env.POSTGRES_DATABASE || 'ooak_future',
+  user: process.env.POSTGRES_USER || 'postgres',
+  password: process.env.POSTGRES_PASSWORD || 'password',
+  ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false,
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+});
+
+
+// Query helper function
+async function query(text, params = []) {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(text, params);
+    return { data: result.rows, error: null };
+  } catch (error) {
+    console.error('❌ PostgreSQL Query Error:', error.message);
+    return { data: null, error: error.message };
+  } finally {
+    client.release();
+  }
+}
+
+// Transaction helper function  
+async function transaction(callback) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await callback(client);
+    await client.query('COMMIT');
+    return { data: result, error: null };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ PostgreSQL Transaction Error:', error.message);
+    return { data: null, error: error.message };
+  } finally {
+    client.release();
+  }
+}
+
+// Original content starts here:
+const { Pool } = require('pg'););
+const fs = require('fs');
+
+// Remote Supabase configuration
+const REMOTE_URL = 'https://aavofqdzjhyfjygkxynq.supabase.co';
+const REMOTE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhdm9mcWR6amh5Zmp5Z2t4eW5xIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczMTU3MjE2NCwiZXhwIjoyMDQ3MTQ4MTY0fQ.k3bI6xHO_BsE9p5wXcJo_oLOw2-y7XClJ46r1T_HtTk';
+
+// Local Supabase configuration
+const LOCAL_URL = 'http://localhost:54321';
+const LOCAL_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxvY2FsaG9zdCIsInJvbGUiOiJzZXJ2aWNlX3JvbGUiLCJpYXQiOjE3MzE1NTc5NDUsImV4cCI6MjA0NzEzMzk0NX0.gfwXTzTK35nL-lD3-6zY2Wn1azOq5TCKdQY_HXOKYzI';
+
+// PostgreSQL connection - see pool configuration below
+// PostgreSQL connection - see pool configuration below
+
+// All known tables from the screenshot analysis
+const ALL_TABLES = [
+  'accounting_workflows', 'action_recommendations', 'activities', 
+  'ai_behavior_settings', 'ai_configurations', 'ai_contacts',
+  'ai_decision_log', 'ai_insights_summary', 'ai_performance_tracking',
+  'ai_prompt_templates', 'ai_recommendations', 'ai_tasks',
+  'analytics_cache', 'analytics_metrics', 'auditions', 'branches',
+  'bug_attachments', 'bug_comments', 'bugs', 'business_trends',
+  'call_analytics', 'call_insights', 'call_transcriptions', 'chat_logs',
+  'client_insights', 'clients', 'companies', 'company_partners',
+  'deliverable_master', 'deliverables', 'department_instructions',
+  'departments', 'designations', 'email_notification_templates',
+  'employee_companies', 'employees', 'events', 'follow_up_auditions',
+  'instruction_approvals', 'lead_drafts', 'lead_followups',
+  'lead_sources', 'lead_task_performance', 'leads', 'management_insights',
+  'menu_items', 'menu_items_tracking', 'ml_model_performance',
+  'mv_user_roles_fast', 'notification_batches', 'notification_engagement',
+  'notification_patterns', 'notification_performance_metrics',
+  'notification_preferences', 'notification_recipients', 'notification_rules',
+  'notification_settings', 'notifications', 'partners', 'payments',
+  'permissions', 'personalization_learning', 'post_sale_confirmations',
+  'post_sales_workflows', 'predictive_insights', 'profiles',
+  'query_performance_logs', 'quotation_approvals', 'quotation_events',
+  'quotation_predictions', 'quotation_revisions', 'quotation_workflow_history',
+  'quotations', 'quote_components', 'quote_deliverables_snapshots',
+  'quote_services_snapshot', 'recent_business_notifications',
+  'rejected_leads_view', 'revenue_forecasts', 'role_menu_permissions',
+  'role_permissions', 'roles', 'sales_activities', 'sales_performance_metrics',
+  'sales_team_members', 'sequence_rules', 'sequence_steps',
+  'service_packages', 'services', 'suppliers', 'system_logs',
+  'task_generation_log', 'task_performance_metrics', 'task_sequence_templates',
+  'task_status_history', 'team_members', 'team_performance_trends',
+  'teams', 'user_accounts', 'user_activity_history', 'user_ai_profiles',
+  'user_behavior_analytics', 'user_engagement_analytics',
+  'user_engagement_summary', 'user_id_mapping', 'user_menu_permissions',
+  'user_notification_summary', 'user_preferences', 'user_roles',
+  'users', 'v_package_deliverables', 'v_package_services',
+  'vendors', 'webhook_logs', 'whatsapp_config', 'whatsapp_messages',
+  'whatsapp_templates'
+];
+
+async function extractTableSchema(tableName) {
+  try {
+    // Get a few sample records to understand the structure
+    const { data, error } = await remoteSupabase
+      .from(tableName)
+      .select('*')
+      .limit(5);
+    
+    if (error) {
+      console.log(`❌ ${tableName}: ${error.message}`);
+      return null;
+    }
+    
+    if (!data || data.length === 0) {
+      console.log(`📭 ${tableName}: Empty table`);
+      return { tableName, isEmpty: true, sampleData: [] };
+    }
+    
+    console.log(`✅ ${tableName}: ${data.length} sample records`);
+    return { tableName, isEmpty: false, sampleData: data };
+    
+  } catch (e) {
+    console.log(`💥 ${tableName}: Exception - ${e.message}`);
+    return null;
+  }
+}
+
+function generateCreateTableSQL(tableName, sampleData) {
+  if (!sampleData || sampleData.length === 0) {
+    return `-- Table ${tableName} is empty, structure unknown\n`;
+  }
+  
+  const firstRecord = sampleData[0];
+  const columns = [];
+  
+  Object.entries(firstRecord).forEach(([key, value]) => {
+    let dataType = 'TEXT';
+    
+    if (value === null) {
+      dataType = 'TEXT';
+    } else if (typeof value === 'number') {
+      if (Number.isInteger(value)) {
+        dataType = key.toLowerCase().includes('id') && key !== 'priority' ? 'SERIAL PRIMARY KEY' : 'INTEGER';
+      } else {
+        dataType = 'DECIMAL';
+      }
+    } else if (typeof value === 'boolean') {
+      dataType = 'BOOLEAN';
+    } else if (typeof value === 'object') {
+      dataType = 'JSONB';
+    } else if (typeof value === 'string') {
+      // Check if it looks like a timestamp
+      if (value.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)) {
+        dataType = 'TIMESTAMP WITH TIME ZONE';
+      } else if (value.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+        dataType = 'UUID';
+      } else {
+        dataType = 'TEXT';
+      }
+    }
+    
+    columns.push(`  ${key} ${dataType}`);
+  });
+  
+  return `CREATE TABLE IF NOT EXISTS ${tableName} (\n${columns.join(',\n')}\n);\n`;
+}
+
+async function createAllSchemas() {
+  console.log('🚀 Starting comprehensive schema extraction...\n');
+  
+  const results = [];
+  const sqlStatements = [];
+  
+  // Process tables in chunks to avoid overwhelming the API
+  const chunkSize = 10;
+  for (let i = 0; i < ALL_TABLES.length; i += chunkSize) {
+    const chunk = ALL_TABLES.slice(i, i + chunkSize);
+    console.log(`\n📦 Processing chunk ${Math.floor(i/chunkSize) + 1}/${Math.ceil(ALL_TABLES.length/chunkSize)}: ${chunk.join(', ')}`);
+    
+    const chunkPromises = chunk.map(table => extractTableSchema(table));
+    const chunkResults = await Promise.all(chunkPromises);
+    
+    chunkResults.forEach(result => {
+      if (result) {
+        results.push(result);
+        const sql = generateCreateTableSQL(result.tableName, result.sampleData);
+        sqlStatements.push(sql);
+      }
+    });
+    
+    // Small delay between chunks
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  
+  // Write the complete SQL file
+  const fullSQL = `-- Complete schema for ${results.length} tables
+-- Generated on ${new Date().toISOString()}
+
+${sqlStatements.join('\n')}`;
+  
+  fs.writeFileSync('all-tables-schema.sql', fullSQL);
+  
+  console.log('\n' + '='.repeat(80));
+  console.log('🎉 SCHEMA EXTRACTION COMPLETE!');
+  console.log('='.repeat(80));
+  console.log(`✅ Successfully processed: ${results.filter(r => !r.isEmpty).length} tables with data`);
+  console.log(`📭 Empty tables: ${results.filter(r => r.isEmpty).length} tables`);
+  console.log(`❌ Failed tables: ${ALL_TABLES.length - results.length} tables`);
+  console.log(`📊 Total tables attempted: ${ALL_TABLES.length}`);
+  
+  console.log('\n📝 Generated file: all-tables-schema.sql');
+  console.log('🔧 To apply to local database: psql -h localhost -p 54322 -U postgres -d postgres -f all-tables-schema.sql');
+  
+  // Show summary
+  console.log('\n📋 Tables with data:');
+  results.filter(r => !r.isEmpty).forEach((result, index) => {
+    console.log(`${index + 1}. ${result.tableName} (${result.sampleData.length} sample records)`);
+  });
+  
+  if (results.filter(r => r.isEmpty).length > 0) {
+    console.log('\n📭 Empty tables:');
+    results.filter(r => r.isEmpty).forEach((result, index) => {
+      console.log(`${index + 1}. ${result.tableName}`);
+    });
+  }
+  
+  return results;
+}
+
+createAllSchemas().then(results => {
+  console.log(`\n🎯 Final count: ${results.length} tables processed successfully!`);
+}).catch(error => {
+  console.error('❌ Error:', error);
+}); 

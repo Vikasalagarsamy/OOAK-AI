@@ -1,12 +1,12 @@
-import { createClient } from "@/lib/supabase"
+import { createClient } from "@/lib/postgresql-unified"
 import { PeopleDashboard } from "@/components/people-dashboard/people-dashboard"
 
 export const dynamic = "force-dynamic"
 
 async function getEmployeeData() {
-  const supabase = createClient()
+  const { query, transaction } = createClient()
 
-  const { data, error } = await supabase.rpc("get_comprehensive_employee_data")
+  const { data, error } = await query(`SELECT * FROM ${functionName}(${params})`)
 
   if (error) {
     console.error("Error fetching employee data:", error)

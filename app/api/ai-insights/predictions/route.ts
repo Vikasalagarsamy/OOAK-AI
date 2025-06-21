@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/actions/auth-actions'
 import { AIMLService } from '@/lib/ai-ml-service'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/postgresql-client'
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get quotation data
-    const supabase = createClient()
+    const { query, transaction } = createClient()
     const { data: quotation, error } = await supabase
       .from('saved_quotations')
       .select('*')
@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const quotationId = searchParams.get('quotation_id')
 
-    const supabase = createClient()
+    const { query, transaction } = createClient()
 
     // Get existing predictions
     const { data: predictions } = await supabase

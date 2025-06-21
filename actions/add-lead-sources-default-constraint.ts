@@ -1,42 +1,30 @@
 "use server"
 
-import { createClient } from "@/utils/supabase/server"
+import { query, transaction } from "@/lib/postgresql-client"
 
 export async function addLeadSourcesDefaultConstraint(): Promise<{
   success: boolean
   message: string
 }> {
   try {
-    const supabase = createClient()
+    // Check if the lead_sources table exists
+    const tableExistsResult = await query(
+      `SELECT table_name 
+       FROM information_schema.tables 
+       WHERE table_name = $1 
+         AND table_schema = 'public'`,
+      ["lead_sources"]
+    )
 
-    // Execute the SQL to add the default constraint
-    const { error } = await supabase.rpc("add_lead_sources_default_constraint")
-
-    if (error) {
-      // If the RPC doesn't exist, try direct SQL
-      const { error: sqlError } = await supabase
-        .from("lead_sources")
-        .select("id")
-        .limit(1)
-        .then(async () => {
-          // Table exists, try to add the constraint
-          return await supabase.rpc("exec_sql", {
-            sql_query: "ALTER TABLE lead_sources ALTER COLUMN is_active SET DEFAULT true;",
-          })
-        })
-        .catch((err) => {
-          console.error("Error checking lead_sources table:", err)
-          return { error: err }
-        })
-
-      if (sqlError) {
-        console.error("Error adding default constraint:", sqlError)
-        return {
-          success: false,
-          message: `Failed to add default constraint: ${sqlError.message}`,
-        }
+    if (!tableExistsResult.rows || tableExistsResult.rows.length === 0) {
+      return {
+        success: false,
+        message: "lead_sources table does not exist",
       }
     }
+
+    // Add the default constraint
+    await query("ALTER TABLE lead_sources ALTER COLUMN is_active SET DEFAULT true")
 
     return {
       success: true,

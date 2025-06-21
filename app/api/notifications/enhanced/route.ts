@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { pool } from '@/lib/postgresql-client'
 import { EnhancedNotificationService } from '@/lib/enhanced-notification-service'
 
-// 🚀 Production-Grade Notification API
-// Features: Rate limiting, caching, pagination, filtering, monitoring
+// 🚀 Production-Grade PostgreSQL Notification API
+// Features: Rate limiting, caching, pagination, filtering, monitoring, connection pooling
+
+// Direct PostgreSQL connection
+// Using centralized PostgreSQL client
 
 // Rate limiting store (in production, use Redis)
 const rateLimitStore = new Map<string, { count: number, resetTime: number }>()
@@ -14,19 +17,20 @@ const cacheStore = new Map<string, { data: any, expiry: number }>()
 // Performance metrics store
 const performanceMetrics = new Map<string, number[]>()
 
-// 📊 GET: Fetch notifications with enhanced features
+// 📊 GET: Fetch notifications with enhanced PostgreSQL features
 export async function GET(request: NextRequest) {
   const startTime = Date.now()
   
   try {
-    console.log('🚀 Production notification API called')
+    console.log('🚀 Production PostgreSQL notification API called')
     
     // 1. Rate limiting check
     const clientId = getClientId(request)
     if (!checkRateLimit(clientId)) {
       return NextResponse.json({
         error: 'Rate limit exceeded',
-        retryAfter: 60
+        retryAfter: 60,
+        database: 'PostgreSQL localhost:5432'
       }, { status: 429 })
     }
     
@@ -39,7 +43,11 @@ export async function GET(request: NextRequest) {
       type: searchParams.get('type'),
       is_read: searchParams.get('is_read'),
       include_business_only: searchParams.get('business_only') === 'true',
-      cache: searchParams.get('cache') !== 'false'
+      cache: searchParams.get('cache') !== 'false',
+      user_id: searchParams.get('user_id'),
+      since: searchParams.get('since'), // For filtering by date
+      sort_by: searchParams.get('sort_by') || 'created_at',
+      sort_order: searchParams.get('sort_order') || 'DESC'
     }
     
     // 3. Check cache
@@ -51,13 +59,14 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({
           ...cached,
           source: 'cache',
-          performance: { duration: Date.now() - startTime }
+          performance: { duration: Date.now() - startTime },
+          database: 'PostgreSQL localhost:5432'
         })
       }
     }
     
-    // 4. Fetch from database with optimized query
-    const result = await fetchNotificationsOptimized(params)
+    // 4. Fetch from PostgreSQL with optimized query
+    const result = await fetchNotificationsOptimizedPostgreSQL(params)
     
     // 5. Cache the result
     if (params.cache && result.success) {
@@ -72,43 +81,57 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       ...result,
       source: 'database',
+      database: 'PostgreSQL localhost:5432',
       performance: { 
         duration,
-        query_params: params
+        query_params: params,
+        connection_pool: {
+          total: pool.totalCount,
+          idle: pool.idleCount,
+          waiting: pool.waitingCount
+        }
       },
       cache_info: {
         cached: false,
-        cache_key: cacheKey
+        cache_key: cacheKey,
+        cache_size: cacheStore.size
       }
     })
 
-  } catch (error) {
-    console.error('❌ Production notification API error:', error)
+  } catch (error: any) {
+    console.error('❌ Production PostgreSQL notification API error:', error)
     
     const duration = Date.now() - startTime
     logPerformanceMetric('api_notification_error', duration)
     
     return NextResponse.json({
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-      performance: { duration }
+      error: error.message || 'Unknown PostgreSQL error',
+      details: {
+        code: error.code,
+        detail: error.detail,
+        hint: error.hint
+      },
+      performance: { duration },
+      database: 'PostgreSQL localhost:5432'
     }, { status: 500 })
   }
 }
 
-// 📝 POST: Create notification with enhanced validation
+// 📝 POST: Create notification with enhanced PostgreSQL validation
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
   
   try {
-    console.log('📝 Creating notification via production API')
+    console.log('📝 Creating notification via PostgreSQL production API')
     
     // Rate limiting
     const clientId = getClientId(request)
     if (!checkRateLimit(clientId, 10, 60)) { // 10 requests per minute for POST
       return NextResponse.json({
         error: 'Rate limit exceeded for notification creation',
-        retryAfter: 60
+        retryAfter: 60,
+        database: 'PostgreSQL localhost:5432'
       }, { status: 429 })
     }
     
@@ -120,44 +143,84 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         success: false,
         error: 'Validation failed',
-        details: validationResult.errors
+        details: validationResult.errors,
+        database: 'PostgreSQL localhost:5432'
       }, { status: 400 })
     }
     
-    // Create notification using enhanced service
-    const success = await EnhancedNotificationService.createNotification(body)
+    // Create notification using PostgreSQL with transaction
+    const client = await pool.connect()
     
-    if (!success) {
-      throw new Error('Failed to create notification')
+    try {
+      await client.query('BEGIN')
+      
+      const { rows } = await client.query(`
+        INSERT INTO notifications (
+          user_id, 
+          type, 
+          title, 
+          message, 
+          priority, 
+          metadata,
+          created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, NOW())
+        RETURNING id, created_at
+      `, [
+        body.user_id,
+        body.type,
+        body.title,
+        body.message,
+        body.priority || 'medium',
+        JSON.stringify(body.metadata || {})
+      ])
+      
+      await client.query('COMMIT')
+      
+      // Clear relevant cache entries
+      clearNotificationCache()
+      
+      const duration = Date.now() - startTime
+      logPerformanceMetric('api_notification_create', duration)
+      
+      return NextResponse.json({
+        success: true,
+        message: 'Notification created successfully via PostgreSQL',
+        data: {
+          id: rows[0].id,
+          created_at: rows[0].created_at
+        },
+        performance: { duration },
+        database: 'PostgreSQL localhost:5432'
+      })
+      
+    } catch (dbError: any) {
+      await client.query('ROLLBACK')
+      throw dbError
+    } finally {
+      client.release()
     }
-    
-    // Clear relevant cache entries
-    clearNotificationCache()
-    
-    const duration = Date.now() - startTime
-    logPerformanceMetric('api_notification_create', duration)
-    
-    return NextResponse.json({
-      success: true,
-      message: 'Notification created successfully',
-      performance: { duration }
-    })
 
-  } catch (error) {
-    console.error('❌ Error creating notification:', error)
+  } catch (error: any) {
+    console.error('❌ Error creating PostgreSQL notification:', error)
     
     const duration = Date.now() - startTime
     logPerformanceMetric('api_notification_create_error', duration)
     
     return NextResponse.json({
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-      performance: { duration }
+      error: error.message || 'Unknown PostgreSQL error',
+      details: {
+        code: error.code,
+        detail: error.detail,
+        hint: error.hint
+      },
+      performance: { duration },
+      database: 'PostgreSQL localhost:5432'
     }, { status: 500 })
   }
 }
 
-// 🔧 UTILITY FUNCTIONS
+// 🔧 ENHANCED POSTGRESQL UTILITY FUNCTIONS
 
 function getClientId(request: NextRequest): string {
   // In production, this would be based on user session or API key
@@ -236,85 +299,145 @@ function logPerformanceMetric(metric: string, value: number): void {
   }
 }
 
-async function fetchNotificationsOptimized(params: any) {
-  const supabase = createClient()
+async function fetchNotificationsOptimizedPostgreSQL(params: any) {
+  const client = await pool.connect()
   
   try {
-    let query = supabase
-      .from('notifications')
-      .select(`
-        id,
-        type,
-        title,
-        message,
-        priority,
-        is_read,
-        created_at,
-        metadata
-      `)
+    const queryStart = Date.now()
     
-    // Apply filters
+    // Build dynamic WHERE clause
+    const conditions = []
+    const values = []
+    let paramIndex = 1
+    
     if (params.priority) {
-      query = query.eq('priority', params.priority)
+      conditions.push(`priority = $${paramIndex++}`)
+      values.push(params.priority)
     }
     
     if (params.type) {
-      query = query.eq('type', params.type)
+      conditions.push(`type = $${paramIndex++}`)
+      values.push(params.type)
     }
     
-    if (params.is_read !== null) {
-      query = query.eq('is_read', params.is_read === 'true')
+    if (params.is_read !== null && params.is_read !== undefined) {
+      conditions.push(`is_read = $${paramIndex++}`)
+      values.push(params.is_read === 'true')
+    }
+    
+    if (params.user_id) {
+      conditions.push(`user_id = $${paramIndex++}`)
+      values.push(parseInt(params.user_id))
+    }
+    
+    if (params.since) {
+      conditions.push(`created_at >= $${paramIndex++}`)
+      values.push(params.since)
     }
     
     if (params.include_business_only) {
-      query = query.eq('metadata->business_event', 'true')
+      conditions.push(`metadata->>'business_event' = 'true'`)
     }
     
-    // Apply pagination
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+    
+    // Pagination
     const offset = (params.page - 1) * params.limit
-    query = query
-      .order('created_at', { ascending: false })
-      .range(offset, offset + params.limit - 1)
+    const sortColumn = ['created_at', 'priority', 'type', 'is_read'].includes(params.sort_by) ? params.sort_by : 'created_at'
+    const sortOrder = ['ASC', 'DESC'].includes(params.sort_order.toUpperCase()) ? params.sort_order : 'DESC'
     
-    const { data: notifications, error, count } = await query
+    // Main query with enhanced PostgreSQL features
+    const { rows: notifications } = await client.query(`
+      WITH notification_data AS (
+        SELECT 
+          id,
+          user_id,
+          type,
+          title,
+          message,
+          priority,
+          is_read,
+          created_at,
+          updated_at,
+          metadata,
+          CASE 
+            WHEN priority = 'urgent' THEN 4
+            WHEN priority = 'high' THEN 3
+            WHEN priority = 'medium' THEN 2
+            ELSE 1
+          END as priority_order,
+          EXTRACT(EPOCH FROM (NOW() - created_at)) / 3600 as hours_ago
+        FROM notifications
+        ${whereClause}
+      ),
+      paginated_data AS (
+        SELECT *
+        FROM notification_data
+        ORDER BY 
+          CASE WHEN '${sortColumn}' = 'priority' THEN priority_order ELSE NULL END ${sortOrder} NULLS LAST,
+          CASE WHEN '${sortColumn}' = 'created_at' THEN created_at ELSE NULL END ${sortOrder} NULLS LAST,
+          CASE WHEN '${sortColumn}' = 'type' THEN type ELSE NULL END ${sortOrder} NULLS LAST,
+          CASE WHEN '${sortColumn}' = 'is_read' THEN is_read ELSE NULL END ${sortOrder} NULLS LAST
+        LIMIT $${paramIndex++} OFFSET $${paramIndex++}
+      )
+      SELECT 
+        *,
+        (SELECT COUNT(*) FROM notification_data) as total_count,
+        (SELECT COUNT(*) FROM notifications WHERE is_read = false AND user_id = COALESCE($${params.user_id ? 1 : 'NULL'}, user_id)) as unread_count
+      FROM paginated_data
+    `, [...values, params.limit, offset])
     
-    if (error) {
-      throw error
-    }
+    const queryTime = Date.now() - queryStart
+    logPerformanceMetric('postgresql_notification_query', queryTime)
     
-    // Get total count for pagination
-    const { count: totalCount } = await supabase
-      .from('notifications')
-      .select('*', { count: 'exact', head: true })
+    const totalCount = notifications.length > 0 ? parseInt(notifications[0].total_count) : 0
+    const unreadCount = notifications.length > 0 ? parseInt(notifications[0].unread_count || 0) : 0
     
-    // Get unread count
-    const { count: unreadCount } = await supabase
-      .from('notifications')
-      .select('*', { count: 'exact', head: true })
-      .eq('is_read', false)
-    
+    // Clean up the results (remove total_count and unread_count from individual records)
+    const cleanNotifications = notifications.map(({ total_count, unread_count, priority_order, hours_ago, ...notification }) => ({
+      ...notification,
+      hours_ago: parseFloat(hours_ago).toFixed(1)
+    }))
+
     return {
       success: true,
-      data: notifications || [],
+      data: cleanNotifications,
       pagination: {
         page: params.page,
         limit: params.limit,
-        total: totalCount || 0,
-        has_more: (offset + params.limit) < (totalCount || 0)
+        total: totalCount,
+        has_more: (offset + params.limit) < totalCount,
+        total_pages: Math.ceil(totalCount / params.limit)
       },
       summary: {
-        total_notifications: totalCount || 0,
-        unread_count: unreadCount || 0,
-        returned: notifications?.length || 0
+        total_notifications: totalCount,
+        unread_count: unreadCount,
+        returned: cleanNotifications.length,
+        query_performance: `${queryTime}ms`
+      },
+      filters_applied: {
+        priority: params.priority,
+        type: params.type,
+        is_read: params.is_read,
+        user_id: params.user_id,
+        business_only: params.include_business_only,
+        since: params.since
       }
     }
 
-  } catch (error) {
-    console.error('❌ Database query error:', error)
+  } catch (error: any) {
+    console.error('❌ PostgreSQL notification query error:', error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Database error'
+      error: error.message || 'PostgreSQL database error',
+      details: {
+        code: error.code,
+        detail: error.detail,
+        hint: error.hint
+      }
     }
+  } finally {
+    client.release()
   }
 }
 
@@ -341,37 +464,62 @@ function validateNotificationRequest(body: any): { valid: boolean, errors?: stri
     errors.push('priority must be one of: low, medium, high, urgent')
   }
   
+  if (body.metadata && typeof body.metadata !== 'object') {
+    errors.push('metadata must be an object')
+  }
+  
   return {
     valid: errors.length === 0,
     errors: errors.length > 0 ? errors : undefined
   }
 }
 
-// 📊 Health check endpoint
+// 📊 Enhanced PostgreSQL health check endpoint
 export async function HEAD(request: NextRequest) {
   try {
-    const supabase = createClient()
+    const client = await pool.connect()
     
-    // Simple health check
-    const { data, error } = await supabase
-      .from('notifications')
-      .select('count')
-      .limit(1)
-    
-    if (error) {
-      return new NextResponse(null, { status: 503 })
+    try {
+      // Comprehensive health check
+      const { rows } = await client.query(`
+        SELECT 
+          COUNT(*) as total_notifications,
+          COUNT(*) FILTER (WHERE is_read = false) as unread_notifications,
+          COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE) as todays_notifications,
+          pg_database_size(current_database()) as db_size,
+          version() as pg_version
+        FROM notifications
+      `)
+      
+      const healthData = rows[0]
+      
+      return new NextResponse(null, { 
+        status: 200,
+        headers: {
+          'X-Health-Status': 'healthy',
+          'X-Database': 'PostgreSQL localhost:5432',
+          'X-Total-Notifications': healthData.total_notifications.toString(),
+          'X-Unread-Notifications': healthData.unread_notifications.toString(),
+          'X-Cache-Size': cacheStore.size.toString(),
+          'X-Rate-Limit-Clients': rateLimitStore.size.toString(),
+          'X-Connection-Pool-Total': pool.totalCount.toString(),
+          'X-Connection-Pool-Idle': pool.idleCount.toString(),
+          'X-Connection-Pool-Waiting': pool.waitingCount.toString(),
+          'X-Performance-Metrics': performanceMetrics.size.toString()
+        }
+      })
+      
+    } finally {
+      client.release()
     }
     
+  } catch (error: any) {
     return new NextResponse(null, { 
-      status: 200,
+      status: 503,
       headers: {
-        'X-Health-Status': 'healthy',
-        'X-Cache-Size': cacheStore.size.toString(),
-        'X-Rate-Limit-Clients': rateLimitStore.size.toString()
+        'X-Health-Status': 'unhealthy',
+        'X-Error': error.message || 'Unknown error'
       }
     })
-    
-  } catch (error) {
-    return new NextResponse(null, { status: 503 })
   }
 } 

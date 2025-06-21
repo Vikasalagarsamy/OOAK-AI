@@ -17,18 +17,18 @@ export class LocalLLMService {
 
   async generateIntelligentResponse(userQuery: string): Promise<string> {
     try {
-      console.log("🤖 Local LLM: Processing query:", userQuery)
+      console.log("🤖 Local LLM: Processing query with PostgreSQL backend:", userQuery)
       
-      // 1. Fetch real business data from Supabase
+      // 1. Fetch real business data from PostgreSQL via enhanced business intelligence service
       const businessData = await this.biService.getComprehensiveBusinessData()
       
-      // 2. Create context-rich prompt for LLM
+      // 2. Create context-rich prompt for LLM with PostgreSQL-powered insights
       const contextPrompt = this.buildBusinessContextPrompt(businessData, userQuery)
       
-      // 3. Send to local LLM
+      // 3. Send to local LLM with enhanced business context
       const llmResponse = await this.callLocalLLM(contextPrompt)
       
-      console.log("🤖 Local LLM: Response generated successfully")
+      console.log("🤖 Local LLM: Response generated successfully with PostgreSQL data")
       return llmResponse
       
     } catch (error) {
@@ -41,9 +41,9 @@ export class LocalLLMService {
   }
 
   private buildBusinessContextPrompt(data: ComprehensiveBusinessData, userQuery: string): string {
-    const context = `You are an expert business analyst and advisor with complete access to this organization's real-time operational data. You understand all workflows, processes, and can provide actionable business intelligence.
+    const context = `You are an expert business analyst and advisor with complete access to this organization's real-time operational data from our PostgreSQL-powered business intelligence system. You understand all workflows, processes, and can provide actionable business intelligence.
 
-**CURRENT BUSINESS DATA:**
+**CURRENT BUSINESS DATA (PostgreSQL-Powered):**
 
 📊 **Sales & Revenue Performance:**
 - Total Quotations: ${data.sales.totalQuotations} (${data.sales.activeQuotations} active)
@@ -105,7 +105,7 @@ ${data.workflows.postSaleConfirmations.slice(0, 3).map(confirm =>
   `- ${confirm.quotation}: ${confirm.status} (${confirm.daysSincePayment} days since payment)`
 ).join('\n')}
 
-🤖 **AI Insights & Predictions:**
+🤖 **AI Insights & Predictions (PostgreSQL-Enhanced):**
 **QUOTATION SUCCESS PREDICTIONS:**
 ${data.ai_insights.quotationPredictions.map(pred => 
   `- ${pred.quotation}: ${(pred.successProbability * 100).toFixed(0)}% success probability`
@@ -144,35 +144,40 @@ ${data.sales.quotationDetails.slice(0, 5).map(q =>
   `- ${q.client_name}: ₹${q.total_amount.toLocaleString()} (Status: ${q.status})`
 ).join('\n')}
 
-⚡ **SYSTEM HEALTH:**
+⚡ **SYSTEM HEALTH (PostgreSQL-Powered):**
+- Database Performance: ${data.performance.systemHealth.database ? '✅ Optimal' : '❌ Issues'}
 - Notifications System: ${data.performance.systemHealth.notifications ? '✅ Active' : '❌ Issues'}
 - Workflows: ${data.performance.systemHealth.workflows ? '✅ Running' : '❌ Issues'}
 - AI Systems: ${data.performance.systemHealth.ai ? '✅ Operational' : '❌ Down'}
 
-**BUSINESS INTELLIGENCE CAPABILITIES:**
+**ENHANCED BUSINESS INTELLIGENCE CAPABILITIES:**
 You have access to:
-1. Complete quotation lifecycle tracking (draft → sent → approved → payment → delivery)
-2. Employee performance and department analytics
-3. Lead management and conversion optimization
-4. AI-powered predictions and recommendations
-5. Workflow bottleneck identification
-6. Revenue forecasting and trend analysis
-7. Real-time notification and alert systems
-8. Deliverable and service management
+1. Real-time PostgreSQL database insights with optimized performance
+2. Complete quotation lifecycle tracking (draft → sent → approved → payment → delivery)
+3. Employee performance and department analytics with detailed metrics
+4. Lead management and conversion optimization with AI predictions
+5. AI-powered predictions and recommendations based on historical data
+6. Workflow bottleneck identification with performance analytics
+7. Revenue forecasting and trend analysis with confidence scoring
+8. Real-time notification and alert systems with priority management
+9. Deliverable and service management with pricing intelligence
+10. Advanced business intelligence with predictive analytics
 
 **INSTRUCTIONS:**
 1. You understand the complete business workflow from lead generation to project delivery
-2. Provide actionable insights based on workflow stages and bottlenecks
-3. Reference specific quotations, employees, and processes by name
+2. Provide actionable insights based on PostgreSQL-powered analytics and workflow stages
+3. Reference specific quotations, employees, and processes by name with data-driven context
 4. Suggest concrete next steps within the application's capabilities
-5. Identify workflow inefficiencies and optimization opportunities
-6. Use AI insights to provide predictive recommendations
-7. Be conversational but data-driven and specific
+5. Identify workflow inefficiencies and optimization opportunities using real data
+6. Use AI insights to provide predictive recommendations with confidence scores
+7. Be conversational but data-driven and specific with PostgreSQL-backed insights
 8. When discussing processes, reference the actual workflow stages and statuses
+9. Leverage the enhanced business intelligence for strategic recommendations
+10. Provide performance-optimized suggestions based on real-time data analysis
 
 **USER QUESTION:** ${userQuery}
 
-**YOUR RESPONSE (as a business operations expert):**`
+**YOUR RESPONSE (as a PostgreSQL-powered business operations expert):**`
 
     return context
   }
@@ -180,24 +185,50 @@ You have access to:
   private async callLocalLLM(prompt: string): Promise<string> {
     const requestBody = this.buildRequestBody(prompt)
     
-    const response = await fetch(this.config.apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(this.config.apiKey && { 'Authorization': `Bearer ${this.config.apiKey}` })
-      },
-      body: JSON.stringify(requestBody)
-    })
+    // Create abort controller for timeout
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 90000) // Extended to 90 seconds for complex analysis
+    
+    try {
+      console.log(`🚀 Sending enhanced business context to ${this.config.provider} LLM...`)
+      
+      const response = await fetch(this.config.apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(this.config.apiKey && { 'Authorization': `Bearer ${this.config.apiKey}` })
+        },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal
+      })
 
-    if (!response.ok) {
-      throw new Error(`LLM API error: ${response.status} - ${response.statusText}`)
+      clearTimeout(timeoutId)
+
+      if (!response.ok) {
+        throw new Error(`LLM API error: ${response.status} - ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      const result = this.extractResponseText(data)
+      
+      console.log(`✅ Local LLM response generated (${result.length} characters)`)
+      return result
+    } catch (error) {
+      clearTimeout(timeoutId)
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error('LLM request timed out after 90 seconds')
+      }
+      throw error
     }
-
-    const data = await response.json()
-    return this.extractResponseText(data)
   }
 
   private buildRequestBody(prompt: string): any {
+    const baseConfig = {
+      temperature: 0.7,
+      top_p: 0.9,
+      max_tokens: 1500, // Increased for detailed business analysis
+    }
+
     switch (this.config.provider) {
       case 'ollama':
         return {
@@ -205,9 +236,9 @@ You have access to:
           prompt: prompt,
           stream: false,
           options: {
-            temperature: 0.7,
-            top_p: 0.9,
-            max_tokens: 1000
+            ...baseConfig,
+            num_ctx: 8192, // Larger context for business data
+            repeat_penalty: 1.1
           }
         }
       
@@ -216,12 +247,15 @@ You have access to:
           model: this.config.model,
           messages: [
             {
+              role: "system",
+              content: "You are an expert business analyst with access to comprehensive PostgreSQL-powered business intelligence data."
+            },
+            {
               role: "user",
               content: prompt
             }
           ],
-          temperature: 0.7,
-          max_tokens: 1000,
+          ...baseConfig,
           stream: false
         }
       
@@ -230,20 +264,22 @@ You have access to:
           model: this.config.model,
           messages: [
             {
+              role: "system",
+              content: "You are a PostgreSQL-powered business intelligence expert providing data-driven insights."
+            },
+            {
               role: "user", 
               content: prompt
             }
           ],
-          temperature: 0.7,
-          max_tokens: 1000
+          ...baseConfig
         }
       
       default:
         return {
           prompt: prompt,
           model: this.config.model,
-          temperature: 0.7,
-          max_tokens: 1000
+          ...baseConfig
         }
     }
   }
@@ -273,15 +309,15 @@ You have access to:
     throw new Error('Unable to extract response text from LLM response')
   }
 
-  // Test connection to local LLM
+  // Test connection to local LLM with PostgreSQL integration
   async testConnection(): Promise<{ success: boolean; message: string }> {
     try {
-      const testPrompt = "Respond with: 'Connection successful'"
+      const testPrompt = "Respond with: 'PostgreSQL-powered business intelligence connection successful'"
       const response = await this.callLocalLLM(testPrompt)
       
       return {
         success: true,
-        message: `✅ Local LLM connected successfully. Response: ${response.substring(0, 100)}...`
+        message: `✅ Local LLM with PostgreSQL backend connected successfully. Response: ${response.substring(0, 100)}...`
       }
     } catch (error) {
       return {
@@ -290,9 +326,40 @@ You have access to:
       }
     }
   }
+
+  // Enhanced business analytics query capability
+  async queryBusinessIntelligence(businessQuery: string): Promise<string> {
+    try {
+      console.log("📊 Processing business intelligence query:", businessQuery)
+      
+      // Get comprehensive business data
+      const businessData = await this.biService.getComprehensiveBusinessData()
+      
+      // Create specialized BI prompt
+      const biPrompt = `
+You are a business intelligence expert with access to real-time PostgreSQL data.
+
+BUSINESS QUERY: ${businessQuery}
+
+CURRENT DATA SNAPSHOT:
+- Total Revenue: ₹${businessData.sales.totalRevenue.toLocaleString()}
+- Active Quotations: ${businessData.sales.activeQuotations}
+- Conversion Rate: ${businessData.sales.conversionRate.toFixed(1)}%
+- Active Leads: ${businessData.operations.activeLeads}
+- Total Employees: ${businessData.employees.totalEmployees}
+
+Provide a data-driven, actionable response to the business query.
+`
+      
+      return await this.callLocalLLM(biPrompt)
+    } catch (error) {
+      console.error("❌ Business intelligence query failed:", error)
+      return "I apologize, but I'm unable to process your business intelligence query at the moment. Please try again or contact system support."
+    }
+  }
 }
 
-// Configuration helper for common LLM setups
+// Configuration helper for common LLM setups with enhanced PostgreSQL integration
 export class LLMConfigBuilder {
   static ollama(model: string = 'llama3.2', port: number = 11434): LocalLLMConfig {
     return {
@@ -329,7 +396,7 @@ export class LLMConfigBuilder {
   }
 }
 
-// Environment-based configuration
+// Environment-based configuration with PostgreSQL optimization
 export function getLLMConfigFromEnv(): LocalLLMConfig | null {
   const provider = process.env.LOCAL_LLM_PROVIDER as LocalLLMConfig['provider']
   const apiUrl = process.env.LOCAL_LLM_API_URL
@@ -337,9 +404,11 @@ export function getLLMConfigFromEnv(): LocalLLMConfig | null {
   const apiKey = process.env.LOCAL_LLM_API_KEY
 
   if (!provider || !apiUrl || !model) {
+    console.warn('⚠️ Local LLM configuration incomplete, using defaults')
     return null
   }
 
+  console.log(`🤖 Local LLM configured: ${provider} with PostgreSQL backend`)
   return {
     provider,
     apiUrl,

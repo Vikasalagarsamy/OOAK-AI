@@ -1,179 +1,155 @@
 "use server"
 
-import { createClient } from "@/lib/supabase/server"
+import { query, transaction } from "@/lib/postgresql-client"
 import { revalidatePath } from "next/cache"
 
+interface MenuItem {
+  id: number
+  parent_id: number | null
+  name: string
+  path: string
+  is_visible: boolean
+}
+
 export async function fixAccountCreationMenu() {
-  const supabase = createClient()
-
   try {
-    // First, check if the account creation menu item exists
-    const { data: menuItems, error: menuError } = await supabase
-      .from("menu_items")
-      .select("id, parent_id, name, path, is_visible")
-      .or("name.ilike.%Account Creation%,path.eq./organization/account-creation")
+    console.log("🔧 [MENU] Starting Account Creation menu fix via PostgreSQL...")
 
-    if (menuError) throw menuError
+    const result = await transaction(async (client) => {
+      // First, check if the account creation menu item exists
+      console.log("🔍 [MENU] Checking for existing Account Creation menu items...")
+      const menuItemsResult = await client.query(`
+        SELECT id, parent_id, name, path, is_visible
+        FROM menu_items 
+        WHERE name ILIKE '%Account Creation%' OR path = '/organization/account-creation'
+      `)
 
-    // Get the organization menu item
-    const { data: orgItems, error: orgError } = await supabase
-      .from("menu_items")
-      .select("id")
-      .or("name.eq.Organization,path.eq./organization")
-      .single()
+      const menuItems: MenuItem[] = menuItemsResult.rows
 
-    if (orgError && orgError.code !== "PGRST116") throw orgError // PGRST116 is "no rows returned"
+      // Get the organization menu item
+      console.log("🔍 [MENU] Looking for Organization menu item...")
+      const orgResult = await client.query(`
+        SELECT id FROM menu_items 
+        WHERE name = 'Organization' OR path = '/organization'
+        LIMIT 1
+      `)
 
-    const organizationId = orgItems?.id
+      let organizationId = orgResult.rows[0]?.id
 
-    if (!organizationId) {
-      // Create organization menu item if it doesn't exist
-      const { data: newOrg, error: createOrgError } = await supabase
-        .from("menu_items")
-        .insert({
-          parent_id: null,
-          name: "Organization",
-          path: "/organization",
-          icon: "building",
-          is_visible: true,
-          sort_order: 20,
-        })
-        .select("id")
-        .single()
-
-      if (createOrgError) throw createOrgError
-
-      console.log("Created Organization menu item:", newOrg)
-    }
-
-    // Check if account creation menu item exists
-    const accountCreationItem = menuItems?.find(
-      (item) => item.name === "Account Creation" || item.path === "/organization/account-creation",
-    )
-
-    if (!accountCreationItem) {
-      // Create account creation menu item
-      const { data: newItem, error: createError } = await supabase
-        .from("menu_items")
-        .insert({
-          parent_id: organizationId,
-          name: "Account Creation",
-          path: "/organization/account-creation",
-          icon: "user-plus",
-          is_visible: true,
-          sort_order: 70,
-        })
-        .select("id")
-        .single()
-
-      if (createError) throw createError
-
-      console.log("Created Account Creation menu item:", newItem)
-
-      // Get admin role
-      const { data: adminRole, error: roleError } = await supabase
-        .from("roles")
-        .select("id")
-        .or("title.eq.Administrator,title.eq.Admin")
-        .single()
-
-      if (roleError && roleError.code !== "PGRST116") throw roleError
-
-      if (adminRole) {
-        // Add permissions for admin role
-        const { error: permError } = await supabase.from("role_menu_permissions").insert({
-          role_id: adminRole.id,
-          menu_item_id: newItem.id,
-          can_view: true,
-          can_add: true,
-          can_edit: true,
-          can_delete: true,
-        })
-
-        if (permError) throw permError
-
-        console.log("Added permissions for admin role")
+      if (!organizationId) {
+        // Create organization menu item if it doesn't exist
+        console.log("➕ [MENU] Creating Organization menu item...")
+        const newOrgResult = await client.query(`
+          INSERT INTO menu_items (parent_id, name, path, icon, is_visible, sort_order)
+          VALUES (NULL, 'Organization', '/organization', 'building', true, 20)
+          RETURNING id
+        `)
+        organizationId = newOrgResult.rows[0].id
+        console.log(`✅ [MENU] Created Organization menu item with ID: ${organizationId}`)
       }
-    } else {
-      // Update existing account creation menu item
-      const { error: updateError } = await supabase
-        .from("menu_items")
-        .update({
-          parent_id: organizationId,
-          is_visible: true,
-          path: "/organization/account-creation",
-          icon: accountCreationItem.path ? accountCreationItem.path : "user-plus",
-        })
-        .eq("id", accountCreationItem.id)
 
-      if (updateError) throw updateError
+      // Check if account creation menu item exists
+      const accountCreationItem = menuItems.find(
+        (item: MenuItem) => item.name === "Account Creation" || item.path === "/organization/account-creation"
+      )
 
-      console.log("Updated Account Creation menu item")
+      let menuItemId: number
+
+      if (!accountCreationItem) {
+        // Create account creation menu item
+        console.log("➕ [MENU] Creating Account Creation menu item...")
+        const newItemResult = await client.query(`
+          INSERT INTO menu_items (parent_id, name, path, icon, is_visible, sort_order)
+          VALUES ($1, 'Account Creation', '/organization/account-creation', 'user-plus', true, 70)
+          RETURNING id
+        `, [organizationId])
+
+        menuItemId = newItemResult.rows[0].id
+        console.log(`✅ [MENU] Created Account Creation menu item with ID: ${menuItemId}`)
+      } else {
+        // Update existing account creation menu item
+        console.log(`📝 [MENU] Updating existing Account Creation menu item ID: ${accountCreationItem.id}`)
+        await client.query(`
+          UPDATE menu_items SET
+            parent_id = $1,
+            is_visible = true,
+            path = '/organization/account-creation',
+            icon = COALESCE(NULLIF(icon, ''), 'user-plus')
+          WHERE id = $2
+        `, [organizationId, accountCreationItem.id])
+
+        menuItemId = accountCreationItem.id
+        console.log("✅ [MENU] Updated Account Creation menu item")
+      }
 
       // Get admin role
-      const { data: adminRole, error: roleError } = await supabase
-        .from("roles")
-        .select("id")
-        .or("title.eq.Administrator,title.eq.Admin")
-        .single()
+      console.log("🔍 [MENU] Looking for admin role...")
+      const adminRoleResult = await client.query(`
+        SELECT id FROM roles 
+        WHERE title IN ('Administrator', 'Admin')
+        LIMIT 1
+      `)
 
-      if (roleError && roleError.code !== "PGRST116") throw roleError
+      const adminRole = adminRoleResult.rows[0]
 
       if (adminRole) {
+        console.log(`👤 [MENU] Found admin role with ID: ${adminRole.id}`)
+
         // Check if permission exists
-        const { data: existingPerm, error: permCheckError } = await supabase
-          .from("role_menu_permissions")
-          .select("id")
-          .eq("role_id", adminRole.id)
-          .eq("menu_item_id", accountCreationItem.id)
+        const existingPermResult = await client.query(`
+          SELECT id FROM role_menu_permissions 
+          WHERE role_id = $1 AND menu_item_id = $2
+        `, [adminRole.id, menuItemId])
 
-        if (permCheckError) throw permCheckError
-
-        if (existingPerm && existingPerm.length > 0) {
-          // Update permission
-          const { error: updatePermError } = await supabase
-            .from("role_menu_permissions")
-            .update({
-              can_view: true,
-              can_add: true,
-              can_edit: true,
-              can_delete: true,
-            })
-            .eq("role_id", adminRole.id)
-            .eq("menu_item_id", accountCreationItem.id)
-
-          if (updatePermError) throw updatePermError
-
-          console.log("Updated permissions for admin role")
+        if (existingPermResult.rows.length > 0) {
+          // Update existing permission
+          console.log("📝 [MENU] Updating existing admin permissions...")
+          await client.query(`
+            UPDATE role_menu_permissions SET
+              can_view = true,
+              can_add = true,
+              can_edit = true,
+              can_delete = true
+            WHERE role_id = $1 AND menu_item_id = $2
+          `, [adminRole.id, menuItemId])
+          console.log("✅ [MENU] Updated admin permissions")
         } else {
-          // Add permission
-          const { error: addPermError } = await supabase.from("role_menu_permissions").insert({
-            role_id: adminRole.id,
-            menu_item_id: accountCreationItem.id,
-            can_view: true,
-            can_add: true,
-            can_edit: true,
-            can_delete: true,
-          })
-
-          if (addPermError) throw addPermError
-
-          console.log("Added permissions for admin role")
+          // Add new permission
+          console.log("➕ [MENU] Adding new admin permissions...")
+          await client.query(`
+            INSERT INTO role_menu_permissions (role_id, menu_item_id, can_view, can_add, can_edit, can_delete)
+            VALUES ($1, $2, true, true, true, true)
+          `, [adminRole.id, menuItemId])
+          console.log("✅ [MENU] Added admin permissions")
         }
+      } else {
+        console.log("⚠️ [MENU] No admin role found - skipping permission setup")
       }
-    }
+
+      return { success: true, menuItemId, organizationId }
+    })
 
     // Revalidate paths to refresh the menu
+    console.log("🔄 [MENU] Revalidating menu paths...")
     revalidatePath("/")
     revalidatePath("/organization")
     revalidatePath("/organization/account-creation")
 
-    return { success: true, message: "Account Creation menu item fixed successfully" }
+    console.log("🎉 [MENU] Account Creation menu fix completed successfully!")
+    return { 
+      success: true, 
+      message: "Account Creation menu item fixed successfully",
+      details: {
+        menuItemId: result.menuItemId,
+        organizationId: result.organizationId
+      }
+    }
   } catch (error: any) {
-    console.error("Error fixing account creation menu:", error)
+    console.error("❌ [MENU] Error fixing account creation menu:", error)
     return {
       success: false,
       message: `Error fixing account creation menu: ${error.message || "Unknown error"}`,
+      error: error.message
     }
   }
 }

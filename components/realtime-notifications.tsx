@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Bell, RefreshCw } from 'lucide-react'
+import { Bell, RefreshCw, Database, Wifi, WifiOff } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -9,9 +9,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
-import { createClient } from '@/lib/supabase-browser'
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { useCurrentUser } from "@/hooks/use-current-user"
+import { query } from "@/lib/postgresql-client"
 import { formatDistanceToNow } from 'date-fns'
-import { getCurrentUser } from '@/actions/auth-actions'
 
 interface Notification {
   id: string
@@ -26,40 +27,19 @@ interface Notification {
 }
 
 export function RealtimeNotifications() {
+  const { user } = useCurrentUser()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState<string>('CONNECTING')
-  const [currentUser, setCurrentUser] = useState<any>(null)
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
   
-  // Refs to track subscriptions and prevent duplicates
-  const channelRef = useRef<any>(null)
+  // Refs to track polling and prevent duplicates
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
-  const isSubscribedRef = useRef(false)
-  const currentUserIdRef = useRef<string | null>(null)
-
-  // Check authentication status
-  const checkAuthentication = async () => {
-    try {
-      const user = await getCurrentUser()
-      if (user) {
-        setCurrentUser(user)
-        setIsAuthenticated(true)
-        return user
-      } else {
-        setCurrentUser(null)
-        setIsAuthenticated(false)
-        return null
-      }
-    } catch (error) {
-      console.log('🚪 User not authenticated')
-      setCurrentUser(null)
-      setIsAuthenticated(false)
-      return null
-    }
-  }
+  const isPollingRef = useRef(false)
+  const lastNotificationId = useRef<string | null>(null)
 
   // Cleanup function
   const cleanup = () => {
@@ -71,386 +51,384 @@ export function RealtimeNotifications() {
       pollIntervalRef.current = null
     }
 
-    // Remove channel subscription
-    if (channelRef.current) {
-      try {
-        const supabase = createClient()
-        supabase.removeChannel(channelRef.current)
-        console.log('✅ Channel removed successfully')
-      } catch (error) {
-        console.log('⚠️ Error removing channel:', error)
-      }
-      channelRef.current = null
-    }
-
-    // Reset subscription state
-    isSubscribedRef.current = false
+    // Reset polling state
+    isPollingRef.current = false
     setConnectionStatus('DISCONNECTED')
   }
 
-  // Load notifications function with authentication check
+  // Load notifications function with PostgreSQL
   const loadNotifications = async (showRefreshing = false) => {
+    if (isPollingRef.current) {
+      console.log('⚠️ Polling already in progress, skipping...')
+      return
+    }
+
+    if (!user) {
+      console.log('🚪 User not authenticated, skipping notification load')
+      setNotifications([])
+      setUnreadCount(0)
+      setConnectionStatus('DISCONNECTED')
+      return
+    }
+
+    isPollingRef.current = true
+    
     try {
       if (showRefreshing) setIsRefreshing(true)
       
-      // Check authentication first
-      const user = await checkAuthentication()
-      if (!user || !isAuthenticated) {
-        console.log('🚪 User not authenticated, skipping notification load')
-        setNotifications([])
-        setUnreadCount(0)
-        return
+      console.log('🔔 Loading notifications from PostgreSQL for user:', user.id)
+      
+      // PostgreSQL query to fetch notifications
+      const result = await query(`
+        SELECT 
+          id,
+          type,
+          title,
+          message,
+          priority,
+          created_at,
+          is_read,
+          user_id,
+          metadata
+        FROM notifications 
+        WHERE user_id = $1 
+        ORDER BY created_at DESC 
+        LIMIT 100
+      `, [user.id])
+      
+      const notificationsList = result.rows as Notification[]
+      console.log('📊 Notifications loaded from PostgreSQL:', notificationsList.length)
+      
+      // Check for new notifications
+      if (notificationsList.length > 0 && lastNotificationId.current) {
+        const newNotifications = notificationsList.filter(n => 
+          new Date(n.created_at) > new Date(lastNotificationId.current || '1970-01-01')
+        )
+        
+        if (newNotifications.length > 0) {
+          console.log('🆕 Found', newNotifications.length, 'new notifications')
+          // Could trigger browser notification here if needed
+        }
       }
       
-      console.log('🔔 Loading notifications for user:', user.id)
-      const response = await fetch(`/api/notifications?user_id=${user.id}&limit=100&_t=` + Date.now())
+      setNotifications(notificationsList)
       
-      if (response.ok) {
-        const data = await response.json()
-        console.log('📊 Notifications loaded:', data.notifications?.length || 0)
-        
-        const notificationsList = data.notifications || []
-        setNotifications(notificationsList)
-        
-        const unread = notificationsList.filter((n: Notification) => !n.is_read).length
-        setUnreadCount(unread)
-        console.log('📈 Unread count updated to:', unread)
-      } else if (response.status === 401) {
-        console.log('🚪 Authentication failed (401), user likely logged out')
-        setIsAuthenticated(false)
-        setNotifications([])
-        setUnreadCount(0)
-        cleanup()
-        return
-      } else {
-        console.error('❌ Failed to load notifications:', response.status)
+      // Update last notification timestamp
+      if (notificationsList.length > 0) {
+        lastNotificationId.current = notificationsList[0].created_at
       }
+      
+      const unread = notificationsList.filter((n: Notification) => !n.is_read).length
+      setUnreadCount(unread)
+      setLastUpdate(new Date())
+      setConnectionStatus('CONNECTED')
+      setError(null)
+      
+      console.log('📈 Unread count updated to:', unread)
+      
     } catch (error: any) {
-      // Only log errors if we're still authenticated
-      if (isAuthenticated && !error.message?.includes('401')) {
-        console.error('❌ Error loading notifications:', error)
-      }
+      console.error('❌ Error loading notifications from PostgreSQL:', error)
+      setError(error.message || 'Failed to load notifications')
+      setConnectionStatus('ERROR')
     } finally {
       setIsLoading(false)
       if (showRefreshing) setIsRefreshing(false)
+      isPollingRef.current = false
     }
   }
 
-  // Setup realtime subscription
-  const setupRealtimeSubscription = async (user: any) => {
-    // Prevent multiple subscriptions
-    if (isSubscribedRef.current || channelRef.current) {
-      console.log('⚠️ Subscription already exists, skipping setup')
+  // Setup PostgreSQL polling for real-time updates
+  const setupPolling = () => {
+    if (!user) {
+      console.log('👤 No user found, skipping polling setup')
       return
     }
 
-    try {
-      const supabase = createClient()
-      console.log('🔗 Setting up real-time subscription for user:', user.id)
-      
-      // Create unique channel name for this user session
-      const channelName = `notifications-${user.id}-${Date.now()}`
-      
-      const channel = supabase
-        .channel(channelName, {
-          config: {
-            broadcast: { self: false },
-            presence: { key: user.id },
-          }
-        })
-        .on(
-          'postgres_changes',
-          {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'notifications',
-            filter: `user_id=eq.${user.id}` // Server-side filtering
-          },
-          (payload: any) => {
-            console.log('🔔 Real-time notification received:', payload)
-            const newNotification = payload.new as Notification
-            
-            console.log('✅ Processing notification for user:', user.id)
-            
-            // Add to notifications list at the top
-            setNotifications(prev => {
-              const exists = prev.find(n => n.id === newNotification.id)
-              if (exists) {
-                console.log('⚠️ Notification already exists, skipping duplicate')
-                return prev
-              }
-              return [newNotification, ...prev]
-            })
-            
-            // Update unread count if it's unread
-            if (!newNotification.is_read) {
-              setUnreadCount(prev => {
-                const newCount = prev + 1
-                console.log('📈 Real-time unread count updated:', prev, '->', newCount)
-                return newCount
-              })
-            }
-            
-            // Show browser notification
-            if ('Notification' in window && Notification.permission === 'granted') {
-              new Notification(newNotification.title, {
-                body: newNotification.message,
-                icon: '/favicon.ico'
-              })
-              console.log('🔔 Browser notification shown')
-            }
-          }
-        )
-        .subscribe((status: string, err?: any) => {
-          console.log('📡 Real-time subscription status:', status)
-          setConnectionStatus(status)
-          
-          if (err) {
-            console.error('❌ Subscription error:', err)
-            isSubscribedRef.current = false
-            return
-          }
-          
-          if (status === 'SUBSCRIBED') {
-            console.log('✅ Real-time subscription active!')
-            isSubscribedRef.current = true
-            
-            // Clear any existing polling
-            if (pollIntervalRef.current) {
-              clearInterval(pollIntervalRef.current)
-              pollIntervalRef.current = null
-            }
-          } else if (status === 'CLOSED' || status === 'TIMED_OUT' || status === 'CHANNEL_ERROR') {
-            console.warn(`⚠️ Real-time connection ${status}. Activating polling mode...`)
-            isSubscribedRef.current = false
-            
-            // Start polling every 10 seconds as fallback
-            if (!pollIntervalRef.current) {
-              const interval = setInterval(() => {
-                if (isAuthenticated && currentUserIdRef.current === user.id) {
-                  console.log('🔄 Polling for new notifications...')
-                  loadNotifications()
-                }
-              }, 10000)
-              
-              pollIntervalRef.current = interval
-            }
-          }
-        })
+    // Clear any existing polling
+    cleanup()
 
-      // Store channel reference
-      channelRef.current = channel
-
-    } catch (error) {
-      console.error('❌ Error setting up realtime subscription:', error)
-      isSubscribedRef.current = false
-    }
+    console.log('🔄 Setting up PostgreSQL polling for user:', user.id)
+    
+    // Initial load
+    loadNotifications()
+    
+    // Set up polling every 10 seconds for real-time updates
+    pollIntervalRef.current = setInterval(() => {
+      if (user) {
+        loadNotifications()
+      } else {
+        cleanup()
+      }
+    }, 10000) as NodeJS.Timeout // 10 second polling interval
+    
+    setConnectionStatus('POLLING')
   }
 
-  // Manual refresh function
+  // Initialize notifications when user changes
+  useEffect(() => {
+    if (user) {
+      console.log('👤 User authenticated, setting up notifications:', user.username || user.id)
+      setupPolling()
+    } else {
+      console.log('👤 User not authenticated, cleaning up notifications')
+      cleanup()
+      setNotifications([])
+      setUnreadCount(0)
+    }
+
+    // Cleanup on unmount or user change
+    return cleanup
+  }, [user])
+
   const refreshNotifications = () => {
-    if (!isAuthenticated) {
-      console.log('🚪 User not authenticated, skipping refresh')
-      return
-    }
-    console.log('🔄 Manual refresh triggered')
+    console.log('🔄 Manual refresh requested')
     loadNotifications(true)
   }
 
-  // Main setup effect
-  useEffect(() => {
-    console.log('🚀 Initializing real-time notifications...')
-    
-    const initializeNotifications = async () => {
-      // Check authentication first
-      const user = await checkAuthentication()
-      if (!user) {
-        console.log('🚪 No user found, skipping notification setup')
-        setIsLoading(false)
-        return
-      }
-
-      // Check if user changed
-      if (currentUserIdRef.current && currentUserIdRef.current !== user.id) {
-        console.log('👤 User changed, cleaning up previous subscription')
-        cleanup()
-      }
-
-      currentUserIdRef.current = user.id
-
-      // Load initial notifications
-      await loadNotifications()
-      
-      // Setup real-time subscription
-      await setupRealtimeSubscription(user)
-
-      // Request notification permission
-      if ('Notification' in window && Notification.permission === 'default') {
-        Notification.requestPermission().then(permission => {
-          console.log('🔔 Notification permission:', permission)
-        })
-      }
-    }
-
-    initializeNotifications()
-
-    // Cleanup function
-    return () => {
-      console.log('🏁 Component unmounting, cleaning up')
-      cleanup()
-    }
-  }, []) // Only run on mount
-
-  // Listen for authentication changes
-  useEffect(() => {
-    const interval = setInterval(async () => {
-      const user = await checkAuthentication()
-      
-      // If user changed or logged out
-      if ((!user && currentUserIdRef.current) || 
-          (user && currentUserIdRef.current && user.id !== currentUserIdRef.current)) {
-        console.log('👤 Authentication state changed, reinitializing')
-        cleanup()
-        
-        if (user) {
-          currentUserIdRef.current = user.id
-          await loadNotifications()
-          await setupRealtimeSubscription(user)
-        } else {
-          currentUserIdRef.current = null
-          setNotifications([])
-          setUnreadCount(0)
-        }
-      }
-    }, 30000) // Check every 30 seconds
-
-    return () => clearInterval(interval)
-  }, [])
-
-  // Mark notification as read
   const markAsRead = async (notificationId: string) => {
-    if (!isAuthenticated) {
-      console.log('🚪 User not authenticated, cannot mark as read')
+    if (!user) {
+      console.log('👤 User not authenticated, cannot mark notification as read')
       return
     }
 
     try {
-      const response = await fetch(`/api/notifications/${notificationId}/read`, {
-        method: 'POST'
-      })
+      console.log('📖 Marking notification as read:', notificationId)
       
-      if (response.ok) {
-        setNotifications(prev => 
-          prev.map(n => n.id === notificationId ? { ...n, is_read: true } : n)
-        )
-        setUnreadCount(prev => Math.max(0, prev - 1))
-        console.log('✅ Marked notification as read:', notificationId)
-      } else if (response.status === 401) {
-        console.log('🚪 Authentication failed, user likely logged out')
-        setIsAuthenticated(false)
-        cleanup()
-      }
-    } catch (error) {
+      // Update notification in PostgreSQL
+      await query(`
+        UPDATE notifications 
+        SET is_read = true, 
+            updated_at = NOW()
+        WHERE id = $1 AND user_id = $2
+      `, [notificationId, user.id])
+
+      // Update local state
+      setNotifications(prev => prev.map(notification => 
+        notification.id === notificationId 
+          ? { ...notification, is_read: true }
+          : notification
+      ))
+
+      // Update unread count
+      setUnreadCount(prev => Math.max(0, prev - 1))
+      
+      console.log('✅ Notification marked as read successfully')
+      
+    } catch (error: any) {
       console.error('❌ Error marking notification as read:', error)
     }
   }
 
-  // Don't render anything if not authenticated
-  if (!isAuthenticated) {
-    return null
+  const markAllAsRead = async () => {
+    if (!user) {
+      console.log('👤 User not authenticated, cannot mark all notifications as read')
+      return
+    }
+
+    try {
+      console.log('📖 Marking all notifications as read for user:', user.id)
+      
+      // Update all notifications in PostgreSQL
+      await query(`
+        UPDATE notifications 
+        SET is_read = true, 
+            updated_at = NOW()
+        WHERE user_id = $1 AND is_read = false
+      `, [user.id])
+
+      // Update local state
+      setNotifications(prev => prev.map(notification => 
+        ({ ...notification, is_read: true })
+      ))
+
+      setUnreadCount(0)
+      
+      console.log('✅ All notifications marked as read successfully')
+      
+    } catch (error: any) {
+      console.error('❌ Error marking all notifications as read:', error)
+    }
+  }
+
+  const getConnectionIcon = () => {
+    switch (connectionStatus) {
+      case 'CONNECTED':
+      case 'POLLING':
+        return <Wifi className="h-3 w-3 text-green-500" />
+      case 'ERROR':
+        return <WifiOff className="h-3 w-3 text-red-500" />
+      case 'CONNECTING':
+        return <RefreshCw className="h-3 w-3 animate-spin text-yellow-500" />
+      default:
+        return <WifiOff className="h-3 w-3 text-gray-500" />
+    }
+  }
+
+  const getConnectionStatus = () => {
+    switch (connectionStatus) {
+      case 'CONNECTED':
+      case 'POLLING':
+        return 'Connected'
+      case 'ERROR':
+        return 'Error'
+      case 'CONNECTING':
+        return 'Connecting'
+      default:
+        return 'Disconnected'
+    }
   }
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative h-9 w-9">
-          <Bell className="h-5 w-5" />
+        <Button variant="ghost" size="icon" className="relative">
+          <Bell className="h-4 w-4" />
           {unreadCount > 0 && (
             <Badge 
               variant="destructive" 
-              className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs"
+              className="absolute -top-1 -right-1 h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs"
             >
               {unreadCount > 99 ? '99+' : unreadCount}
             </Badge>
           )}
-          {/* Show connection status indicator */}
-          <div 
-            className={`absolute -bottom-1 -right-1 w-2 h-2 rounded-full ${
-              connectionStatus === 'SUBSCRIBED' ? 'bg-green-500' : 
-              connectionStatus === 'CONNECTING' ? 'bg-yellow-500' : 'bg-red-500'
-            }`}
-            title={`Real-time status: ${connectionStatus}`}
-          />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-80 max-h-96 overflow-y-auto" align="end">
-        <div className="p-3 border-b">
-          <div className="flex justify-between items-center">
-            <div>
-              <h3 className="font-semibold">Notifications</h3>
-              <p className="text-sm text-muted-foreground">
-                {unreadCount} unread • {connectionStatus === 'SUBSCRIBED' ? '🟢 Real-time' : '🔴 Polling (10s)'}
-              </p>
-            </div>
-            <Button 
-              variant="ghost" 
-              size="sm" 
+      
+      <DropdownMenuContent align="end" className="w-80 max-h-96 overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b">
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold">Notifications</h3>
+            <Badge variant="outline" className="flex items-center gap-1">
+              {getConnectionIcon()}
+              PostgreSQL
+            </Badge>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={refreshNotifications}
               disabled={isRefreshing}
               className="h-8 w-8 p-0"
             >
-              <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-3 w-3 ${isRefreshing ? 'animate-spin' : ''}`} />
             </Button>
           </div>
         </div>
-        
+
+        {/* Status */}
+        <div className="px-4 py-2 border-b bg-muted/50">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span className="flex items-center gap-2">
+              {getConnectionIcon()}
+              {getConnectionStatus()}
+              {lastUpdate && (
+                <span>• Updated {formatDistanceToNow(lastUpdate, { addSuffix: true })}</span>
+              )}
+            </span>
+            {unreadCount > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={markAllAsRead}
+                className="h-6 px-2 text-xs"
+              >
+                Mark all read
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Content */}
         <div className="max-h-64 overflow-y-auto">
-          {isLoading ? (
+          {error ? (
+            <div className="p-4">
+              <Alert variant="destructive">
+                <AlertDescription className="text-sm">
+                  {error}
+                </AlertDescription>
+              </Alert>
+              <Button 
+                onClick={refreshNotifications} 
+                variant="outline" 
+                size="sm" 
+                className="mt-2 w-full"
+              >
+                <RefreshCw className="h-3 w-3 mr-2" />
+                Retry
+              </Button>
+            </div>
+          ) : !user ? (
             <div className="p-4 text-center text-sm text-muted-foreground">
+              Please log in to view notifications
+            </div>
+          ) : isLoading ? (
+            <div className="p-4 text-center text-sm text-muted-foreground">
+              <Database className="h-4 w-4 mx-auto mb-2 animate-pulse" />
               Loading notifications...
             </div>
-          ) : notifications.filter(n => !n.is_read).length === 0 ? (
+          ) : notifications.length === 0 ? (
             <div className="p-4 text-center text-sm text-muted-foreground">
-              No unread notifications
+              <Bell className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              <p>No notifications yet</p>
+              <p className="text-xs mt-1">You'll see new notifications here</p>
             </div>
           ) : (
-            notifications.filter(n => !n.is_read).slice(0, 10).map((notification) => (
-              <div
-                key={notification.id}
-                className="p-3 border-b cursor-pointer hover:bg-gray-50 bg-blue-50"
-                onClick={() => markAsRead(notification.id)}
-              >
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <h4 className="text-sm font-medium">{notification.title}</h4>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {notification.message}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })}
-                    </p>
+            <div className="divide-y">
+              {notifications.map((notification) => (
+                <div
+                  key={notification.id}
+                  className={`p-3 hover:bg-muted/50 cursor-pointer transition-colors ${
+                    !notification.is_read ? 'bg-blue-50 border-l-2 border-l-blue-500' : ''
+                  }`}
+                  onClick={() => markAsRead(notification.id)}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className="text-sm font-medium truncate">
+                          {notification.title}
+                        </p>
+                        {!notification.is_read && (
+                          <div className="h-2 w-2 bg-blue-500 rounded-full flex-shrink-0" />
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground mb-1 line-clamp-2">
+                        {notification.message}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">
+                          {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })}
+                        </span>
+                        <Badge 
+                          variant={
+                            notification.priority === 'urgent' ? 'destructive' :
+                            notification.priority === 'high' ? 'secondary' : 'outline'
+                          }
+                          className="text-xs"
+                        >
+                          {notification.priority}
+                        </Badge>
+                      </div>
+                    </div>
                   </div>
-                  <div className="h-2 w-2 bg-blue-500 rounded-full ml-2 mt-1" />
                 </div>
-              </div>
-            ))
+              ))}
+            </div>
           )}
         </div>
-        
-        {notifications.filter(n => !n.is_read).length > 0 && (
-          <div className="p-3 border-t">
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className="w-full text-xs"
-              onClick={() => {
-                notifications.filter(n => !n.is_read).forEach(n => {
-                  markAsRead(n.id)
-                })
-              }}
-            >
-              Mark all as read
-            </Button>
+
+        {/* Footer */}
+        {notifications.length > 0 && (
+          <div className="p-3 border-t bg-muted/50">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Showing {notifications.length} notifications</span>
+              <span className="flex items-center gap-1">
+                <Database className="h-3 w-3" />
+                Real-time polling
+              </span>
+            </div>
           </div>
         )}
       </DropdownMenuContent>

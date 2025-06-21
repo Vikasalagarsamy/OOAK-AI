@@ -1,0 +1,993 @@
+[
+  {
+    "id": "whatsapp_1750229488232_7g7bmw5yi",
+    "timestamp": "2025-06-18T06:51:28.232Z",
+    "direction": "incoming",
+    "platform": "whatsapp",
+    "client_phone": "919894750951",
+    "client_name": "Kavya - Arjun - 2013631",
+    "message_content": "Sure will let you know and will do drop in to collect :)",
+    "message_type": "text",
+    "context": {
+      "session_id": "session_919894750951_Wed_Jun_18_2025",
+      "conversation_stage": "inquiry",
+      "business_intent": "photography",
+      "sentiment": "neutral"
+    },
+    "ai_response": {
+      "should_respond": true,
+      "response_type": "human_required",
+      "urgency_level": 3
+    },
+    "metadata": {
+      "raw_data": {
+        "client_name": "Kavya - Arjun - 2013631",
+        "message_type": "text",
+        "raw_data": {
+          "id": "e7cea7b1-a6f5-4732-a6ed-1ec4849aa223",
+          "from": "919894750951",
+          "timestamp": 1750209685.757,
+          "type": "text",
+          "text": {
+            "body": "Sure will let you know and will do drop in to collect :)"
+          },
+          "customer_name": "Kavya - Arjun - 2013631",
+          "interakt_data": {
+            "customer": {
+              "id": "b193c9af-dbc9-415c-ae7b-8850fdcb25f6",
+              "channel_phone_number": "919894750951",
+              "phone_number": "9894750951",
+              "country_code": "+91",
+              "traits": {
+                "name": "Kavya - Arjun - 2013631",
+                "whatsapp_opted_in": true,
+                "source_id": null,
+                "source_url": null,
+                "email": ""
+              }
+            },
+            "message": {
+              "id": "e7cea7b1-a6f5-4732-a6ed-1ec4849aa223",
+              "chat_message_type": "CustomerMessage",
+              "channel_failure_reason": null,
+              "message_status": "Sent",
+              "received_at_utc": "2025-06-18T06:51:25.757526",
+              "delivered_at_utc": null,
+              "seen_at_utc": null,
+              "campaign_id": null,
+              "is_template_message": false,
+              "raw_template": null,
+              "channel_error_code": null,
+              "message_content_type": "Text",
+              "media_url": null,
+              "message": "Sure will let you know and will do drop in to collect :)",
+              "meta_data": {},
+              "source_message_id": null
+            },
+            "channel_type": "Whatsapp",
+            "is_fallback_message": false,
+            "next_fallback_channel": null
+          }
+        }
+      },
+      "client_journey_stage": "discovery",
+      "previous_interactions": 0,
+      "last_interaction": "never"
+    }
+  },
+  {
+    "id": "whatsapp_1750230014975_k8mns060c",
+    "timestamp": "2025-06-18T07:00:14.975Z",
+    "direction": "incoming",
+    "platform": "whatsapp",
+    "client_phone": "919465841398",
+    "client_name": "Degitizer It Solutions",
+    "message_content": "📢 Grow Your Business with Trusted Digital Services\n\nDear Business Owner,\nLooking to build your brand, get more leads, and improve your online presence?\n\nChoose from our proven digital marketing solutions:\n\n1️⃣ Google Reviews\n2️⃣ YouTube Engagement\n3️⃣ Instagram Growth\n4️⃣ Facebook Marketing\n5️⃣ Facebook Ad Management\n6️⃣ SEO-Optimized Content\n7️⃣ High-Quality Backlinks\n8️⃣ Advanced SEO\n9️⃣ Google Ads\n🔟 Professional Graphics (Social Media)\n1️⃣1️⃣ Website Design & Development\n1️⃣2️⃣ Increase Targeted Traffic\n1️⃣3️⃣ Custom CRM Solutions\n\n🌐 Visit Us: degitizeritsolution.com\n& https://digitools.degitizeritsolution.com/\n📞 Call Support: +91 7741997012\n💬 Chat Support: +91 9552264690\n🔧 Issue Resolution: +91 7887705345\n\n💬 Reply \"Livechat\" to connect with a live agent now!\n\n🚀 Your growth is our mission – Let’s get started today!\n\n_If this is not relevant please say STOP and we will never message you again._",
+    "message_type": "text",
+    "context": {
+      "session_id": "session_919465841398_Wed_Jun_18_2025",
+      "conversation_stage": "booking",
+      "business_intent": "availability",
+      "sentiment": "neutral"
+    },
+    "ai_response": {
+      "should_respond": true,
+      "response_type": "human_required",
+      "urgency_level": 3
+    },
+    "metadata": {
+      "raw_data": {
+        "client_name": "Degitizer It Solutions",
+        "message_type": "text",
+        "raw_data": {
+          "id": "16d3ba36-a9a4-40d3-81b2-2e4a6897aa78",
+          "from": "919465841398",
+          "timestamp": 1750210213.192,
+          "type": "text",
+          "text": {
+            "body": "📢 Grow Your Business with Trusted Digital Services\n\nDear Business Owner,\nLooking to build your brand, get more leads, and improve your online presence?\n\nChoose from our proven digital marketing solutions:\n\n1️⃣ Google Reviews\n2️⃣ YouTube Engagement\n3️⃣ Instagram Growth\n4️⃣ Facebook Marketing\n5️⃣ Facebook Ad Management\n6️⃣ SEO-Optimized Content\n7️⃣ High-Quality Backlinks\n8️⃣ Advanced SEO\n9️⃣ Google Ads\n🔟 Professional Graphics (Social Media)\n1️⃣1️⃣ Website Design & Development\n1️⃣2️⃣ Increase Targeted Traffic\n1️⃣3️⃣ Custom CRM Solutions\n\n🌐 Visit Us: degitizeritsolution.com\n& https://digitools.degitizeritsolution.com/\n📞 Call Support: +91 7741997012\n💬 Chat Support: +91 9552264690\n🔧 Issue Resolution: +91 7887705345\n\n💬 Reply \"Livechat\" to connect with a live agent now!\n\n🚀 Your growth is our mission – Let’s get started today!\n\n_If this is not relevant please say STOP and we will never message you again._"
+          },
+          "customer_name": "Degitizer It Solutions",
+          "interakt_data": {
+            "customer": {
+              "id": "20ff8f8d-5a5e-4c9e-9e8b-d5b374099863",
+              "channel_phone_number": "919465841398",
+              "phone_number": "9465841398",
+              "country_code": "+91",
+              "traits": {
+                "name": "Degitizer It Solutions",
+                "whatsapp_opted_in": true,
+                "source_id": null,
+                "source_url": null,
+                "country_code": "+91"
+              }
+            },
+            "message": {
+              "id": "16d3ba36-a9a4-40d3-81b2-2e4a6897aa78",
+              "chat_message_type": "CustomerMessage",
+              "channel_failure_reason": null,
+              "message_status": "Sent",
+              "received_at_utc": "2025-06-18T07:00:13.192360",
+              "delivered_at_utc": null,
+              "seen_at_utc": null,
+              "campaign_id": null,
+              "is_template_message": false,
+              "raw_template": null,
+              "channel_error_code": null,
+              "message_content_type": "Text",
+              "media_url": null,
+              "message": "📢 Grow Your Business with Trusted Digital Services\n\nDear Business Owner,\nLooking to build your brand, get more leads, and improve your online presence?\n\nChoose from our proven digital marketing solutions:\n\n1️⃣ Google Reviews\n2️⃣ YouTube Engagement\n3️⃣ Instagram Growth\n4️⃣ Facebook Marketing\n5️⃣ Facebook Ad Management\n6️⃣ SEO-Optimized Content\n7️⃣ High-Quality Backlinks\n8️⃣ Advanced SEO\n9️⃣ Google Ads\n🔟 Professional Graphics (Social Media)\n1️⃣1️⃣ Website Design & Development\n1️⃣2️⃣ Increase Targeted Traffic\n1️⃣3️⃣ Custom CRM Solutions\n\n🌐 Visit Us: degitizeritsolution.com\n& https://digitools.degitizeritsolution.com/\n📞 Call Support: +91 7741997012\n💬 Chat Support: +91 9552264690\n🔧 Issue Resolution: +91 7887705345\n\n💬 Reply \"Livechat\" to connect with a live agent now!\n\n🚀 Your growth is our mission – Let’s get started today!\n\n_If this is not relevant please say STOP and we will never message you again._",
+              "meta_data": {},
+              "source_message_id": null
+            },
+            "channel_type": "Whatsapp",
+            "is_fallback_message": false,
+            "next_fallback_channel": null
+          }
+        }
+      },
+      "client_journey_stage": "discovery",
+      "previous_interactions": 0,
+      "last_interaction": "never"
+    }
+  },
+  {
+    "id": "whatsapp_1750231307816_5qkcqyroe",
+    "timestamp": "2025-06-18T07:21:47.816Z",
+    "direction": "incoming",
+    "platform": "whatsapp",
+    "client_phone": "919110471651",
+    "client_name": "Benita Tejal - Ashwin-Engagement-2014146",
+    "message_content": "I’ve been down with viral",
+    "message_type": "text",
+    "context": {
+      "session_id": "session_919110471651_Wed_Jun_18_2025",
+      "conversation_stage": "inquiry",
+      "business_intent": "photography",
+      "sentiment": "neutral"
+    },
+    "ai_response": {
+      "should_respond": true,
+      "response_type": "human_required",
+      "urgency_level": 3
+    },
+    "metadata": {
+      "raw_data": {
+        "client_name": "Benita Tejal - Ashwin-Engagement-2014146",
+        "message_type": "text",
+        "raw_data": {
+          "id": "0da23331-a6bf-41ff-a35b-5bc025c9945f",
+          "from": "919110471651",
+          "timestamp": 1750211505.584,
+          "type": "text",
+          "text": {
+            "body": "I’ve been down with viral"
+          },
+          "customer_name": "Benita Tejal - Ashwin-Engagement-2014146",
+          "interakt_data": {
+            "customer": {
+              "id": "4bf1141c-19af-44d3-8eb2-e3e24a96b40a",
+              "channel_phone_number": "919110471651",
+              "phone_number": "9110471651",
+              "country_code": "+91",
+              "traits": {
+                "name": "Benita Tejal - Ashwin-Engagement-2014146",
+                "email": "",
+                "whatsapp_opted_in": true
+              }
+            },
+            "message": {
+              "id": "0da23331-a6bf-41ff-a35b-5bc025c9945f",
+              "chat_message_type": "CustomerMessage",
+              "channel_failure_reason": null,
+              "message_status": "Sent",
+              "received_at_utc": "2025-06-18T07:21:45.584040",
+              "delivered_at_utc": null,
+              "seen_at_utc": null,
+              "campaign_id": null,
+              "is_template_message": false,
+              "raw_template": null,
+              "channel_error_code": null,
+              "message_content_type": "Text",
+              "media_url": null,
+              "message": "I’ve been down with viral",
+              "meta_data": {},
+              "source_message_id": null
+            },
+            "channel_type": "Whatsapp",
+            "is_fallback_message": false,
+            "next_fallback_channel": null
+          }
+        }
+      },
+      "client_journey_stage": "discovery",
+      "previous_interactions": 1,
+      "last_interaction": "2025-06-18T07:21:42.266Z"
+    }
+  },
+  {
+    "id": "whatsapp_1750231308132_u6hla1zuz",
+    "timestamp": "2025-06-18T07:21:48.132Z",
+    "direction": "incoming",
+    "platform": "whatsapp",
+    "client_phone": "919110471651",
+    "client_name": "Benita Tejal - Ashwin-Engagement-2014146",
+    "message_content": "Unwell",
+    "message_type": "text",
+    "context": {
+      "session_id": "session_919110471651_Wed_Jun_18_2025",
+      "conversation_stage": "inquiry",
+      "business_intent": "photography",
+      "sentiment": "neutral"
+    },
+    "ai_response": {
+      "should_respond": true,
+      "response_type": "human_required",
+      "urgency_level": 3
+    },
+    "metadata": {
+      "raw_data": {
+        "client_name": "Benita Tejal - Ashwin-Engagement-2014146",
+        "message_type": "text",
+        "raw_data": {
+          "id": "e7c0038c-a9cf-4cd4-92bf-76fc4a2833dd",
+          "from": "919110471651",
+          "timestamp": 1750211507.284,
+          "type": "text",
+          "text": {
+            "body": "Unwell"
+          },
+          "customer_name": "Benita Tejal - Ashwin-Engagement-2014146",
+          "interakt_data": {
+            "customer": {
+              "id": "4bf1141c-19af-44d3-8eb2-e3e24a96b40a",
+              "channel_phone_number": "919110471651",
+              "phone_number": "9110471651",
+              "country_code": "+91",
+              "traits": {
+                "name": "Benita Tejal - Ashwin-Engagement-2014146",
+                "email": "",
+                "whatsapp_opted_in": true
+              }
+            },
+            "message": {
+              "id": "e7c0038c-a9cf-4cd4-92bf-76fc4a2833dd",
+              "chat_message_type": "CustomerMessage",
+              "channel_failure_reason": null,
+              "message_status": "Sent",
+              "received_at_utc": "2025-06-18T07:21:47.284928",
+              "delivered_at_utc": null,
+              "seen_at_utc": null,
+              "campaign_id": null,
+              "is_template_message": false,
+              "raw_template": null,
+              "channel_error_code": null,
+              "message_content_type": "Text",
+              "media_url": null,
+              "message": "Unwell",
+              "meta_data": {},
+              "source_message_id": null
+            },
+            "channel_type": "Whatsapp",
+            "is_fallback_message": false,
+            "next_fallback_channel": null
+          }
+        }
+      },
+      "client_journey_stage": "discovery",
+      "previous_interactions": 2,
+      "last_interaction": "2025-06-18T07:21:47.816Z"
+    }
+  },
+  {
+    "id": "whatsapp_1750233147764_199g2btnc",
+    "timestamp": "2025-06-18T07:52:27.764Z",
+    "direction": "incoming",
+    "platform": "whatsapp",
+    "client_phone": "919894750951",
+    "client_name": "Kavya - Arjun - 2013631",
+    "message_content": "IF needed",
+    "message_type": "text",
+    "context": {
+      "session_id": "session_919894750951_Wed_Jun_18_2025",
+      "conversation_stage": "inquiry",
+      "business_intent": "photography",
+      "sentiment": "neutral"
+    },
+    "ai_response": {
+      "should_respond": true,
+      "response_type": "human_required",
+      "urgency_level": 3
+    },
+    "metadata": {
+      "raw_data": {
+        "client_name": "Kavya - Arjun - 2013631",
+        "message_type": "text",
+        "raw_data": {
+          "id": "2f436fc1-ec90-42f0-bfaa-736d47fed572",
+          "from": "919894750951",
+          "timestamp": 1750213346.716,
+          "type": "text",
+          "text": {
+            "body": "IF needed"
+          },
+          "customer_name": "Kavya - Arjun - 2013631",
+          "interakt_data": {
+            "customer": {
+              "id": "b193c9af-dbc9-415c-ae7b-8850fdcb25f6",
+              "channel_phone_number": "919894750951",
+              "phone_number": "9894750951",
+              "country_code": "+91",
+              "traits": {
+                "name": "Kavya - Arjun - 2013631",
+                "whatsapp_opted_in": true,
+                "source_id": null,
+                "source_url": null,
+                "email": ""
+              }
+            },
+            "message": {
+              "id": "2f436fc1-ec90-42f0-bfaa-736d47fed572",
+              "chat_message_type": "CustomerMessage",
+              "channel_failure_reason": null,
+              "message_status": "Sent",
+              "received_at_utc": "2025-06-18T07:52:26.716787",
+              "delivered_at_utc": null,
+              "seen_at_utc": null,
+              "campaign_id": null,
+              "is_template_message": false,
+              "raw_template": null,
+              "channel_error_code": null,
+              "message_content_type": "Text",
+              "media_url": null,
+              "message": "IF needed",
+              "meta_data": {},
+              "source_message_id": null
+            },
+            "channel_type": "Whatsapp",
+            "is_fallback_message": false,
+            "next_fallback_channel": null
+          }
+        }
+      },
+      "client_journey_stage": "discovery",
+      "previous_interactions": 0,
+      "last_interaction": "never"
+    }
+  },
+  {
+    "id": "whatsapp_1750233156641_igh662usl",
+    "timestamp": "2025-06-18T07:52:36.641Z",
+    "direction": "incoming",
+    "platform": "whatsapp",
+    "client_phone": "919894750951",
+    "client_name": "Kavya - Arjun - 2013631",
+    "message_content": "And I'll select pics for album asap",
+    "message_type": "text",
+    "context": {
+      "session_id": "session_919894750951_Wed_Jun_18_2025",
+      "conversation_stage": "inquiry",
+      "business_intent": "photography",
+      "sentiment": "urgent"
+    },
+    "ai_response": {
+      "should_respond": true,
+      "response_type": "human_required",
+      "urgency_level": 5
+    },
+    "metadata": {
+      "raw_data": {
+        "client_name": "Kavya - Arjun - 2013631",
+        "message_type": "text",
+        "raw_data": {
+          "id": "71112afb-aca0-42e1-97fa-3e4d1c354ef9",
+          "from": "919894750951",
+          "timestamp": 1750213355.935,
+          "type": "text",
+          "text": {
+            "body": "And I'll select pics for album asap"
+          },
+          "customer_name": "Kavya - Arjun - 2013631",
+          "interakt_data": {
+            "customer": {
+              "id": "b193c9af-dbc9-415c-ae7b-8850fdcb25f6",
+              "channel_phone_number": "919894750951",
+              "phone_number": "9894750951",
+              "country_code": "+91",
+              "traits": {
+                "name": "Kavya - Arjun - 2013631",
+                "whatsapp_opted_in": true,
+                "source_id": null,
+                "source_url": null,
+                "email": ""
+              }
+            },
+            "message": {
+              "id": "71112afb-aca0-42e1-97fa-3e4d1c354ef9",
+              "chat_message_type": "CustomerMessage",
+              "channel_failure_reason": null,
+              "message_status": "Sent",
+              "received_at_utc": "2025-06-18T07:52:35.935389",
+              "delivered_at_utc": null,
+              "seen_at_utc": null,
+              "campaign_id": null,
+              "is_template_message": false,
+              "raw_template": null,
+              "channel_error_code": null,
+              "message_content_type": "Text",
+              "media_url": null,
+              "message": "And I'll select pics for album asap",
+              "meta_data": {},
+              "source_message_id": null
+            },
+            "channel_type": "Whatsapp",
+            "is_fallback_message": false,
+            "next_fallback_channel": null
+          }
+        }
+      },
+      "client_journey_stage": "discovery",
+      "previous_interactions": 1,
+      "last_interaction": "2025-06-18T07:52:27.764Z"
+    }
+  },
+  {
+    "id": "whatsapp_1750235577553_1ot9xemti",
+    "timestamp": "2025-06-18T08:32:57.553Z",
+    "direction": "incoming",
+    "platform": "whatsapp",
+    "client_phone": "919894750951",
+    "client_name": "Kavya - Arjun - 2013631",
+    "message_content": "Let me recheck again",
+    "message_type": "text",
+    "context": {
+      "session_id": "session_919894750951_Wed_Jun_18_2025",
+      "conversation_stage": "inquiry",
+      "business_intent": "photography",
+      "sentiment": "neutral"
+    },
+    "ai_response": {
+      "should_respond": true,
+      "response_type": "human_required",
+      "urgency_level": 3
+    },
+    "metadata": {
+      "raw_data": {
+        "client_name": "Kavya - Arjun - 2013631",
+        "message_type": "text",
+        "raw_data": {
+          "id": "6037b6d9-ed1d-48df-8e4f-ef4c39482c33",
+          "from": "919894750951",
+          "timestamp": 1750215775.802,
+          "type": "text",
+          "text": {
+            "body": "Let me recheck again"
+          },
+          "customer_name": "Kavya - Arjun - 2013631",
+          "interakt_data": {
+            "customer": {
+              "id": "b193c9af-dbc9-415c-ae7b-8850fdcb25f6",
+              "channel_phone_number": "919894750951",
+              "phone_number": "9894750951",
+              "country_code": "+91",
+              "traits": {
+                "name": "Kavya - Arjun - 2013631",
+                "whatsapp_opted_in": true,
+                "source_id": null,
+                "source_url": null,
+                "email": ""
+              }
+            },
+            "message": {
+              "id": "6037b6d9-ed1d-48df-8e4f-ef4c39482c33",
+              "chat_message_type": "CustomerMessage",
+              "channel_failure_reason": null,
+              "message_status": "Sent",
+              "received_at_utc": "2025-06-18T08:32:55.802258",
+              "delivered_at_utc": null,
+              "seen_at_utc": null,
+              "campaign_id": null,
+              "is_template_message": false,
+              "raw_template": null,
+              "channel_error_code": null,
+              "message_content_type": "Text",
+              "media_url": null,
+              "message": "Let me recheck again",
+              "meta_data": {},
+              "source_message_id": null
+            },
+            "channel_type": "Whatsapp",
+            "is_fallback_message": false,
+            "next_fallback_channel": null
+          }
+        }
+      },
+      "client_journey_stage": "discovery",
+      "previous_interactions": 2,
+      "last_interaction": "2025-06-18T07:52:36.641Z"
+    }
+  },
+  {
+    "id": "whatsapp_1750235950004_th21qopx2",
+    "timestamp": "2025-06-18T08:39:10.004Z",
+    "direction": "incoming",
+    "platform": "whatsapp",
+    "client_phone": "919591007872",
+    "client_name": "jakaraypujari804",
+    "message_content": "Hii",
+    "message_type": "text",
+    "context": {
+      "session_id": "session_919591007872_Wed_Jun_18_2025",
+      "conversation_stage": "inquiry",
+      "business_intent": "photography",
+      "sentiment": "neutral"
+    },
+    "ai_response": {
+      "should_respond": true,
+      "response_type": "human_required",
+      "urgency_level": 3
+    },
+    "metadata": {
+      "raw_data": {
+        "client_name": "jakaraypujari804",
+        "message_type": "text",
+        "raw_data": {
+          "id": "5251ebcc-0888-4e4f-8b54-70179630c75f",
+          "from": "919591007872",
+          "timestamp": 1750216149.252,
+          "type": "text",
+          "text": {
+            "body": "Hii"
+          },
+          "customer_name": "jakaraypujari804",
+          "interakt_data": {
+            "customer": {
+              "id": "a8f6a055-6f03-42f1-81d4-0c0c6dae0da3",
+              "channel_phone_number": "919591007872",
+              "phone_number": "9591007872",
+              "country_code": "+91",
+              "traits": {
+                "name": "jakaraypujari804",
+                "whatsapp_opted_in": true,
+                "source_id": "120229358514750316",
+                "source_url": "https://www.instagram.com/p/DKf63xggsqW/",
+                "_internal_lead_source": "Whatsapp",
+                "country_code": "+91"
+              }
+            },
+            "message": {
+              "id": "5251ebcc-0888-4e4f-8b54-70179630c75f",
+              "chat_message_type": "CustomerMessage",
+              "channel_failure_reason": null,
+              "message_status": "Sent",
+              "received_at_utc": "2025-06-18T08:39:09.252381",
+              "delivered_at_utc": null,
+              "seen_at_utc": null,
+              "campaign_id": null,
+              "is_template_message": false,
+              "raw_template": null,
+              "channel_error_code": null,
+              "message_content_type": "Text",
+              "media_url": null,
+              "message": "Hii",
+              "meta_data": {},
+              "source_message_id": null
+            },
+            "channel_type": "Whatsapp",
+            "is_fallback_message": false,
+            "next_fallback_channel": null
+          }
+        }
+      },
+      "client_journey_stage": "discovery",
+      "previous_interactions": 0,
+      "last_interaction": "never"
+    }
+  },
+  {
+    "id": "whatsapp_1750236238610_rdf4idovv",
+    "timestamp": "2025-06-18T08:43:58.610Z",
+    "direction": "incoming",
+    "platform": "whatsapp",
+    "client_phone": "919947082612",
+    "client_name": "❤️‍🩹",
+    "message_content": "Hy",
+    "message_type": "text",
+    "context": {
+      "session_id": "session_919947082612_Wed_Jun_18_2025",
+      "conversation_stage": "inquiry",
+      "business_intent": "photography",
+      "sentiment": "neutral"
+    },
+    "ai_response": {
+      "should_respond": true,
+      "response_type": "human_required",
+      "urgency_level": 3
+    },
+    "metadata": {
+      "raw_data": {
+        "client_name": "❤️‍🩹",
+        "message_type": "text",
+        "raw_data": {
+          "id": "30861a46-3dc1-4e25-aa91-84456d88a1e9",
+          "from": "919947082612",
+          "timestamp": 1750216436.072,
+          "type": "text",
+          "text": {
+            "body": "Hy"
+          },
+          "customer_name": "❤️‍🩹",
+          "interakt_data": {
+            "customer": {
+              "id": "d8e4e9c2-c5d6-4952-9807-9a4484cf3edf",
+              "channel_phone_number": "919947082612",
+              "phone_number": "9947082612",
+              "country_code": "+91",
+              "traits": {
+                "name": "❤️‍🩹",
+                "whatsapp_opted_in": true,
+                "source_id": null,
+                "source_url": null,
+                "_internal_lead_source": "Whatsapp",
+                "country_code": "+91"
+              }
+            },
+            "message": {
+              "id": "30861a46-3dc1-4e25-aa91-84456d88a1e9",
+              "chat_message_type": "CustomerMessage",
+              "channel_failure_reason": null,
+              "message_status": "Sent",
+              "received_at_utc": "2025-06-18T08:43:56.072287",
+              "delivered_at_utc": null,
+              "seen_at_utc": null,
+              "campaign_id": null,
+              "is_template_message": false,
+              "raw_template": null,
+              "channel_error_code": null,
+              "message_content_type": "Text",
+              "media_url": null,
+              "message": "Hy",
+              "meta_data": {},
+              "source_message_id": null
+            },
+            "channel_type": "Whatsapp",
+            "is_fallback_message": false,
+            "next_fallback_channel": null
+          }
+        }
+      },
+      "client_journey_stage": "discovery",
+      "previous_interactions": 0,
+      "last_interaction": "never"
+    }
+  },
+  {
+    "id": "whatsapp_1750236247291_swvdti0bk",
+    "timestamp": "2025-06-18T08:44:07.291Z",
+    "direction": "incoming",
+    "platform": "whatsapp",
+    "client_phone": "919947082612",
+    "client_name": "❤️‍🩹",
+    "message_content": "None",
+    "message_type": "text",
+    "context": {
+      "session_id": "session_919947082612_Wed_Jun_18_2025",
+      "conversation_stage": "inquiry",
+      "business_intent": "photography",
+      "sentiment": "neutral"
+    },
+    "ai_response": {
+      "should_respond": true,
+      "response_type": "human_required",
+      "urgency_level": 3
+    },
+    "metadata": {
+      "raw_data": {
+        "client_name": "❤️‍🩹",
+        "message_type": "text",
+        "raw_data": {
+          "id": "7261d1fd-c995-4166-9ac4-7069845e4fde",
+          "from": "919947082612",
+          "timestamp": 1750216444.485,
+          "type": "text",
+          "text": {
+            "body": "None"
+          },
+          "customer_name": "❤️‍🩹",
+          "interakt_data": {
+            "customer": {
+              "id": "d8e4e9c2-c5d6-4952-9807-9a4484cf3edf",
+              "channel_phone_number": "919947082612",
+              "phone_number": "9947082612",
+              "country_code": "+91",
+              "traits": {
+                "name": "❤️‍🩹",
+                "whatsapp_opted_in": true,
+                "source_id": null,
+                "source_url": null,
+                "_internal_lead_source": "Whatsapp",
+                "country_code": "+91"
+              }
+            },
+            "message": {
+              "id": "7261d1fd-c995-4166-9ac4-7069845e4fde",
+              "chat_message_type": "CustomerMessage",
+              "channel_failure_reason": null,
+              "message_status": "Sent",
+              "received_at_utc": "2025-06-18T08:44:04.485359",
+              "delivered_at_utc": null,
+              "seen_at_utc": null,
+              "campaign_id": null,
+              "is_template_message": false,
+              "raw_template": null,
+              "channel_error_code": null,
+              "message_content_type": "Document",
+              "media_url": "https://interaktprodmediastorage.blob.core.windows.net/mediaprodstoragecontainer/236ad4be-48f0-4bfb-ad99-6eba56b0a41f/inbox_customer_to_agent/qoUKlhvlvGuo/KHOUYtZpqSTd.pdf?se=2030-06-12T08%3A44%3A06Z&sp=r&sv=2022-11-02&sr=b&sig=CNS7wHucL7Pi3jYa0QxR/CB4%2BDvNvfbM1waWOMmkEUE%3D",
+              "message": "None",
+              "meta_data": {},
+              "source_message_id": null
+            },
+            "channel_type": "Whatsapp",
+            "is_fallback_message": false,
+            "next_fallback_channel": null
+          }
+        }
+      },
+      "client_journey_stage": "discovery",
+      "previous_interactions": 1,
+      "last_interaction": "2025-06-18T08:43:58.610Z"
+    }
+  },
+  {
+    "id": "whatsapp_1750236287555_2h5qpv0ip",
+    "timestamp": "2025-06-18T08:44:47.555Z",
+    "direction": "incoming",
+    "platform": "whatsapp",
+    "client_phone": "919947082612",
+    "client_name": "❤️‍🩹",
+    "message_content": "None",
+    "message_type": "text",
+    "context": {
+      "session_id": "session_919947082612_Wed_Jun_18_2025",
+      "conversation_stage": "inquiry",
+      "business_intent": "photography",
+      "sentiment": "neutral"
+    },
+    "ai_response": {
+      "should_respond": true,
+      "response_type": "human_required",
+      "urgency_level": 3
+    },
+    "metadata": {
+      "raw_data": {
+        "client_name": "❤️‍🩹",
+        "message_type": "text",
+        "raw_data": {
+          "id": "05bfa689-8ce9-49bc-923a-41cb1ba23fca",
+          "from": "919947082612",
+          "timestamp": 1750216484.625,
+          "type": "text",
+          "text": {
+            "body": "None"
+          },
+          "customer_name": "❤️‍🩹",
+          "interakt_data": {
+            "customer": {
+              "id": "d8e4e9c2-c5d6-4952-9807-9a4484cf3edf",
+              "channel_phone_number": "919947082612",
+              "phone_number": "9947082612",
+              "country_code": "+91",
+              "traits": {
+                "name": "❤️‍🩹",
+                "whatsapp_opted_in": true,
+                "source_id": null,
+                "source_url": null,
+                "_internal_lead_source": "Whatsapp",
+                "country_code": "+91"
+              }
+            },
+            "message": {
+              "id": "05bfa689-8ce9-49bc-923a-41cb1ba23fca",
+              "chat_message_type": "CustomerMessage",
+              "channel_failure_reason": null,
+              "message_status": "Sent",
+              "received_at_utc": "2025-06-18T08:44:44.625919",
+              "delivered_at_utc": null,
+              "seen_at_utc": null,
+              "campaign_id": null,
+              "is_template_message": false,
+              "raw_template": null,
+              "channel_error_code": null,
+              "message_content_type": "Image",
+              "media_url": "https://interaktprodmediastorage.blob.core.windows.net/mediaprodstoragecontainer/236ad4be-48f0-4bfb-ad99-6eba56b0a41f/inbox_customer_to_agent/KTwXhGIvKJRB/tISqlWpmCzof.jpeg?se=2030-06-12T08%3A44%3A46Z&sp=r&sv=2022-11-02&sr=b&sig=rC3ul/Pdu8hi5ZDPqXzMIU1Xh93i5vkdwbPKRgAuupU%3D",
+              "message": "None",
+              "meta_data": {},
+              "source_message_id": null
+            },
+            "channel_type": "Whatsapp",
+            "is_fallback_message": false,
+            "next_fallback_channel": null
+          }
+        }
+      },
+      "client_journey_stage": "discovery",
+      "previous_interactions": 0,
+      "last_interaction": "never"
+    }
+  },
+  {
+    "id": "whatsapp_1750269223329_4lxbum3th",
+    "timestamp": "2025-06-18T17:53:43.329Z",
+    "direction": "incoming",
+    "platform": "whatsapp",
+    "client_phone": "919176323160",
+    "client_name": "Nishanth Kanna",
+    "message_content": "Engagement on July 3rd at Annalakshmi restaurant",
+    "message_type": "text",
+    "context": {
+      "session_id": "session_919176323160_Wed_Jun_18_2025",
+      "conversation_stage": "inquiry",
+      "business_intent": "photography",
+      "sentiment": "neutral"
+    },
+    "ai_response": {
+      "should_respond": true,
+      "response_type": "human_required",
+      "urgency_level": 3
+    },
+    "metadata": {
+      "raw_data": {
+        "client_name": "Nishanth Kanna",
+        "message_type": "text",
+        "raw_data": {
+          "id": "2b051297-6180-4bca-918e-b69bdf873f38",
+          "from": "919176323160",
+          "timestamp": 1750249422.5,
+          "type": "text",
+          "text": {
+            "body": "Engagement on July 3rd at Annalakshmi restaurant"
+          },
+          "customer_name": "Nishanth Kanna",
+          "interakt_data": {
+            "customer": {
+              "id": "73797a84-5c4d-4ee8-a7de-28d38f856459",
+              "channel_phone_number": "919176323160",
+              "phone_number": "9176323160",
+              "country_code": "+91",
+              "traits": {
+                "name": "Nishanth Kanna",
+                "whatsapp_opted_in": true,
+                "source_id": "120229379383060316",
+                "source_url": "https://www.instagram.com/p/DD83zaLAT2t/",
+                "_internal_lead_source": "Whatsapp",
+                "ctwa_clid": "AfcP66iIiXMjpSVDU5Lt_KMVY-U7PwgDw_X89ixXlvzb67bil3shaZLF1UmTvB2mZUqKn7zeQSuCr5aWxxBNfEjVEmKVF2YeEfE60q5PgRTkbJcIa8-YHJS9io3170Si7OMYGxVHbQ",
+                "country_code": "+91"
+              }
+            },
+            "message": {
+              "id": "2b051297-6180-4bca-918e-b69bdf873f38",
+              "chat_message_type": "CustomerMessage",
+              "channel_failure_reason": null,
+              "message_status": "Sent",
+              "received_at_utc": "2025-06-18T17:53:42.500307",
+              "delivered_at_utc": null,
+              "seen_at_utc": null,
+              "campaign_id": null,
+              "is_template_message": false,
+              "raw_template": null,
+              "channel_error_code": null,
+              "message_content_type": "Text",
+              "media_url": null,
+              "message": "Engagement on July 3rd at Annalakshmi restaurant",
+              "meta_data": {},
+              "source_message_id": null
+            },
+            "channel_type": "Whatsapp",
+            "is_fallback_message": false,
+            "next_fallback_channel": null
+          }
+        }
+      },
+      "client_journey_stage": "discovery",
+      "previous_interactions": 0,
+      "last_interaction": "never"
+    }
+  },
+  {
+    "id": "whatsapp_1750270139701_60ncd9kmo",
+    "timestamp": "2025-06-18T18:08:59.701Z",
+    "direction": "incoming",
+    "platform": "whatsapp",
+    "client_phone": "918778320989",
+    "client_name": "Priyanka",
+    "message_content": "Muhurtham only",
+    "message_type": "text",
+    "context": {
+      "session_id": "session_918778320989_Wed_Jun_18_2025",
+      "conversation_stage": "inquiry",
+      "business_intent": "photography",
+      "sentiment": "neutral"
+    },
+    "ai_response": {
+      "should_respond": true,
+      "response_type": "human_required",
+      "urgency_level": 3
+    },
+    "metadata": {
+      "raw_data": {
+        "client_name": "Priyanka",
+        "message_type": "text",
+        "raw_data": {
+          "id": "c94ac3d5-fe28-4a23-9222-400120e07a17",
+          "from": "918778320989",
+          "timestamp": 1750250339.292,
+          "type": "text",
+          "text": {
+            "body": "Muhurtham only"
+          },
+          "customer_name": "Priyanka",
+          "interakt_data": {
+            "customer": {
+              "id": "0c0f8fa6-7e29-490b-a4ec-e409164fc58d",
+              "channel_phone_number": "918778320989",
+              "phone_number": "8778320989",
+              "country_code": "+91",
+              "traits": {
+                "name": "Priyanka",
+                "whatsapp_opted_in": true,
+                "source_id": "120228144630060316",
+                "source_url": "https://www.instagram.com/p/DIqHPZdA78t/",
+                "_internal_lead_source": "Whatsapp",
+                "ctwa_clid": "AfdiZ4tsbVnDDy4tU3Guaz7iijI-TgbMy49Q-j0MUZ0sAV0jPxe9uUOULlorNfIwDMxnYk8cwmE8rBEyR1hJSv9tWROvn4ccsLTq7sdjtXubLNsT_YsdZ_a9VXZKTEG_95qX213gFmKW"
+              }
+            },
+            "message": {
+              "id": "c94ac3d5-fe28-4a23-9222-400120e07a17",
+              "chat_message_type": "CustomerMessage",
+              "channel_failure_reason": null,
+              "message_status": "Sent",
+              "received_at_utc": "2025-06-18T18:08:59.292552",
+              "delivered_at_utc": null,
+              "seen_at_utc": null,
+              "campaign_id": null,
+              "is_template_message": false,
+              "raw_template": null,
+              "channel_error_code": null,
+              "message_content_type": "Text",
+              "media_url": null,
+              "message": "Muhurtham only",
+              "meta_data": {},
+              "source_message_id": null
+            },
+            "channel_type": "Whatsapp",
+            "is_fallback_message": false,
+            "next_fallback_channel": null
+          }
+        }
+      },
+      "client_journey_stage": "discovery",
+      "previous_interactions": 0,
+      "last_interaction": "never"
+    }
+  }
+]

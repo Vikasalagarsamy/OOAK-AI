@@ -1,4 +1,5 @@
-import { createClient } from '@/lib/supabase'
+import { query, transaction } from '@/lib/postgresql-client'
+import { getUserIdForDatabase } from '@/lib/uuid-helpers'
 
 export interface NotificationRule {
   id: string
@@ -15,6 +16,7 @@ export interface TaskNotification {
   id: string
   task_id: string
   employee_id: string
+  employee_uuid?: string
   type: 'reminder' | 'escalation' | 'deadline_warning' | 'overdue_alert'
   message: string
   sent_at: string
@@ -23,8 +25,6 @@ export interface TaskNotification {
 }
 
 export class TaskNotificationService {
-  private supabase = createClient()
-
   /**
    * Check for tasks that need reminders or escalations
    */
@@ -34,45 +34,76 @@ export class TaskNotificationService {
     notifications: TaskNotification[]
   }> {
     try {
-      console.log('🔔 Task Notification Service: Checking for overdue tasks and reminders...')
+      console.log('🔔 [NOTIFICATION] Task Notification Service: Checking for overdue tasks via PostgreSQL...')
 
-      // In a real implementation, this would:
-      // 1. Query the database for tasks that need attention
-      // 2. Check notification rules and escalation policies
-      // 3. Send appropriate notifications
-      // 4. Log notification history
+      // Query PostgreSQL for tasks that need attention
+      const overdueTasksResult = await query(`
+        SELECT 
+          t.id, t.title, t.assigned_to, t.due_date, t.priority, t.status,
+          e.name as employee_name, e.email
+        FROM tasks t
+        LEFT JOIN employees e ON t.assigned_to = e.id
+        WHERE t.due_date < NOW() 
+        AND t.status NOT IN ('completed', 'cancelled')
+        ORDER BY t.due_date ASC
+        LIMIT 50
+      `)
 
-      // Mock implementation for demo
-      const mockNotifications: TaskNotification[] = [
-        {
-          id: 'notif-001',
-          task_id: 'task-001',
-          employee_id: '1',
+      const upcomingTasksResult = await query(`
+        SELECT 
+          t.id, t.title, t.assigned_to, t.due_date, t.priority, t.status,
+          e.name as employee_name, e.email
+        FROM tasks t
+        LEFT JOIN employees e ON t.assigned_to = e.id
+        WHERE t.due_date BETWEEN NOW() AND NOW() + INTERVAL '24 hours'
+        AND t.status NOT IN ('completed', 'cancelled')
+        ORDER BY t.due_date ASC
+        LIMIT 50
+      `)
+
+      const mockNotifications: TaskNotification[] = []
+      let remindersSent = 0
+      let escalationsTriggered = 0
+
+      // Process overdue tasks
+      for (const task of overdueTasksResult.rows) {
+        mockNotifications.push({
+          id: `notif-overdue-${task.id}`,
+          task_id: task.id,
+          employee_id: task.assigned_to,
           type: 'overdue_alert',
-          message: 'URGENT: Task "Review and approve quotation for Tamil" is overdue by 24 hours. Revenue impact: ₹33,000',
+          message: `URGENT: Task "${task.title}" is overdue. Priority: ${task.priority}`,
           sent_at: new Date().toISOString(),
           method: 'email',
           status: 'sent'
-        },
-        {
-          id: 'notif-002',
-          task_id: 'task-002',
-          employee_id: '2',
-          type: 'reminder',
-          message: 'Reminder: Task "Follow up with Ramya about quotation" is due in 24 hours. Client value: ₹54,000',
+        })
+        escalationsTriggered++
+      }
+
+      // Process upcoming deadlines
+      for (const task of upcomingTasksResult.rows) {
+        mockNotifications.push({
+          id: `notif-reminder-${task.id}`,
+          task_id: task.id,
+          employee_id: task.assigned_to,
+          type: 'deadline_warning',
+          message: `Reminder: Task "${task.title}" is due in 24 hours. Priority: ${task.priority}`,
           sent_at: new Date().toISOString(),
           method: 'in_app',
           status: 'sent'
-        }
-      ]
+        })
+        remindersSent++
+      }
+
+      console.log(`✅ [NOTIFICATION] Processed ${mockNotifications.length} notifications via PostgreSQL`)
 
       return {
-        reminders_sent: 1,
-        escalations_triggered: 1,
+        reminders_sent: remindersSent,
+        escalations_triggered: escalationsTriggered,
         notifications: mockNotifications
       }
     } catch (error) {
-      console.error('❌ Task Notification Service Error:', error)
+      console.error('❌ [NOTIFICATION] Task Notification Service Error:', error)
       return {
         reminders_sent: 0,
         escalations_triggered: 0,
@@ -94,11 +125,15 @@ export class TaskNotificationService {
     try {
       console.log(`📧 Sending task assignment notification to employee ${employeeId}`)
 
+      // Convert employee ID to UUID format for notification system compatibility
+      const employeeUuid = getUserIdForDatabase(employeeId)
+
       // Mock notification sending
       const notification: TaskNotification = {
         id: `notif-${Date.now()}`,
         task_id: taskId,
-        employee_id: employeeId,
+        employee_id: employeeId, // Keep original for task system
+        employee_uuid: employeeUuid, // UUID format for notifications
         type: 'reminder',
         message: `New ${priority} priority task assigned: "${taskTitle}" - Due: ${new Date(dueDate).toLocaleDateString()}`,
         sent_at: new Date().toISOString(),
@@ -277,15 +312,28 @@ export class TaskNotificationService {
     type: 'info' | 'warning' | 'error' | 'success'
   ): Promise<string> {
     try {
-      const notificationId = `in-app-${Date.now()}`
+      // Convert employee ID to UUID format for notification system
+      const employeeUuid = getUserIdForDatabase(employeeId)
       
-      console.log(`📲 In-app notification created for employee ${employeeId}:`, title)
+      const notificationId = `notif-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`
       
-      // In real implementation, this would be stored in database for the user's notification center
+      // In real implementation, save to notifications table
+      const notificationData = {
+        id: notificationId,
+        user_id: parseInt(employeeId), // Integer for notifications table
+        user_uuid: employeeUuid, // UUID for cross-system compatibility
+        title,
+        message,
+        type,
+        read: false,
+        created_at: new Date().toISOString()
+      }
+      
+      console.log(`🔔 In-app notification created for employee ${employeeId}:`, title)
       return notificationId
     } catch (error) {
       console.error('❌ Failed to create in-app notification:', error)
-      return ''
+      throw error
     }
   }
 

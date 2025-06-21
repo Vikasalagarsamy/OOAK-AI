@@ -1,5 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { MenuPermissionsDebugger } from "@/components/admin/menu-permissions-debugger"
+import { MenuPermissionsDebugger } from "@/components/menu-system/menu-permissions-debugger"
 
 export default function DebugMenuPermissionsPage() {
   return (

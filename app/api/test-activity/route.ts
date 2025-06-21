@@ -1,3 +1,4 @@
+import { createClient } from '@/lib/postgresql-client'
 import { createTestActivity } from "@/utils/test-activity"
 import { NextResponse } from "next/server"
 

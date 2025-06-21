@@ -132,32 +132,18 @@ END $$;
 -- 9. Create view for workflow analytics
 CREATE OR REPLACE VIEW quotation_workflow_analytics AS
 SELECT 
-  q.id,
-  q.client_name,
-  q.bride_name,
-  q.groom_name,
-  q.email,
-  q.mobile,
-  q.total_amount,
-  q.workflow_status,
-  q.created_at as quotation_created,
-  q.client_verbal_confirmation_date,
-  q.payment_received_date,
-  q.payment_amount,
-  qa.approval_date,
-  qa.approver_user_id,
-  qa.approval_status,
-  psc.confirmation_date,
-  psc.confirmed_by_user_id,
-  psc.confirmation_method,
-  -- Calculate time spent in each stage
-  EXTRACT(EPOCH FROM (COALESCE(q.client_verbal_confirmation_date, CURRENT_TIMESTAMP) - q.created_at))/86400 as days_to_client_confirmation,
-  EXTRACT(EPOCH FROM (COALESCE(qa.approval_date, CURRENT_TIMESTAMP) - COALESCE(q.client_verbal_confirmation_date, q.created_at)))/86400 as days_to_approval,
-  EXTRACT(EPOCH FROM (COALESCE(q.payment_received_date, CURRENT_TIMESTAMP) - COALESCE(qa.approval_date, q.created_at)))/86400 as days_to_payment,
-  EXTRACT(EPOCH FROM (COALESCE(psc.confirmation_date, CURRENT_TIMESTAMP) - COALESCE(q.payment_received_date, q.created_at)))/86400 as days_to_confirmation
+    q.quotation_number,
+    q.client_name,
+    q.total_amount,
+    q.status as quotation_status,
+    qa.approval_status,
+    qa.created_at as submitted_at,
+    qa.approval_date,
+    qa.comments,
+    EXTRACT(EPOCH FROM (qa.approval_date - qa.created_at))/3600 as approval_time_hours
 FROM quotations q
 LEFT JOIN quotation_approvals qa ON q.id = qa.quotation_id
-LEFT JOIN post_sale_confirmations psc ON q.id = psc.quotation_id;
+ORDER BY q.created_at DESC;
 
 -- 10. Insert sample workflow statuses for existing quotations (optional migration)
 -- Uncomment the line below if you want to set existing quotations to 'pending_client_confirmation'
@@ -165,4 +151,139 @@ LEFT JOIN post_sale_confirmations psc ON q.id = psc.quotation_id;
 
 COMMENT ON TABLE quotation_approvals IS 'Tracks approval workflow for quotations including Sales Head approvals';
 COMMENT ON TABLE post_sale_confirmations IS 'Tracks post-sale confirmation calls and client verification';
-COMMENT ON VIEW quotation_workflow_analytics IS 'Analytics view for quotation workflow performance metrics'; 
+COMMENT ON VIEW quotation_workflow_analytics IS 'Analytics view for quotation workflow performance metrics';
+
+-- ============================
+-- 🔧 DATA SYNCHRONIZATION TRIGGERS
+-- ============================
+
+-- Create function to sync quotation updates to related tasks
+CREATE OR REPLACE FUNCTION sync_quotation_to_tasks()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Update all tasks linked to this quotation with the new values
+    UPDATE ai_tasks 
+    SET 
+        estimated_value = NEW.total_amount,
+        client_name = NEW.client_name,
+        updated_at = NOW()
+    WHERE quotation_id = NEW.id;
+    
+    -- Log the sync operation
+    INSERT INTO sync_log (table_name, record_id, operation, details)
+    VALUES (
+        'quotations', 
+        NEW.id, 
+        'task_sync', 
+        format('Synced quotation %s (₹%s) to %s tasks', 
+               NEW.quotation_number, 
+               NEW.total_amount, 
+               (SELECT COUNT(*) FROM ai_tasks WHERE quotation_id = NEW.id)
+        )
+    ) ON CONFLICT DO NOTHING;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger for quotation updates
+DROP TRIGGER IF EXISTS trigger_sync_quotation_to_tasks ON quotations;
+CREATE TRIGGER trigger_sync_quotation_to_tasks
+    AFTER UPDATE ON quotations
+    FOR EACH ROW
+    WHEN (OLD.total_amount IS DISTINCT FROM NEW.total_amount OR OLD.client_name IS DISTINCT FROM NEW.client_name)
+    EXECUTE FUNCTION sync_quotation_to_tasks();
+
+-- Create sync log table (if not exists)
+CREATE TABLE IF NOT EXISTS sync_log (
+    id SERIAL PRIMARY KEY,
+    table_name VARCHAR(50) NOT NULL,
+    record_id INTEGER NOT NULL,
+    operation VARCHAR(50) NOT NULL,
+    details TEXT,
+    created_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(table_name, record_id, operation, created_at)
+);
+
+-- ============================
+-- 🎯 ROLE-BASED TASK ASSIGNMENT FUNCTION
+-- ============================
+
+-- Create function to ensure proper task assignment
+CREATE OR REPLACE FUNCTION ensure_proper_task_assignment()
+RETURNS TRIGGER AS $$
+DECLARE
+    sales_head_id INTEGER;
+BEGIN
+    -- For quotation approval tasks, ensure they're assigned to Sales Head only
+    IF NEW.task_type = 'quotation_approval' THEN
+        -- Find Sales Head employee ID
+        SELECT id INTO sales_head_id
+        FROM employees e
+        JOIN roles r ON e.role_id = r.id
+        WHERE r.role_name ILIKE '%sales head%'
+        LIMIT 1;
+        
+        IF sales_head_id IS NOT NULL THEN
+            NEW.assigned_to_employee_id = sales_head_id;
+        ELSE
+            -- Log warning if no Sales Head found
+            INSERT INTO sync_log (table_name, record_id, operation, details)
+            VALUES (
+                'ai_tasks', 
+                NEW.id, 
+                'assignment_warning', 
+                'No Sales Head found for quotation approval task assignment'
+            ) ON CONFLICT DO NOTHING;
+        END IF;
+    END IF;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger for task assignment enforcement
+DROP TRIGGER IF EXISTS trigger_ensure_proper_task_assignment ON ai_tasks;
+CREATE TRIGGER trigger_ensure_proper_task_assignment
+    BEFORE INSERT OR UPDATE ON ai_tasks
+    FOR EACH ROW
+    WHEN (NEW.task_type = 'quotation_approval')
+    EXECUTE FUNCTION ensure_proper_task_assignment();
+
+-- ============================
+-- 🔄 FIX EXISTING DATA INCONSISTENCIES
+-- ============================
+
+-- Sync existing quotation values to related tasks
+UPDATE ai_tasks 
+SET 
+    estimated_value = q.total_amount,
+    client_name = q.client_name,
+    updated_at = NOW()
+FROM quotations q 
+WHERE ai_tasks.quotation_id = q.id 
+  AND (ai_tasks.estimated_value != q.total_amount OR ai_tasks.client_name != q.client_name);
+
+-- Reassign existing quotation approval tasks to Sales Head
+UPDATE ai_tasks 
+SET assigned_to_employee_id = (
+    SELECT e.id 
+    FROM employees e 
+    JOIN roles r ON e.role_id = r.id 
+    WHERE r.role_name ILIKE '%sales head%' 
+    LIMIT 1
+)
+WHERE task_type = 'quotation_approval' 
+  AND assigned_to_employee_id != (
+      SELECT e.id 
+      FROM employees e 
+      JOIN roles r ON e.role_id = r.id 
+      WHERE r.role_name ILIKE '%sales head%' 
+      LIMIT 1
+  );
+
+-- ============================
+-- 🎉 SETUP COMPLETE!
+-- ============================
+
+SELECT 'Enhanced Quotation Workflow with Data Sync Setup Complete! 🎉' as status; 

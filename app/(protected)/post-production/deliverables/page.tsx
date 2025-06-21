@@ -1,234 +1,63 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
-import { format } from "date-fns"
-import {
-  Plus,
-  Search,
-  Filter,
-  Edit,
-  Trash2,
-  Upload,
-  Settings,
-  Package,
-  Clock,
-  Users,
-  CheckCircle,
-  XCircle,
-  PlayCircle,
-  ArrowUpRight,
-  ArrowDownRight,
-  User,
-  UserCheck,
-  Building,
-} from "lucide-react"
-
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Checkbox } from "@/components/ui/checkbox"
+import { Badge } from "@/components/ui/badge"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Plus, MoreHorizontal, Edit, Trash2, Package, FileText, Camera, Video } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
-
-import {
-  getDeliverables,
-  createDeliverable,
-  updateDeliverable,
-  deleteDeliverable,
-  getServicePackages,
-  bulkImportDeliverables,
-  getEmployees,
-  getDeliverableCategories,
-  getDeliverableTypes,
-  getDeliverableNames,
-  getFilteredDeliverableNames,
-} from "@/actions/deliverables-actions"
+import { Checkbox } from "@/components/ui/checkbox"
+import { 
+  getDeliverableCatalogSummary,
+  createDeliverableCatalog,
+  updateDeliverableCatalog,
+  deleteDeliverableCatalog
+} from "@/actions/deliverable-catalog-actions"
 import type { 
-  Deliverable, 
-  DeliverableFormData, 
-  DeliverableFilters, 
-  ServicePackage,
-  PackageType
-} from "@/types/deliverables"
+  DeliverableCatalogSummary,
+  DeliverableCatalogFormData
+} from "@/types/deliverable-catalog"
 
-const CATEGORY_COLORS = {
-  Main: "bg-blue-100 text-blue-800",
-  Optional: "bg-purple-100 text-purple-800",
-}
-
-const TYPE_COLORS = {
-  Photo: "bg-green-100 text-green-800",
-  Video: "bg-orange-100 text-orange-800",
-}
-
-const STATUS_COLORS: Record<number, string> = {
-  1: "bg-green-100 text-green-800",
-  0: "bg-red-100 text-red-800",
-}
-
-const TIMING_ICONS = {
-  days: "📅",
-  hr: "⏰",
-  min: "⏱️",
-}
-
-const PACKAGE_COLORS = {
-  basic: "bg-gray-100 text-gray-800",
-  premium: "bg-yellow-100 text-yellow-800",
-  elite: "bg-red-100 text-red-800",
-}
-
-export default function DeliverablesPage() {
-  const [deliverables, setDeliverables] = useState<Deliverable[]>([])
-  const [filteredDeliverables, setFilteredDeliverables] = useState<Deliverable[]>([])
-  const [packages, setPackages] = useState<ServicePackage[]>([])
-  const [employees, setEmployees] = useState<{ id: number; name: string; department?: string }[]>([])
-  const [categories, setCategories] = useState<string[]>(["Main", "Optional"])
-  const [types, setTypes] = useState<string[]>(["Photo", "Video"])
-  const [availableDeliverableNames, setAvailableDeliverableNames] = useState<{ id: number; name: string; category: string; type: string }[]>([])
-  const [loading, setLoading] = useState(true)
+export default function DeliverablePage() {
+  const [deliverables, setDeliverables] = useState<DeliverableCatalogSummary[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
-  const [categoryFilter, setCategoryFilter] = useState<string>("all")
-  const [typeFilter, setTypeFilter] = useState<string>("all")
-  const [packageFilter, setPackageFilter] = useState<string>("all")
-  const [selectedDeliverable, setSelectedDeliverable] = useState<Deliverable | null>(null)
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+  const [selectedCategory, setSelectedCategory] = useState<string>("all")
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState("all")
+  const [editingDeliverable, setEditingDeliverable] = useState<DeliverableCatalogSummary | null>(null)
 
   // Form state
-  const [formData, setFormData] = useState<DeliverableFormData>({
-    deliverable_cat: "Main",
-    deliverable_type: "Photo",
-    deliverable_id: undefined,
+  const [formData, setFormData] = useState<DeliverableCatalogFormData>({
     deliverable_name: "",
-    process_name: "",
-    has_customer: false,
-    has_employee: false,
-    has_qc: false,
-    has_vendor: false,
-    sort_order: 0,
-    timing_type: "days",
-    skippable: false,
-    has_download_option: false,
-    has_task_process: true,
-    has_upload_folder_path: false,
-    process_starts_from: 0,
-    status: 1,
-    employee: [],
+    deliverable_category: "Main",
+    deliverable_type: "Photo",
+    description: "",
     basic_price: 0,
     premium_price: 0,
     elite_price: 0,
     package_included: {
       basic: false,
       premium: false,
-      elite: false,
-    },
+      elite: false
+    }
   })
 
-  // Load deliverables and packages
+  // Load deliverables
   useEffect(() => {
     loadDeliverables()
-    loadPackages()
-    loadEmployees()
-    loadCategories()
-    loadTypes()
   }, [])
 
-  // Load filtered deliverable names when category or type changes
-  useEffect(() => {
-    console.log(`🔄 Form data changed - Category: ${formData.deliverable_cat}, Type: ${formData.deliverable_type}`)
-    if (formData.deliverable_cat && formData.deliverable_type) {
-      console.log(`📞 Calling loadFilteredDeliverableNames with: ${formData.deliverable_cat}, ${formData.deliverable_type}`)
-      loadFilteredDeliverableNames(formData.deliverable_cat, formData.deliverable_type)
-    } else {
-      console.log("⚠️ Category or type is missing, not loading deliverable names")
-    }
-  }, [formData.deliverable_cat, formData.deliverable_type])
-
-  // Filter deliverables
-  useEffect(() => {
-    let filtered = deliverables
-
-    // Text search
-    if (searchTerm) {
-      filtered = filtered.filter(deliverable =>
-        deliverable.deliverable_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        deliverable.process_name.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    }
-
-    // Category filter
-    if (categoryFilter !== "all") {
-      filtered = filtered.filter(deliverable => deliverable.deliverable_cat === categoryFilter)
-    }
-
-    // Type filter
-    if (typeFilter !== "all") {
-      filtered = filtered.filter(deliverable => deliverable.deliverable_type === typeFilter)
-    }
-
-    // Package filter
-    if (packageFilter !== "all") {
-      filtered = filtered.filter(deliverable => 
-        deliverable.package_included[packageFilter as PackageType]
-      )
-    }
-
-    // Tab filter
-    if (activeTab !== "all") {
-      if (activeTab === "main") {
-        filtered = filtered.filter(deliverable => deliverable.deliverable_cat === "Main")
-      } else if (activeTab === "optional") {
-        filtered = filtered.filter(deliverable => deliverable.deliverable_cat === "Optional")
-      } else if (activeTab === "photo") {
-        filtered = filtered.filter(deliverable => deliverable.deliverable_type === "Photo")
-      } else if (activeTab === "video") {
-        filtered = filtered.filter(deliverable => deliverable.deliverable_type === "Video")
-      }
-    }
-
-    setFilteredDeliverables(filtered)
-  }, [deliverables, searchTerm, categoryFilter, typeFilter, packageFilter, activeTab])
-
-  async function loadDeliverables() {
-    setLoading(true)
+  const loadDeliverables = async () => {
     try {
-      const data = await getDeliverables()
+      setIsLoading(true)
+      const data = await getDeliverableCatalogSummary()
       setDeliverables(data)
     } catch (error) {
       console.error("Error loading deliverables:", error)
@@ -238,116 +67,56 @@ export default function DeliverablesPage() {
         variant: "destructive",
       })
     } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
   }
 
-  async function loadPackages() {
-    try {
-      const data = await getServicePackages()
-      setPackages(data)
-    } catch (error) {
-      console.error("Error loading packages:", error)
-    }
-  }
+  // Filter deliverables
+  const filteredDeliverables = deliverables.filter(deliverable => {
+    const matchesSearch = deliverable.deliverable_name.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesCategory = selectedCategory === "all" || deliverable.deliverable_type.toLowerCase() === selectedCategory.toLowerCase()
+    return matchesSearch && matchesCategory
+  })
 
-  async function loadEmployees() {
-    try {
-      const data = await getEmployees()
-      setEmployees(data)
-    } catch (error) {
-      console.error("Error loading employees:", error)
-    }
-  }
+  // Get statistics
+  const totalDeliverables = deliverables.length
+  const photoDeliverables = deliverables.filter(d => d.deliverable_type === "Photo").length
+  const videoDeliverables = deliverables.filter(d => d.deliverable_type === "Video").length
+  const mainDeliverables = deliverables.filter(d => d.deliverable_category === "Main").length
 
-  async function loadCategories() {
-    try {
-      const data = await getDeliverableCategories()
-      setCategories(data)
-    } catch (error) {
-      console.error("Error loading categories:", error)
-    }
-  }
-
-  async function loadTypes() {
-    try {
-      const data = await getDeliverableTypes()
-      setTypes(data)
-    } catch (error) {
-      console.error("Error loading types:", error)
-    }
-  }
-
-  async function loadFilteredDeliverableNames(category: string, type: string) {
-    try {
-      console.log(`Loading deliverable names for category: ${category}, type: ${type}`)
-      const data = await getFilteredDeliverableNames(category, type)
-      console.log(`Received ${data.length} deliverable names:`, data)
-      setAvailableDeliverableNames(data)
-    } catch (error) {
-      console.error("Error loading filtered deliverable names:", error)
-      setAvailableDeliverableNames([])
-      toast({
-        title: "Error",
-        description: "Failed to load deliverable names. Please ensure the deliverable_master table exists.",
-        variant: "destructive",
-      })
-    }
-  }
-
-  function resetForm() {
+  const resetForm = () => {
     setFormData({
-      deliverable_cat: "Main",
-      deliverable_type: "Photo",
-      deliverable_id: undefined,
       deliverable_name: "",
-      process_name: "",
-      has_customer: false,
-      has_employee: false,
-      has_qc: false,
-      has_vendor: false,
-      sort_order: 0,
-      timing_type: "days",
-      skippable: false,
-      has_download_option: false,
-      has_task_process: true,
-      has_upload_folder_path: false,
-      process_starts_from: 0,
-      status: 1,
-      employee: [],
+      deliverable_category: "Main",
+      deliverable_type: "Photo",
+      description: "",
       basic_price: 0,
       premium_price: 0,
       elite_price: 0,
       package_included: {
         basic: false,
         premium: false,
-        elite: false,
-      },
+        elite: false
+      }
     })
-    setAvailableDeliverableNames([])
   }
 
-  async function handleCreate() {
-    if (!formData.deliverable_id || !formData.deliverable_name.trim() || !formData.process_name.trim()) {
-      toast({
-        title: "Error",
-        description: "Category, type, deliverable name, and process name are required",
-        variant: "destructive",
-      })
-      return
-    }
-
+  const handleAddDeliverable = async (e: React.FormEvent) => {
+    e.preventDefault()
     try {
-      const result = await createDeliverable(formData)
+      console.log('Creating deliverable with data:', formData)
+      const result = await createDeliverableCatalog(formData)
+      
       if (result.success) {
         toast({
           title: "Success",
           description: result.message,
         })
-        setIsCreateDialogOpen(false)
+        setIsAddDialogOpen(false)
         resetForm()
         loadDeliverables()
       } else {
+        console.error('Server action failed:', result.message)
         toast({
           title: "Error",
           description: result.message,
@@ -355,37 +124,34 @@ export default function DeliverablesPage() {
         })
       }
     } catch (error) {
-      console.error("Error creating deliverable:", error)
+      console.error("Error adding deliverable:", error)
       toast({
         title: "Error",
-        description: "Failed to create deliverable",
+        description: "Failed to add deliverable",
         variant: "destructive",
       })
     }
   }
 
-  async function handleEdit() {
-    if (!selectedDeliverable || !formData.deliverable_id || !formData.deliverable_name.trim() || !formData.process_name.trim()) {
-      toast({
-        title: "Error",
-        description: "Category, type, deliverable name, and process name are required",
-        variant: "destructive",
-      })
-      return
-    }
+  const handleEditDeliverable = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingDeliverable) return
 
     try {
-      const result = await updateDeliverable(selectedDeliverable.id, formData)
+      console.log('Updating deliverable with data:', formData)
+      const result = await updateDeliverableCatalog(editingDeliverable.id, formData)
+      
       if (result.success) {
         toast({
           title: "Success",
           description: result.message,
         })
         setIsEditDialogOpen(false)
-        setSelectedDeliverable(null)
+        setEditingDeliverable(null)
         resetForm()
         loadDeliverables()
       } else {
+        console.error('Server action failed:', result.message)
         toast({
           title: "Error",
           description: result.message,
@@ -402,18 +168,15 @@ export default function DeliverablesPage() {
     }
   }
 
-  async function handleDelete() {
-    if (!selectedDeliverable) return
-
+  const handleDeleteDeliverable = async (deliverable: DeliverableCatalogSummary) => {
     try {
-      const result = await deleteDeliverable(selectedDeliverable.id)
+      const result = await deleteDeliverableCatalog(deliverable.id)
+      
       if (result.success) {
         toast({
           title: "Success",
           description: result.message,
         })
-        setIsDeleteDialogOpen(false)
-        setSelectedDeliverable(null)
         loadDeliverables()
       } else {
         toast({
@@ -432,1204 +195,393 @@ export default function DeliverablesPage() {
     }
   }
 
-  function openEditDialog(deliverable: Deliverable) {
-    setSelectedDeliverable(deliverable)
-    const formDataToSet = {
-      deliverable_cat: deliverable.deliverable_cat,
-      deliverable_type: deliverable.deliverable_type,
-      deliverable_id: deliverable.deliverable_id,
+  const openEditDialog = (deliverable: DeliverableCatalogSummary) => {
+    setEditingDeliverable(deliverable)
+    setFormData({
       deliverable_name: deliverable.deliverable_name,
-      process_name: deliverable.process_name,
-      has_customer: deliverable.has_customer,
-      has_employee: deliverable.has_employee,
-      has_qc: deliverable.has_qc,
-      has_vendor: deliverable.has_vendor,
-      link: deliverable.link,
-      sort_order: deliverable.sort_order,
-      timing_type: deliverable.timing_type,
-      tat: deliverable.tat,
-      tat_value: deliverable.tat_value,
-      buffer: deliverable.buffer,
-      skippable: deliverable.skippable,
-      employee: deliverable.employee,
-      has_download_option: deliverable.has_download_option,
-      has_task_process: deliverable.has_task_process,
-      has_upload_folder_path: deliverable.has_upload_folder_path,
-      process_starts_from: deliverable.process_starts_from,
-      status: deliverable.status,
-      basic_price: deliverable.basic_price || 0,
-      premium_price: deliverable.premium_price || 0,
-      elite_price: deliverable.elite_price || 0,
-      on_start_template: deliverable.on_start_template,
-      on_complete_template: deliverable.on_complete_template,
-      on_correction_template: deliverable.on_correction_template,
-      input_names: deliverable.input_names,
-      stream: deliverable.stream,
-      stage: deliverable.stage,
-      package_included: deliverable.package_included,
-    }
-    
-    setFormData(formDataToSet)
-    
-    // Load filtered deliverable names for the current category and type
-    if (deliverable.deliverable_cat && deliverable.deliverable_type) {
-      loadFilteredDeliverableNames(deliverable.deliverable_cat, deliverable.deliverable_type)
-    }
-    
+      deliverable_category: deliverable.deliverable_category,
+      deliverable_type: deliverable.deliverable_type,
+      description: deliverable.description || "",
+      basic_price: deliverable.basic_price,
+      premium_price: deliverable.premium_price,
+      elite_price: deliverable.elite_price,
+      package_included: deliverable.package_included
+    })
     setIsEditDialogOpen(true)
   }
 
-  function openCreateDialog() {
-    resetForm()
-    // Load initial filtered deliverable names for default category/type
-    console.log("Opening create dialog, loading deliverable names for Main/Photo")
-    loadFilteredDeliverableNames("Main", "Photo")
-    setIsCreateDialogOpen(true)
-  }
+  const renderDeliverableForm = (isEdit = false) => (
+    <form onSubmit={isEdit ? handleEditDeliverable : handleAddDeliverable} className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="deliverable_name">Deliverable Name *</Label>
+        <Input
+          id="deliverable_name"
+          value={formData.deliverable_name}
+          onChange={(e) => setFormData(prev => ({ ...prev, deliverable_name: e.target.value }))}
+          placeholder="Enter deliverable name"
+          required
+        />
+      </div>
 
-  function openDeleteDialog(deliverable: Deliverable) {
-    setSelectedDeliverable(deliverable)
-    setIsDeleteDialogOpen(true)
-  }
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="deliverable_category">Category</Label>
+          <Select 
+            value={formData.deliverable_category} 
+            onValueChange={(value: 'Main' | 'Optional') => setFormData(prev => ({ ...prev, deliverable_category: value }))}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Main">Main</SelectItem>
+              <SelectItem value="Optional">Optional</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
-  const getStats = () => {
-    const total = deliverables.length
-    const main = deliverables.filter(d => d.deliverable_cat === "Main").length
-    const optional = deliverables.filter(d => d.deliverable_cat === "Optional").length
-    const photo = deliverables.filter(d => d.deliverable_type === "Photo").length
-    const video = deliverables.filter(d => d.deliverable_type === "Video").length
-    const active = deliverables.filter(d => d.status === 1).length
+        <div className="space-y-2">
+          <Label htmlFor="deliverable_type">Type</Label>
+          <Select 
+            value={formData.deliverable_type} 
+            onValueChange={(value: 'Photo' | 'Video') => setFormData(prev => ({ ...prev, deliverable_type: value }))}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Photo">📸 Photo</SelectItem>
+              <SelectItem value="Video">🎥 Video</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
 
-    return { total, main, optional, photo, video, active }
-  }
+      <div className="space-y-2">
+        <Label htmlFor="description">Description (Optional)</Label>
+        <Input
+          id="description"
+          value={formData.description}
+          onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+          placeholder="Enter deliverable description"
+        />
+      </div>
 
-  const stats = getStats()
+      {/* Package Pricing Section */}
+      <div className="space-y-4 border-t pt-4">
+        <h4 className="font-medium text-sm">Package Pricing</h4>
+        <div className="grid grid-cols-3 gap-4">
+          <div>
+            <Label htmlFor="basic_price">Basic Price (₹)</Label>
+            <Input
+              id="basic_price"
+              type="number"
+              value={formData.basic_price || ""}
+              onChange={(e) => setFormData(prev => ({ ...prev, basic_price: e.target.value ? Number(e.target.value) : 0 }))}
+              placeholder="0"
+              min="0"
+            />
+          </div>
+          <div>
+            <Label htmlFor="premium_price">Premium Price (₹)</Label>
+            <Input
+              id="premium_price"
+              type="number"
+              value={formData.premium_price || ""}
+              onChange={(e) => setFormData(prev => ({ ...prev, premium_price: e.target.value ? Number(e.target.value) : 0 }))}
+              placeholder="0"
+              min="0"
+            />
+          </div>
+          <div>
+            <Label htmlFor="elite_price">Elite Price (₹)</Label>
+            <Input
+              id="elite_price"
+              type="number"
+              value={formData.elite_price || ""}
+              onChange={(e) => setFormData(prev => ({ ...prev, elite_price: e.target.value ? Number(e.target.value) : 0 }))}
+              placeholder="0"
+              min="0"
+            />
+          </div>
+        </div>
+        
+        {/* Package Inclusion */}
+        <div>
+          <Label className="text-sm font-medium">Include in Packages</Label>
+          <div className="flex space-x-6 mt-2">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="basic"
+                checked={formData.package_included?.basic || false}
+                onCheckedChange={(checked) => setFormData(prev => ({ 
+                  ...prev, 
+                  package_included: { 
+                    ...prev.package_included, 
+                    basic: checked as boolean 
+                  }
+                }))}
+              />
+              <Label htmlFor="basic" className="text-sm">Basic</Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="premium"
+                checked={formData.package_included?.premium || false}
+                onCheckedChange={(checked) => setFormData(prev => ({ 
+                  ...prev, 
+                  package_included: { 
+                    ...prev.package_included, 
+                    premium: checked as boolean 
+                  }
+                }))}
+              />
+              <Label htmlFor="premium" className="text-sm">Premium</Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="elite"
+                checked={formData.package_included?.elite || false}
+                onCheckedChange={(checked) => setFormData(prev => ({ 
+                  ...prev, 
+                  package_included: { 
+                    ...prev.package_included, 
+                    elite: checked as boolean 
+                  }
+                }))}
+              />
+              <Label htmlFor="elite" className="text-sm">Elite</Label>
+            </div>
+          </div>
+        </div>
+      </div>
 
-  const getStakeholderIcons = (deliverable: Deliverable) => {
-    const icons = []
-    if (deliverable.has_customer) icons.push(<User key="customer" className="h-3 w-3 text-blue-600" />)
-    if (deliverable.has_employee) icons.push(<Users key="employee" className="h-3 w-3 text-green-600" />)
-    if (deliverable.has_qc) icons.push(<CheckCircle key="qc" className="h-3 w-3 text-purple-600" />)
-    if (deliverable.has_vendor) icons.push(<Building key="vendor" className="h-3 w-3 text-orange-600" />)
-    return icons
-  }
-
-  // Debug: Log available deliverable names when they change
-  useEffect(() => {
-    console.log("Available deliverable names updated:", availableDeliverableNames)
-  }, [availableDeliverableNames])
-
-  // Debug function to test the API directly
-  async function testDeliverableMasterAPI() {
-    try {
-      console.log("🔍 Testing deliverable master API...")
-      
-      // Test the direct function
-      const { getDeliverableMasterByCategoryAndType } = await import("@/actions/deliverable-master-actions")
-      const result = await getDeliverableMasterByCategoryAndType("Optional", "Photo")
-      
-      console.log("✅ Direct API call result:", result)
-      toast({
-        title: "API Test Result",
-        description: `Found ${result.length} deliverables. Check console for details.`,
-      })
-    } catch (error) {
-      console.error("❌ API test failed:", error)
-      toast({
-        title: "API Test Failed", 
-        description: error instanceof Error ? error.message : "Unknown error",
-        variant: "destructive",
-      })
-    }
-  }
+      <div className="flex justify-end space-x-2">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => {
+            if (isEdit) {
+              setIsEditDialogOpen(false)
+              setEditingDeliverable(null)
+            } else {
+              setIsAddDialogOpen(false)
+            }
+            resetForm()
+          }}
+        >
+          Cancel
+        </Button>
+        <Button type="submit">
+          {isEdit ? "Update" : "Add"} Deliverable
+        </Button>
+      </div>
+    </form>
+  )
 
   return (
-    <div className="container mx-auto py-8">
-      <div className="flex justify-between items-center mb-6">
+    <div className="container mx-auto py-6">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-bold">Post Production Deliverables</h1>
-          <p className="text-muted-foreground">Manage workflow processes and package deliverables</p>
+          <h1 className="text-3xl font-bold">Deliverables</h1>
+          <p className="text-gray-600">Manage your event deliverables catalog</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={testDeliverableMasterAPI}>
-            🔍 Test API
+        <div className="flex items-center space-x-2">
+          <Button variant="outline">
+            <FileText className="h-4 w-4 mr-2" />
+            Import Data
           </Button>
-          <Button onClick={openCreateDialog}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Deliverable
-          </Button>
+          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Deliverable
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Add New Deliverable</DialogTitle>
+              </DialogHeader>
+              {renderDeliverableForm()}
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
       {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Deliverables</CardTitle>
             <Package className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.total}</div>
+            <div className="text-2xl font-bold">{totalDeliverables}</div>
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Main</CardTitle>
-            <PlayCircle className="h-4 w-4 text-blue-600" />
+            <CardTitle className="text-sm font-medium">Photo Deliverables</CardTitle>
+            <Camera className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{stats.main}</div>
+            <div className="text-2xl font-bold">{photoDeliverables}</div>
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Optional</CardTitle>
-            <Package className="h-4 w-4 text-purple-600" />
+            <CardTitle className="text-sm font-medium">Video Deliverables</CardTitle>
+            <Video className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-purple-600">{stats.optional}</div>
+            <div className="text-2xl font-bold">{videoDeliverables}</div>
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Photo</CardTitle>
-            <span className="text-lg">📸</span>
+            <CardTitle className="text-sm font-medium">Main Deliverables</CardTitle>
+            <Package className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{stats.photo}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Video</CardTitle>
-            <span className="text-lg">🎥</span>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-orange-600">{stats.video}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active</CardTitle>
-            <CheckCircle className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">{stats.active}</div>
+            <div className="text-2xl font-bold">{mainDeliverables}</div>
           </CardContent>
         </Card>
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col md:flex-row gap-4 mb-6">
-        <div className="flex-1">
-          <div className="relative">
-            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search deliverables..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9"
-            />
+      <Card className="mb-6">
+        <CardContent className="pt-6">
+          <div className="flex items-center space-x-4">
+            <div className="flex-1">
+              <Input
+                placeholder="Search deliverables..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+              <SelectTrigger className="w-48">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                <SelectItem value="photo">Photo</SelectItem>
+                <SelectItem value="video">Video</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-        </div>
-        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-          <SelectTrigger className="w-[150px]">
-            <SelectValue placeholder="Category" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Categories</SelectItem>
-            <SelectItem value="Main">Main</SelectItem>
-            <SelectItem value="Optional">Optional</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={typeFilter} onValueChange={setTypeFilter}>
-          <SelectTrigger className="w-[120px]">
-            <SelectValue placeholder="Type" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Types</SelectItem>
-            <SelectItem value="Photo">📸 Photo</SelectItem>
-            <SelectItem value="Video">🎥 Video</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={packageFilter} onValueChange={setPackageFilter}>
-          <SelectTrigger className="w-[140px]">
-            <SelectValue placeholder="Package" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Packages</SelectItem>
-            <SelectItem value="basic">Basic</SelectItem>
-            <SelectItem value="premium">Premium</SelectItem>
-            <SelectItem value="elite">Elite</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+        </CardContent>
+      </Card>
 
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="all">All ({stats.total})</TabsTrigger>
-          <TabsTrigger value="main">Main ({stats.main})</TabsTrigger>
-          <TabsTrigger value="optional">Optional ({stats.optional})</TabsTrigger>
-          <TabsTrigger value="photo">Photo ({stats.photo})</TabsTrigger>
-          <TabsTrigger value="video">Video ({stats.video})</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value={activeTab} className="mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Deliverables ({filteredDeliverables.length})</CardTitle>
-              <CardDescription>
-                Manage post-production workflow processes and deliverables
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <div className="flex items-center justify-center py-8">
-                  <div className="text-center">
-                    <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary mx-auto mb-4"></div>
-                    <p className="text-muted-foreground">Loading deliverables...</p>
-                  </div>
-                </div>
+      {/* Deliverables Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Deliverables ({filteredDeliverables.length})</CardTitle>
+          <CardDescription>Manage your event deliverables catalog</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Deliverable Name</TableHead>
+                <TableHead>Category</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Workflows</TableHead>
+                <TableHead>Basic Price</TableHead>
+                <TableHead>Premium Price</TableHead>
+                <TableHead>Elite Price</TableHead>
+                <TableHead>Created</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={9} className="text-center py-6">
+                    Loading deliverables...
+                  </TableCell>
+                </TableRow>
               ) : filteredDeliverables.length === 0 ? (
-                <div className="text-center py-8">
-                  <Package className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No deliverables found</h3>
-                  <p className="text-muted-foreground mb-4">
-                    {deliverables.length === 0 
-                      ? "Get started by adding your first deliverable process."
-                      : "Try adjusting your search or filters."}
-                  </p>
-                  {deliverables.length === 0 && (
-                    <Button onClick={openCreateDialog}>
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add Deliverable
-                    </Button>
-                  )}
-                </div>
+                <TableRow>
+                  <TableCell colSpan={9} className="text-center py-6">
+                    No deliverables found
+                  </TableCell>
+                </TableRow>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Deliverable</TableHead>
-                      <TableHead>Process</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Stakeholders</TableHead>
-                      <TableHead>Timing</TableHead>
-                      <TableHead>Packages</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredDeliverables.map((deliverable) => (
-                      <TableRow key={deliverable.id}>
-                        <TableCell>
-                          <div>
-                            <div className="font-medium">{deliverable.deliverable_name}</div>
-                            {deliverable.deliverable_id && (
-                              <div className="text-sm text-muted-foreground">ID: {deliverable.deliverable_id}</div>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="font-medium">{deliverable.process_name}</div>
-                          {deliverable.stream && (
-                            <div className="flex items-center text-sm text-muted-foreground">
-                              {deliverable.stream === "UP" ? (
-                                <ArrowUpRight className="h-3 w-3 mr-1" />
-                              ) : (
-                                <ArrowDownRight className="h-3 w-3 mr-1" />
-                              )}
-                              {deliverable.stream} {deliverable.stage}
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={CATEGORY_COLORS[deliverable.deliverable_cat]}>
-                            {deliverable.deliverable_cat}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={TYPE_COLORS[deliverable.deliverable_type]}>
-                            {deliverable.deliverable_type === "Photo" ? "📸" : "🎥"} {deliverable.deliverable_type}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex space-x-1">
-                            {getStakeholderIcons(deliverable)}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {deliverable.tat && (
-                            <div className="flex items-center">
-                              <span className="mr-1">{TIMING_ICONS[deliverable.timing_type]}</span>
-                              {deliverable.tat} {deliverable.timing_type}
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            {Object.entries(deliverable.package_included).map(([pkg, included]) => 
-                              included && (
-                                <Badge key={pkg} className={PACKAGE_COLORS[pkg as PackageType]} variant="outline">
-                                  {pkg}
-                                </Badge>
-                              )
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={STATUS_COLORS[deliverable.status]}>
-                            {deliverable.status === 1 ? "Active" : "Inactive"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm">
-                                <Settings className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem onClick={() => openEditDialog(deliverable)}>
-                                <Edit className="mr-2 h-4 w-4" />
-                                Edit
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => openDeleteDialog(deliverable)}
-                                className="text-red-600"
-                              >
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-
-      {/* Create Deliverable Dialog */}
-      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Add New Deliverable</DialogTitle>
-            <DialogDescription>
-              Create a new post-production deliverable process. Select category and type first to see available deliverable names.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            {/* First Row: Category and Type */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="deliverable_cat">Category *</Label>
-                <Select 
-                  value={formData.deliverable_cat} 
-                  onValueChange={(value) => setFormData({ ...formData, deliverable_cat: value as "Main" | "Optional", deliverable_id: undefined, deliverable_name: "" })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.map((category) => (
-                      <SelectItem key={category} value={category}>
-                        {category}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="deliverable_type">Type *</Label>
-                <Select 
-                  value={formData.deliverable_type} 
-                  onValueChange={(value) => setFormData({ ...formData, deliverable_type: value as "Photo" | "Video", deliverable_id: undefined, deliverable_name: "" })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {types.map((type) => (
-                      <SelectItem key={type} value={type}>
-                        {type === "Photo" ? "📸" : "🎥"} {type}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Second Row: Deliverable Name and Process Name */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="deliverable_name">Deliverable Name *</Label>
-                <Select 
-                  value={formData.deliverable_id?.toString() || ""} 
-                  onValueChange={(value) => {
-                    const selectedDeliverable = availableDeliverableNames.find(d => d.id.toString() === value)
-                    if (selectedDeliverable) {
-                      setFormData({ 
-                        ...formData, 
-                        deliverable_id: selectedDeliverable.id,
-                        deliverable_name: selectedDeliverable.name
-                      })
-                    }
-                  }}
-                  disabled={availableDeliverableNames.length === 0}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={
-                      availableDeliverableNames.length > 0 
-                        ? "Select deliverable name" 
-                        : formData.deliverable_cat && formData.deliverable_type 
-                          ? "No deliverables found - Run SQL script to create deliverable_master table"
-                          : "Select category and type first"
-                    } />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableDeliverableNames.length > 0 ? (
-                      availableDeliverableNames.map((deliverable) => (
-                        <SelectItem key={deliverable.id} value={deliverable.id.toString()}>
-                          {deliverable.name}
-                        </SelectItem>
-                      ))
-                    ) : (
-                      <div className="px-2 py-1 text-sm text-muted-foreground">
-                        {formData.deliverable_cat && formData.deliverable_type 
-                          ? "No deliverables found. Please run the deliverable_master table creation script in Supabase SQL Editor."
-                          : "Select category and type first"
-                        }
+                filteredDeliverables.map((deliverable) => (
+                  <TableRow key={deliverable.id}>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center space-x-2">
+                        {deliverable.deliverable_type === "Photo" ? (
+                          <Camera className="h-4 w-4 text-blue-500" />
+                        ) : (
+                          <Video className="h-4 w-4 text-purple-500" />
+                        )}
+                        <span>{deliverable.deliverable_name}</span>
                       </div>
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="process_name">Process Name *</Label>
-                <Input
-                  id="process_name"
-                  value={formData.process_name}
-                  onChange={(e) => setFormData({ ...formData, process_name: e.target.value })}
-                  placeholder="Enter process name"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <Label htmlFor="tat">TAT</Label>
-                <Input
-                  id="tat"
-                  type="number"
-                  value={formData.tat || ""}
-                  onChange={(e) => setFormData({ ...formData, tat: e.target.value ? Number(e.target.value) : undefined })}
-                  placeholder="0"
-                />
-              </div>
-              <div>
-                <Label htmlFor="timing_type">Timing Type</Label>
-                <Select value={formData.timing_type} onValueChange={(value) => setFormData({ ...formData, timing_type: value as "days" | "hr" | "min" })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="days">📅 Days</SelectItem>
-                    <SelectItem value="hr">⏰ Hours</SelectItem>
-                    <SelectItem value="min">⏱️ Minutes</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="sort_order">Sort Order</Label>
-                <Input
-                  id="sort_order"
-                  type="number"
-                  value={formData.sort_order}
-                  onChange={(e) => setFormData({ ...formData, sort_order: Number(e.target.value) })}
-                  placeholder="0"
-                />
-              </div>
-            </div>
-
-            {/* Stakeholders */}
-            <div>
-              <Label className="text-sm font-medium">Stakeholders</Label>
-              <div className="flex space-x-6 mt-2">
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="has_customer"
-                    checked={formData.has_customer}
-                    onCheckedChange={(checked) => setFormData({ ...formData, has_customer: !!checked })}
-                  />
-                  <Label htmlFor="has_customer" className="text-sm">👤 Customer</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="has_employee"
-                    checked={formData.has_employee}
-                    onCheckedChange={(checked) => setFormData({ ...formData, has_employee: !!checked })}
-                  />
-                  <Label htmlFor="has_employee" className="text-sm">👥 Employee</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="has_qc"
-                    checked={formData.has_qc}
-                    onCheckedChange={(checked) => setFormData({ ...formData, has_qc: !!checked })}
-                  />
-                  <Label htmlFor="has_qc" className="text-sm">✅ QC</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="has_vendor"
-                    checked={formData.has_vendor}
-                    onCheckedChange={(checked) => setFormData({ ...formData, has_vendor: !!checked })}
-                  />
-                  <Label htmlFor="has_vendor" className="text-sm">🏢 Vendor</Label>
-                </div>
-              </div>
-              
-              {/* Employee Selection - Show when Employee stakeholder is checked */}
-              {formData.has_employee && (
-                <div className="mt-4">
-                  <Label className="text-sm font-medium">Assign Employees</Label>
-                  <div className="mt-2 max-h-32 overflow-y-auto border rounded-md p-2">
-                    {employees.length > 0 ? (
-                      employees.map((employee) => (
-                        <div key={employee.id} className="flex items-center space-x-2 py-1">
-                          <Checkbox
-                            id={`employee-${employee.id}`}
-                            checked={formData.employee?.includes(employee.id) || false}
-                            onCheckedChange={(checked) => {
-                              const currentEmployees = formData.employee || []
-                              if (checked) {
-                                setFormData({
-                                  ...formData,
-                                  employee: [...currentEmployees, employee.id]
-                                })
-                              } else {
-                                setFormData({
-                                  ...formData,
-                                  employee: currentEmployees.filter(id => id !== employee.id)
-                                })
-                              }
-                            }}
-                          />
-                          <Label htmlFor={`employee-${employee.id}`} className="text-sm cursor-pointer">
-                            {employee.name}
-                            {employee.department && (
-                              <span className="text-muted-foreground ml-1">({employee.department})</span>
-                            )}
-                          </Label>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-sm text-muted-foreground">No employees available</p>
-                    )}
-                  </div>
-                </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={deliverable.deliverable_category === "Main" ? "default" : "secondary"}>
+                        {deliverable.deliverable_category}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">
+                        {deliverable.deliverable_type}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">
+                        {deliverable.workflow_count} process{deliverable.workflow_count !== 1 ? 'es' : ''}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>₹ {deliverable.basic_price.toLocaleString()}</TableCell>
+                    <TableCell>₹ {deliverable.premium_price.toLocaleString()}</TableCell>
+                    <TableCell>₹ {deliverable.elite_price.toLocaleString()}</TableCell>
+                    <TableCell>
+                      {new Date(deliverable.created_date).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" className="h-8 w-8 p-0">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => openEditDialog(deliverable)}>
+                            <Edit className="h-4 w-4 mr-2" />
+                            Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            onClick={() => handleDeleteDeliverable(deliverable)}
+                            className="text-red-600"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))
               )}
-            </div>
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
-            {/* Package Inclusion */}
-            <div>
-              <Label className="text-sm font-medium">Include in Packages</Label>
-              <div className="flex space-x-6 mt-2">
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="basic_package"
-                    checked={formData.package_included.basic}
-                    onCheckedChange={(checked) => 
-                      setFormData({
-                        ...formData,
-                        package_included: {
-                          ...formData.package_included,
-                          basic: !!checked
-                        }
-                      })
-                    }
-                  />
-                  <Label htmlFor="basic_package" className="text-sm">Basic</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="premium_package"
-                    checked={formData.package_included.premium}
-                    onCheckedChange={(checked) => 
-                      setFormData({
-                        ...formData,
-                        package_included: {
-                          ...formData.package_included,
-                          premium: !!checked
-                        }
-                      })
-                    }
-                  />
-                  <Label htmlFor="premium_package" className="text-sm">Premium</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="elite_package"
-                    checked={formData.package_included.elite}
-                    onCheckedChange={(checked) => 
-                      setFormData({
-                        ...formData,
-                        package_included: {
-                          ...formData.package_included,
-                          elite: !!checked
-                        }
-                      })
-                    }
-                  />
-                  <Label htmlFor="elite_package" className="text-sm">Elite</Label>
-                </div>
-              </div>
-            </div>
-
-            {/* Process Options */}
-            <div>
-              <Label className="text-sm font-medium">Process Options</Label>
-              <div className="grid grid-cols-2 gap-4 mt-2">
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="skippable"
-                    checked={formData.skippable}
-                    onCheckedChange={(checked) => setFormData({ ...formData, skippable: !!checked })}
-                  />
-                  <Label htmlFor="skippable" className="text-sm">Skippable *</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="has_download_option"
-                    checked={formData.has_download_option}
-                    onCheckedChange={(checked) => setFormData({ ...formData, has_download_option: !!checked })}
-                  />
-                  <Label htmlFor="has_download_option" className="text-sm">Has File Download Option *</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="has_task_process"
-                    checked={formData.has_task_process}
-                    onCheckedChange={(checked) => setFormData({ ...formData, has_task_process: !!checked })}
-                  />
-                  <Label htmlFor="has_task_process" className="text-sm">Has Task Process Option *</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="has_upload_folder_path"
-                    checked={formData.has_upload_folder_path}
-                    onCheckedChange={(checked) => setFormData({ ...formData, has_upload_folder_path: !!checked })}
-                  />
-                  <Label htmlFor="has_upload_folder_path" className="text-sm">Has Upload Folder Path Option *</Label>
-                </div>
-              </div>
-            </div>
-
-            {/* Template Configuration */}
-            <div>
-              <Label className="text-sm font-medium">Template Configuration</Label>
-              <div className="grid grid-cols-1 gap-4 mt-2">
-                <div>
-                  <Label htmlFor="on_start_template">Interact Template Name On Start</Label>
-                  <Input
-                    id="on_start_template"
-                    value={formData.on_start_template || ""}
-                    onChange={(e) => setFormData({ ...formData, on_start_template: e.target.value })}
-                    placeholder="Enter template name for process start"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="on_complete_template">Interact Template Name On Complete</Label>
-                  <Input
-                    id="on_complete_template"
-                    value={formData.on_complete_template || ""}
-                    onChange={(e) => setFormData({ ...formData, on_complete_template: e.target.value })}
-                    placeholder="Enter template name for process completion"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Process Pricing */}
-            <div>
-              <Label className="text-sm font-medium">Process Pricing</Label>
-              <p className="text-xs text-muted-foreground mb-3">
-                Set individual process prices for each package tier. Total deliverable cost will be calculated by summing all process prices.
-              </p>
-              <div className="grid grid-cols-3 gap-4 mt-2">
-                <div>
-                  <Label htmlFor="basic_price">Basic Process Price</Label>
-                  <Input
-                    id="basic_price"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={formData.basic_price || ""}
-                    onChange={(e) => setFormData({ ...formData, basic_price: parseFloat(e.target.value) || 0 })}
-                    placeholder="0.00"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="premium_price">Premium Process Price</Label>
-                  <Input
-                    id="premium_price"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={formData.premium_price || ""}
-                    onChange={(e) => setFormData({ ...formData, premium_price: parseFloat(e.target.value) || 0 })}
-                    placeholder="0.00"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="elite_price">Elite Process Price</Label>
-                  <Input
-                    id="elite_price"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={formData.elite_price || ""}
-                    onChange={(e) => setFormData({ ...formData, elite_price: parseFloat(e.target.value) || 0 })}
-                    placeholder="0.00"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setIsCreateDialogOpen(false); resetForm(); }}>
-              Cancel
-            </Button>
-            <Button onClick={handleCreate}>Create Deliverable</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Deliverable Dialog */}
+      {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Deliverable</DialogTitle>
-            <DialogDescription>
-              Update the deliverable process information.
-            </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            {/* First Row: Category and Type */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="edit-deliverable_cat">Category *</Label>
-                <Select 
-                  value={formData.deliverable_cat} 
-                  onValueChange={(value) => setFormData({ ...formData, deliverable_cat: value as "Main" | "Optional", deliverable_id: undefined, deliverable_name: "" })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.map((category) => (
-                      <SelectItem key={category} value={category}>
-                        {category}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="edit-deliverable_type">Type *</Label>
-                <Select 
-                  value={formData.deliverable_type} 
-                  onValueChange={(value) => setFormData({ ...formData, deliverable_type: value as "Photo" | "Video", deliverable_id: undefined, deliverable_name: "" })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {types.map((type) => (
-                      <SelectItem key={type} value={type}>
-                        {type === "Photo" ? "📸" : "🎥"} {type}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Second Row: Deliverable Name and Process Name */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="edit-deliverable_name">Deliverable Name *</Label>
-                <Select 
-                  value={formData.deliverable_id?.toString() || ""} 
-                  onValueChange={(value) => {
-                    const selectedDeliverable = availableDeliverableNames.find(d => d.id.toString() === value)
-                    if (selectedDeliverable) {
-                      setFormData({ 
-                        ...formData, 
-                        deliverable_id: selectedDeliverable.id,
-                        deliverable_name: selectedDeliverable.name
-                      })
-                    }
-                  }}
-                  disabled={availableDeliverableNames.length === 0}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={
-                      availableDeliverableNames.length > 0 
-                        ? "Select deliverable name" 
-                        : formData.deliverable_cat && formData.deliverable_type 
-                          ? "No deliverables found - Run SQL script to create deliverable_master table"
-                          : "Select category and type first"
-                    } />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableDeliverableNames.length > 0 ? (
-                      availableDeliverableNames.map((deliverable) => (
-                        <SelectItem key={deliverable.id} value={deliverable.id.toString()}>
-                          {deliverable.name}
-                        </SelectItem>
-                      ))
-                    ) : (
-                      <div className="px-2 py-1 text-sm text-muted-foreground">
-                        {formData.deliverable_cat && formData.deliverable_type 
-                          ? "No deliverables found. Please run the deliverable_master table creation script in Supabase SQL Editor."
-                          : "Select category and type first"
-                        }
-                      </div>
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="process_name">Process Name *</Label>
-                <Input
-                  id="process_name"
-                  value={formData.process_name}
-                  onChange={(e) => setFormData({ ...formData, process_name: e.target.value })}
-                  placeholder="Enter process name"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <Label htmlFor="edit-tat">TAT</Label>
-                <Input
-                  id="edit-tat"
-                  type="number"
-                  value={formData.tat || ""}
-                  onChange={(e) => setFormData({ ...formData, tat: e.target.value ? Number(e.target.value) : undefined })}
-                />
-              </div>
-              <div>
-                <Label htmlFor="edit-timing_type">Timing Type</Label>
-                <Select value={formData.timing_type} onValueChange={(value) => setFormData({ ...formData, timing_type: value as "days" | "hr" | "min" })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="days">📅 Days</SelectItem>
-                    <SelectItem value="hr">⏰ Hours</SelectItem>
-                    <SelectItem value="min">⏱️ Minutes</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="edit-sort_order">Sort Order</Label>
-                <Input
-                  id="edit-sort_order"
-                  type="number"
-                  value={formData.sort_order}
-                  onChange={(e) => setFormData({ ...formData, sort_order: Number(e.target.value) })}
-                />
-              </div>
-            </div>
-
-            {/* Stakeholders */}
-            <div>
-              <Label className="text-sm font-medium">Stakeholders</Label>
-              <div className="flex space-x-6 mt-2">
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="edit-has_customer"
-                    checked={formData.has_customer}
-                    onCheckedChange={(checked) => setFormData({ ...formData, has_customer: !!checked })}
-                  />
-                  <Label htmlFor="edit-has_customer" className="text-sm">👤 Customer</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="edit-has_employee"
-                    checked={formData.has_employee}
-                    onCheckedChange={(checked) => setFormData({ ...formData, has_employee: !!checked })}
-                  />
-                  <Label htmlFor="edit-has_employee" className="text-sm">👥 Employee</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="edit-has_qc"
-                    checked={formData.has_qc}
-                    onCheckedChange={(checked) => setFormData({ ...formData, has_qc: !!checked })}
-                  />
-                  <Label htmlFor="edit-has_qc" className="text-sm">✅ QC</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="edit-has_vendor"
-                    checked={formData.has_vendor}
-                    onCheckedChange={(checked) => setFormData({ ...formData, has_vendor: !!checked })}
-                  />
-                  <Label htmlFor="edit-has_vendor" className="text-sm">🏢 Vendor</Label>
-                </div>
-              </div>
-              
-              {/* Employee Selection - Show when Employee stakeholder is checked */}
-              {formData.has_employee && (
-                <div className="mt-4">
-                  <Label className="text-sm font-medium">Assign Employees</Label>
-                  <div className="mt-2 max-h-32 overflow-y-auto border rounded-md p-2">
-                    {employees.length > 0 ? (
-                      employees.map((employee) => (
-                        <div key={employee.id} className="flex items-center space-x-2 py-1">
-                          <Checkbox
-                            id={`edit-employee-${employee.id}`}
-                            checked={formData.employee?.includes(employee.id) || false}
-                            onCheckedChange={(checked) => {
-                              const currentEmployees = formData.employee || []
-                              if (checked) {
-                                setFormData({
-                                  ...formData,
-                                  employee: [...currentEmployees, employee.id]
-                                })
-                              } else {
-                                setFormData({
-                                  ...formData,
-                                  employee: currentEmployees.filter(id => id !== employee.id)
-                                })
-                              }
-                            }}
-                          />
-                          <Label htmlFor={`edit-employee-${employee.id}`} className="text-sm cursor-pointer">
-                            {employee.name}
-                            {employee.department && (
-                              <span className="text-muted-foreground ml-1">({employee.department})</span>
-                            )}
-                          </Label>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-sm text-muted-foreground">No employees available</p>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Package Inclusion */}
-            <div>
-              <Label className="text-sm font-medium">Include in Packages</Label>
-              <div className="flex space-x-6 mt-2">
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="edit-basic_package"
-                    checked={formData.package_included.basic}
-                    onCheckedChange={(checked) => 
-                      setFormData({
-                        ...formData,
-                        package_included: {
-                          ...formData.package_included,
-                          basic: !!checked
-                        }
-                      })
-                    }
-                  />
-                  <Label htmlFor="edit-basic_package" className="text-sm">Basic</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="edit-premium_package"
-                    checked={formData.package_included.premium}
-                    onCheckedChange={(checked) => 
-                      setFormData({
-                        ...formData,
-                        package_included: {
-                          ...formData.package_included,
-                          premium: !!checked
-                        }
-                      })
-                    }
-                  />
-                  <Label htmlFor="edit-premium_package" className="text-sm">Premium</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="edit-elite_package"
-                    checked={formData.package_included.elite}
-                    onCheckedChange={(checked) => 
-                      setFormData({
-                        ...formData,
-                        package_included: {
-                          ...formData.package_included,
-                          elite: !!checked
-                        }
-                      })
-                    }
-                  />
-                  <Label htmlFor="edit-elite_package" className="text-sm">Elite</Label>
-                </div>
-              </div>
-            </div>
-
-            {/* Process Options */}
-            <div>
-              <Label className="text-sm font-medium">Process Options</Label>
-              <div className="grid grid-cols-2 gap-4 mt-2">
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="edit-skippable"
-                    checked={formData.skippable}
-                    onCheckedChange={(checked) => setFormData({ ...formData, skippable: !!checked })}
-                  />
-                  <Label htmlFor="edit-skippable" className="text-sm">Skippable *</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="edit-has_download_option"
-                    checked={formData.has_download_option}
-                    onCheckedChange={(checked) => setFormData({ ...formData, has_download_option: !!checked })}
-                  />
-                  <Label htmlFor="edit-has_download_option" className="text-sm">Has File Download Option *</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="edit-has_task_process"
-                    checked={formData.has_task_process}
-                    onCheckedChange={(checked) => setFormData({ ...formData, has_task_process: !!checked })}
-                  />
-                  <Label htmlFor="edit-has_task_process" className="text-sm">Has Task Process Option *</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="edit-has_upload_folder_path"
-                    checked={formData.has_upload_folder_path}
-                    onCheckedChange={(checked) => setFormData({ ...formData, has_upload_folder_path: !!checked })}
-                  />
-                  <Label htmlFor="edit-has_upload_folder_path" className="text-sm">Has Upload Folder Path Option *</Label>
-                </div>
-              </div>
-            </div>
-
-            {/* Template Configuration */}
-            <div>
-              <Label className="text-sm font-medium">Template Configuration</Label>
-              <div className="grid grid-cols-1 gap-4 mt-2">
-                <div>
-                  <Label htmlFor="edit-on_start_template">Interact Template Name On Start</Label>
-                  <Input
-                    id="edit-on_start_template"
-                    value={formData.on_start_template || ""}
-                    onChange={(e) => setFormData({ ...formData, on_start_template: e.target.value })}
-                    placeholder="Enter template name for process start"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="edit-on_complete_template">Interact Template Name On Complete</Label>
-                  <Input
-                    id="edit-on_complete_template"
-                    value={formData.on_complete_template || ""}
-                    onChange={(e) => setFormData({ ...formData, on_complete_template: e.target.value })}
-                    placeholder="Enter template name for process completion"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Process Pricing */}
-            <div>
-              <Label className="text-sm font-medium">Process Pricing</Label>
-              <p className="text-xs text-muted-foreground mb-3">
-                Set individual process prices for each package tier. Total deliverable cost will be calculated by summing all process prices.
-              </p>
-              <div className="grid grid-cols-3 gap-4 mt-2">
-                <div>
-                  <Label htmlFor="edit-basic_price">Basic Process Price</Label>
-                  <Input
-                    id="edit-basic_price"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={formData.basic_price || ""}
-                    onChange={(e) => setFormData({ ...formData, basic_price: parseFloat(e.target.value) || 0 })}
-                    placeholder="0.00"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="edit-premium_price">Premium Process Price</Label>
-                  <Input
-                    id="edit-premium_price"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={formData.premium_price || ""}
-                    onChange={(e) => setFormData({ ...formData, premium_price: parseFloat(e.target.value) || 0 })}
-                    placeholder="0.00"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="edit-elite_price">Elite Process Price</Label>
-                  <Input
-                    id="edit-elite_price"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={formData.elite_price || ""}
-                    onChange={(e) => setFormData({ ...formData, elite_price: parseFloat(e.target.value) || 0 })}
-                    placeholder="0.00"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { 
-              setIsEditDialogOpen(false); 
-              setSelectedDeliverable(null); 
-              resetForm(); 
-            }}>
-              Cancel
-            </Button>
-            <Button onClick={handleEdit}>Update Deliverable</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Delete Deliverable</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete "{selectedDeliverable?.deliverable_name}"? This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setIsDeleteDialogOpen(false); setSelectedDeliverable(null); }}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={handleDelete}>
-              Delete
-            </Button>
-          </DialogFooter>
+          {renderDeliverableForm(true)}
         </DialogContent>
       </Dialog>
     </div>

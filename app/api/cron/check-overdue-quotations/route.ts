@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/postgresql-client'
 import { NotificationService } from '@/lib/notification-service'
 import { differenceInDays } from 'date-fns'
 
@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const supabase = createClient()
+    const { query, transaction } = createClient()
 
     // Get all active quotations (not cancelled, rejected, or confirmed)
     const { data: quotations, error } = await supabase

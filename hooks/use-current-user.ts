@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 
-type User = {
+interface UserData {
   id: string
   username: string
   email: string
@@ -13,39 +13,85 @@ type User = {
   isAdmin: boolean
 }
 
-export function useCurrentUser() {
-  const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+interface UseCurrentUserReturn {
+  user: UserData | null
+  loading: boolean
+  error: string | null
+}
+
+export function useCurrentUser(): UseCurrentUserReturn {
+  const [userData, setUserData] = useState<UseCurrentUserReturn>({
+    user: null,
+    loading: true,
+    error: null
+  })
 
   useEffect(() => {
-    async function fetchCurrentUser() {
+    async function loadUser() {
       try {
-        setLoading(true)
-        const response = await fetch("/api/auth/status")
+        setUserData(prev => ({ ...prev, loading: true }))
+        
+        // Check authentication status using our JWT-based system
+        const response = await fetch("/api/auth/status", {
+          credentials: 'include',
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        })
 
         if (!response.ok) {
-          throw new Error("Failed to fetch user data")
+          throw new Error('Failed to check auth status')
         }
 
         const data = await response.json()
 
-        if (data.authenticated && data.user) {
-          setUser(data.user)
-        } else {
-          setUser(null)
+        if (!data.authenticated || !data.user) {
+          setUserData({
+            user: null,
+            loading: false,
+            error: null
+          })
+          return
         }
-      } catch (err) {
-        console.error("Error fetching current user:", err)
-        setError(err instanceof Error ? err.message : "Unknown error")
-        setUser(null)
-      } finally {
-        setLoading(false)
+
+        console.log('✅ Found authenticated user:', data.user.username)
+
+        setUserData({
+          user: {
+            id: data.user.id,
+            username: data.user.username,
+            email: data.user.email || '',
+            firstName: data.user.firstName,
+            lastName: data.user.lastName,
+            roleId: data.user.roleId,
+            roleName: data.user.roleName || 'User',
+            isAdmin: data.user.isAdmin || false
+          },
+          loading: false,
+          error: null
+        })
+
+      } catch (error) {
+        console.error('❌ Error loading user data:', error)
+        setUserData({
+          user: null,
+          loading: false,
+          error: 'Failed to load user data'
+        })
       }
     }
 
-    fetchCurrentUser()
+    // Load initial data
+    loadUser()
+
+    // Set up periodic auth check (optional)
+    const interval = setInterval(loadUser, 30000) // Check every 30 seconds
+
+    return () => {
+      clearInterval(interval)
+    }
   }, [])
 
-  return { user, loading, error }
+  return userData
 }

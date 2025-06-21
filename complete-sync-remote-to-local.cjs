@@ -1,0 +1,257 @@
+// 🚨 MIGRATED FROM SUPABASE TO POSTGRESQL
+// Migration Date: 2025-06-20T09:38:43.926Z
+// Original file backed up as: complete-sync-remote-to-local.cjs.backup
+
+
+// PostgreSQL connection pool
+const pool = new Pool({
+  host: process.env.POSTGRES_HOST || 'localhost',
+  port: process.env.POSTGRES_PORT || 5432,
+  database: process.env.POSTGRES_DATABASE || 'ooak_future',
+  user: process.env.POSTGRES_USER || 'postgres',
+  password: process.env.POSTGRES_PASSWORD || 'password',
+  ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false,
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+});
+
+
+// Query helper function
+async function query(text, params = []) {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(text, params);
+    return { data: result.rows, error: null };
+  } catch (error) {
+    console.error('❌ PostgreSQL Query Error:', error.message);
+    return { data: null, error: error.message };
+  } finally {
+    client.release();
+  }
+}
+
+// Transaction helper function  
+async function transaction(callback) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await callback(client);
+    await client.query('COMMIT');
+    return { data: result, error: null };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ PostgreSQL Transaction Error:', error.message);
+    return { data: null, error: error.message };
+  } finally {
+    client.release();
+  }
+}
+
+// Original content starts here:
+const { Pool } = require('pg'););
+
+// Remote Supabase configuration
+const REMOTE_URL = 'https://aavofqdzjhyfjygkxynq.supabase.co';
+const REMOTE_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhdm9mcWR6amh5Zmp5Z2t4eW5xIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NTA5ODkxNCwiZXhwIjoyMDYwNjc0OTE0fQ.EDdXANDTnC8zjWciG_p6JORec0KyMVZQe2c0Ca6HfLY';
+
+// Local Supabase configuration  
+const LOCAL_URL = 'http://localhost:54321';
+const LOCAL_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJzZXJ2aWNlX3JvbGUiLAogICAgImlzcyI6ICJzdXBhYmFzZS1kZW1vIiwKICAgICJpYXQiOiAxNjQxNzY5MjAwLAogICAgImV4cCI6IDE3OTk1MzU2MDAKfQ.DaYlNEoUrrEn2Ig7tqibS-PHK5vgusbcbo7X36XVt4Q';
+
+// PostgreSQL connection - see pool configuration below
+// PostgreSQL connection - see pool configuration below
+
+// All tables from remote database (extracted from API)
+const TABLES = [
+  'accounting_workflows', 'action_recommendations', 'activities', 'ai_behavior_settings',
+  'ai_configurations', 'ai_contacts', 'ai_decision_log', 'ai_insights_summary',
+  'ai_performance_tracking', 'ai_prompt_templates', 'ai_recommendations', 'ai_tasks',
+  'analytics_cache', 'analytics_metrics', 'auditions', 'branches', 'bug_attachments',
+  'bug_comments', 'bugs', 'business_trends', 'call_analytics', 'call_insights',
+  'call_transcriptions', 'chat_logs', 'client_insights', 'clients', 'companies',
+  'company_partners', 'deliverable_master', 'deliverables', 'department_instructions',
+  'departments', 'designations', 'email_notification_templates', 'employee_companies',
+  'employees', 'events', 'follow_up_auditions', 'instruction_approvals', 'lead_drafts',
+  'lead_followups', 'lead_sources', 'lead_task_performance', 'leads', 'management_insights',
+  'menu_items', 'menu_items_tracking', 'ml_model_performance', 'mv_user_roles_fast',
+  'notification_batches', 'notification_engagement', 'notification_patterns',
+  'notification_performance_metrics', 'notification_preferences', 'notification_recipients',
+  'notification_rules', 'notification_settings', 'notifications', 'partners', 'payments',
+  'permissions', 'personalization_learning', 'post_sale_confirmations', 'post_sales_workflows',
+  'predictive_insights', 'profiles', 'query_performance_logs', 'quotation_approvals',
+  'quotation_events', 'quotation_predictions', 'quotation_revisions', 'quotation_workflow_history',
+  'quotations', 'quote_components', 'quote_deliverables_snapshot', 'quote_services_snapshot',
+  'recent_business_notifications', 'rejected_leads_view', 'revenue_forecasts', 'role_menu_permissions',
+  'role_permissions', 'roles', 'sales_activities', 'sales_performance_metrics', 'sales_team_members',
+  'sequence_rules', 'sequence_steps', 'service_packages', 'services', 'suppliers', 'system_logs',
+  'task_generation_log', 'task_performance_metrics', 'task_sequence_templates', 'task_status_history',
+  'team_members', 'team_performance_trends', 'teams', 'user_accounts', 'user_activity_history',
+  'user_ai_profiles', 'user_behavior_analytics', 'user_engagement_analytics', 'user_engagement_summary',
+  'user_id_mapping', 'user_menu_permissions', 'user_notification_summary', 'user_preferences',
+  'user_roles', 'users', 'v_package_deliverables', 'v_package_services', 'vendors', 'webhook_logs',
+  'whatsapp_config', 'whatsapp_messages', 'whatsapp_templates'
+];
+
+async function getTableSchema(tableName) {
+  try {
+    const { data, error } = await remoteSupabase
+      .from(tableName)
+      .select('*')
+      .limit(1);
+    
+    if (error) {
+      console.log(`⚠️ Table ${tableName} not accessible or doesn't exist: ${error.message}`);
+      return null;
+    }
+    
+    return data;
+  } catch (err) {
+    console.log(`⚠️ Error checking table ${tableName}: ${err.message}`);
+    return null;
+  }
+}
+
+async function syncTable(tableName) {
+  try {
+    console.log(`🔄 Syncing table: ${tableName}`);
+    
+    // Get all data from remote
+    const { data: remoteData, error: remoteError } = await remoteSupabase
+      .from(tableName)
+      .select('*');
+    
+    if (remoteError) {
+      console.log(`❌ Error fetching from remote ${tableName}: ${remoteError.message}`);
+      return { success: false, error: remoteError.message };
+    }
+    
+    if (!remoteData || remoteData.length === 0) {
+      console.log(`📭 Table ${tableName} is empty`);
+      return { success: true, count: 0 };
+    }
+    
+    // Clear local table first
+    await localSupabase.from(tableName).delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    
+    // Insert data to local in batches
+    const batchSize = 100;
+    let totalInserted = 0;
+    
+    for (let i = 0; i < remoteData.length; i += batchSize) {
+      const batch = remoteData.slice(i, i + batchSize);
+      
+      const { error: localError } = await localSupabase
+        .from(tableName)
+        .insert(batch);
+      
+      if (localError) {
+        console.log(`❌ Error inserting batch to local ${tableName}: ${localError.message}`);
+        return { success: false, error: localError.message };
+      }
+      
+      totalInserted += batch.length;
+    }
+    
+    console.log(`✅ Successfully synced ${tableName}: ${totalInserted} records`);
+    return { success: true, count: totalInserted };
+    
+  } catch (error) {
+    console.log(`❌ Unexpected error syncing ${tableName}: ${error.message}`);
+    return { success: false, error: error.message };
+  }
+}
+
+async function discoverTables() {
+  console.log('🔍 Discovering all tables in remote database...');
+  
+  const existingTables = [];
+  const missingTables = [];
+  
+  for (const table of TABLES) {
+    const schema = await getTableSchema(table);
+    if (schema !== null) {
+      existingTables.push(table);
+    } else {
+      missingTables.push(table);
+    }
+  }
+  
+  console.log(`\n📊 Table Discovery Results:`);
+  console.log(`✅ Found ${existingTables.length} existing tables`);
+  console.log(`❌ Missing ${missingTables.length} tables`);
+  
+  if (existingTables.length > 0) {
+    console.log(`\n✅ Existing tables:`);
+    existingTables.forEach(table => console.log(`  - ${table}`));
+  }
+  
+  if (missingTables.length > 0) {
+    console.log(`\n❌ Missing tables:`);
+    missingTables.forEach(table => console.log(`  - ${table}`));
+  }
+  
+  return existingTables;
+}
+
+async function syncAllTables() {
+  console.log('🚀 Starting complete database sync from remote to local...\n');
+  
+  // Discover available tables
+  const availableTables = await discoverTables();
+  
+  if (availableTables.length === 0) {
+    console.log('❌ No tables found to sync!');
+    return;
+  }
+  
+  console.log(`\n🔄 Starting sync of ${availableTables.length} tables...\n`);
+  
+  const results = {
+    successful: [],
+    failed: [],
+    totalRecords: 0
+  };
+  
+  for (const table of availableTables) {
+    const result = await syncTable(table);
+    
+    if (result.success) {
+      results.successful.push({ table, count: result.count });
+      results.totalRecords += result.count;
+    } else {
+      results.failed.push({ table, error: result.error });
+    }
+    
+    // Small delay between tables
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  
+  // Summary
+  console.log('\n' + '='.repeat(80));
+  console.log('🎉 SYNC COMPLETE! Summary:');
+  console.log('='.repeat(80));
+  console.log(`✅ Successfully synced: ${results.successful.length} tables`);
+  console.log(`❌ Failed: ${results.failed.length} tables`);
+  console.log(`📊 Total records synced: ${results.totalRecords}`);
+  
+  if (results.successful.length > 0) {
+    console.log('\n✅ Successful syncs:');
+    results.successful.forEach(({ table, count }) => {
+      console.log(`  - ${table}: ${count} records`);
+    });
+  }
+  
+  if (results.failed.length > 0) {
+    console.log('\n❌ Failed syncs:');
+    results.failed.forEach(({ table, error }) => {
+      console.log(`  - ${table}: ${error}`);
+    });
+  }
+  
+  console.log('\n🎯 All available data has been synced from remote to local!');
+  console.log('🗑️ You can now safely delete the remote Supabase instance.');
+}
+
+// Run the sync
+syncAllTables().catch(console.error); 

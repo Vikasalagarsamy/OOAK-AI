@@ -5,7 +5,6 @@ import { StatsCards } from "@/components/dashboard/stats-cards"
 import { RecentActivity } from "@/components/dashboard/recent-activity"
 import { BranchDistributionChart } from "@/components/dashboard/branch-distribution-chart"
 import { RealTimeDepartmentChart } from "@/components/dashboard/real-time-department-chart"
-import { PersonalizedHeader } from "@/components/dashboard/personalized-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { RefreshCw, WifiOff, Wifi } from "lucide-react"
@@ -19,9 +18,6 @@ export function RealTimeDashboard({ initialData }: { initialData?: any }) {
 
   return (
     <div className="space-y-6">
-      {/* Personalized Header */}
-      <PersonalizedHeader />
-
       {/* Dashboard Controls */}
       <div className="flex items-center justify-between">
         <div>

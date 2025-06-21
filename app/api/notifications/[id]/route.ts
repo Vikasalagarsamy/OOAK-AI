@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/actions/auth-actions'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/postgresql-client'
 
 export async function DELETE(
   request: NextRequest,
@@ -13,7 +13,7 @@ export async function DELETE(
     }
 
     const { id } = params
-    const supabase = createClient()
+    const { query, transaction } = createClient()
 
     const { error } = await supabase
       .from('notifications')

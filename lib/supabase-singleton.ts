@@ -1,4 +1,4 @@
-import { createClient as supabaseCreateClient } from "@supabase/supabase-js"
+import { createClient as supabaseCreateClient } from "@/lib/postgresql-client-unified"
 
 // Define types for better type safety
 type SupabaseClient = ReturnType<typeof supabaseCreateClient>
@@ -133,7 +133,7 @@ export function createClient() {
   return supabaseClient
 }
 
-// Also export the original createClient from supabase for maximum compatibility
+// Also export the original createClient from database client for maximum compatibility
 export const originalCreateClient = supabaseCreateClient
 
 // Create a singleton to prevent multiple instances

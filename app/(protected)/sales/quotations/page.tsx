@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { FileText, Plus, Search, Filter, MoreHorizontal, Eye, Edit, Trash2, Send, Download, Calendar, Users, Package, Check, Settings, Share, ExternalLink, AlertTriangle, CheckCircle, Clock, XCircle, BarChart3, ThumbsUp, ThumbsDown, DollarSign, UserCheck, ArrowRight, Table as TableIcon } from "lucide-react"
+import { FileText, Plus, Search, Filter, MoreHorizontal, Eye, Edit, Trash2, Send, Download, Calendar, Users, Package, Check, Settings, Share, ExternalLink, AlertTriangle, CheckCircle, Clock, XCircle, BarChart3, ThumbsUp, ThumbsDown, DollarSign, UserCheck, ArrowRight, Table as TableIcon, Lock } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -42,7 +42,7 @@ export default function QuotationPage() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
-  const [activeTab, setActiveTab] = useState("active")
+  const [activeTab, setActiveTab] = useState("all")
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({})
   const [selectedQuotation, setSelectedQuotation] = useState<SavedQuotation | null>(null)
   const [services, setServices] = useState<any[]>([])
@@ -89,7 +89,7 @@ export default function QuotationPage() {
         }
 
         // Load quotations for default tab
-        await loadQuotationsForTab("active")
+        await loadQuotationsForTab("all")
         
         console.log("✅ Quotations page data loaded")
       } catch (error) {
@@ -124,28 +124,84 @@ export default function QuotationPage() {
     }
   }, [workflowView]) // Only depend on workflowView
 
+  // Calculate dynamic totals including services and deliverables
+  const calculateDynamicTotals = async (quotationsList: SavedQuotation[]) => {
+    const totals: Record<number, number> = {}
+    
+    for (const quotation of quotationsList) {
+      try {
+        // Get services total (already stored in total_amount)
+        let servicesTotal = quotation.total_amount || 0
+        
+        // Get deliverables total by calculating from quotation data
+        let deliverablesTotal = 0
+        
+        const quotationData = quotation.quotation_data as any
+        if (quotationData?.selected_deliverables && Array.isArray(quotationData.selected_deliverables)) {
+          deliverablesTotal = quotationData.selected_deliverables.reduce((sum: number, deliverable: any) => {
+            const price = getDeliverablePrice(
+              deliverable.deliverable_id, 
+              quotation.default_package, 
+              deliverable.quantity || 1
+            )
+            return sum + price
+          }, 0)
+        }
+        
+        // Calculate true total
+        const trueTotal = servicesTotal + deliverablesTotal
+        totals[quotation.id] = trueTotal
+        
+        console.log(`📊 Quotation ${quotation.id}: Services ₹${servicesTotal} + Deliverables ₹${deliverablesTotal} = ₹${trueTotal}`)
+      } catch (error) {
+        console.error(`Error calculating total for quotation ${quotation.id}:`, error)
+        // Fallback to stored total_amount
+        totals[quotation.id] = quotation.total_amount || 0
+      }
+    }
+    
+    setDynamicTotals(totals)
+  }
+
   const loadQuotationsForTab = async (tabName: string) => {
     try {
       console.log(`🔍 Loading quotations for tab: ${tabName}`)
-      let result
       
-      switch (tabName) {
-        case "active":
-          result = await getQuotationsByStatus(['draft', 'sent', 'approved'])
-          break
-        case "rejected":
-          result = await getQuotationsByStatus(['rejected', 'expired'])
-          break
-        case "all":
-          result = await getQuotations()
-          break
-        default:
-          result = await getQuotations()
+      // Use the simple API that bypasses authentication issues
+      const response = await fetch('/api/quotations-simple')
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
-
+      
+      const result = await response.json()
+      
       if (result.success && result.quotations) {
-        setQuotations(result.quotations)
-        console.log(`✅ Loaded ${result.quotations.length} quotations for ${tabName}`)
+        let filteredQuotations = result.quotations
+        
+        // Apply tab-specific filtering
+        switch (tabName) {
+          case "active":
+            filteredQuotations = result.quotations.filter((q: any) => 
+              ['draft', 'sent', 'approved'].includes(q.status)
+            )
+            break
+          case "rejected":
+            filteredQuotations = result.quotations.filter((q: any) => 
+              ['rejected', 'expired'].includes(q.status)
+            )
+            break
+          case "all":
+          default:
+            filteredQuotations = result.quotations
+            break
+        }
+        
+        setQuotations(filteredQuotations)
+        
+        // Calculate dynamic totals including deliverables
+        await calculateDynamicTotals(filteredQuotations)
+        
+        console.log(`✅ Loaded ${filteredQuotations.length} quotations for ${tabName}`)
       } else {
         console.error("Error loading quotations:", result.error)
         toast({
@@ -395,10 +451,7 @@ export default function QuotationPage() {
     }
   }
 
-  const handleEdit = (quotationId: string) => {
-    // Navigate to edit page (we'll create this later)
-    router.push(`/sales/quotations/edit/${quotationId}`)
-  }
+  // Direct editing is now blocked - users must edit through tasks
 
   const getServiceName = (serviceId: number) => {
     const service = services.find(s => s.id === serviceId)
@@ -653,9 +706,9 @@ export default function QuotationPage() {
                             <Eye className="h-4 w-4 mr-2" />
                             View Details
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleEdit(quotation.id.toString())}>
-                            <Edit className="h-4 w-4 mr-2" />
-                            Edit
+                          <DropdownMenuItem disabled className="text-gray-400">
+                            <Lock className="h-4 w-4 mr-2" />
+                            Edit (Use Tasks)
                           </DropdownMenuItem>
                           <DropdownMenuItem>
                             <Download className="h-4 w-4 mr-2" />
@@ -682,10 +735,7 @@ export default function QuotationPage() {
   return (
     <div className="container mx-auto p-4">
       <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">My Quotations</h1>
-          <p className="text-muted-foreground">Create and manage quotations for clients</p>
-        </div>
+        <h1 className="text-2xl font-bold">My Quotations</h1>
         <div className="flex gap-2">
           <TestNotificationButton />
           <Button 
@@ -723,9 +773,6 @@ export default function QuotationPage() {
         <Card>
           <CardHeader>
             <CardTitle>Quotation Workflow Pipeline</CardTitle>
-            <CardDescription>
-              Track and manage quotations through their approval and confirmation stages
-            </CardDescription>
           </CardHeader>
           <CardContent>
             <QuotationWorkflowPipeline
@@ -740,9 +787,6 @@ export default function QuotationPage() {
         <Card>
           <CardHeader>
             <CardTitle>Quotations List</CardTitle>
-            <CardDescription>
-              View and manage all your quotations
-            </CardDescription>
           </CardHeader>
           {renderQuotationsContent()}
         </Card>

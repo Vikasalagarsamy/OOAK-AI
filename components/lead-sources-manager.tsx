@@ -17,8 +17,9 @@ import {
   createLeadSource,
   updateLeadSource,
   toggleLeadSourceStatus,
+  deleteLeadSource,
 } from "@/services/lead-source-service"
-import { Loader2, Plus, Edit, Check, X } from "lucide-react"
+import { Loader2, Plus, Edit, Check, X, Trash2 } from "lucide-react"
 
 const formSchema = z.object({
   name: z.string().min(2, "Name is required and must be at least 2 characters"),
@@ -152,6 +153,30 @@ export function LeadSourcesManager() {
     }
   }
 
+  const handleDeleteLeadSource = async (id: number, name: string) => {
+    if (!confirm(`Are you sure you want to delete the lead source "${name}"? This action cannot be undone.`)) {
+      return
+    }
+
+    try {
+      await deleteLeadSource(id)
+
+      toast({
+        title: "Success",
+        description: "Lead source deleted successfully!",
+      })
+
+      fetchLeadSources()
+    } catch (error) {
+      console.error("Error deleting lead source:", error)
+      toast({
+        title: "Error",
+        description: `Failed to delete lead source: ${error instanceof Error ? error.message : String(error)}`,
+        variant: "destructive",
+      })
+    }
+  }
+
   return (
     <div className="space-y-6">
       <Card>
@@ -275,6 +300,14 @@ export function LeadSourcesManager() {
                           <div className="flex justify-end gap-2">
                             <Button size="icon" variant="outline" onClick={() => startEditing(source)}>
                               <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button 
+                              size="icon" 
+                              variant="outline" 
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                              onClick={() => handleDeleteLeadSource(source.id, source.name)}
+                            >
+                              <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
                         )}

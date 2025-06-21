@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
+import { createClient } from "@/lib/postgresql-client"
 import { ScheduleFollowUpForm } from "@/components/follow-ups/schedule-follow-up-form"
 
 interface ScheduleFollowUpPageProps {
@@ -16,7 +16,7 @@ export default async function ScheduleFollowUpPage({ params }: ScheduleFollowUpP
   }
 
   // Fetch lead details
-  const supabase = createClient()
+  const { query, transaction } = createClient()
   const { data: lead, error } = await supabase
     .from("leads")
     .select("id, lead_number, client_name")

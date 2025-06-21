@@ -1,0 +1,91 @@
+"use client"
+
+import { type ReactNode, useEffect, useState } from "react"
+import Link from "next/link"
+import { usePathname } from "next/navigation"
+import { NavigationMenuLink } from "@/components/ui/navigation-menu"
+import { cn } from "@/lib/utils"
+import { query } from "@/lib/postgresql-client"
+
+interface PermissionAwareLinkProps {
+  href: string
+  children: ReactNode
+  requiredPermission: string
+  className?: string
+}
+
+export function PermissionAwareLink({ href, children, requiredPermission, className }: PermissionAwareLinkProps) {
+  const pathname = usePathname()
+  const [hasPermission, setHasPermission] = useState(true) // Default to true for initial render
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    async function checkPermission() {
+      try {
+        console.log(`🔐 Checking permission: ${requiredPermission}`)
+        
+        // Get current user from session/auth context
+        // For now, we'll use a placeholder - this should be replaced with actual user context
+        const userId = "current-user-id" // Replace with actual user ID from auth context
+        
+        if (!userId) {
+          console.log('❌ No user ID found')
+          setHasPermission(false)
+          return
+        }
+
+        // Get user role and permissions in a single query
+        const result = await query(`
+          SELECT ur.permissions 
+          FROM users u
+          JOIN user_roles ur ON u.role_id = ur.id
+          WHERE u.id = $1
+        `, [userId])
+
+        if (!result.success || !result.data || result.data.length === 0) {
+          console.error("❌ Error fetching user permissions:", result.error)
+          setHasPermission(false)
+          return
+        }
+
+        const roleData = result.data[0]
+        
+        // Parse permissions
+        const permissions = typeof roleData.permissions === "string" 
+          ? JSON.parse(roleData.permissions) 
+          : roleData.permissions
+
+        // Check if user has required permission
+        const permissionObj = permissions[requiredPermission]
+        const hasAccess = permissionObj && permissionObj.view === true
+        
+        console.log(`${hasAccess ? '✅' : '❌'} Permission check result for ${requiredPermission}: ${hasAccess}`)
+        setHasPermission(hasAccess)
+      } catch (error) {
+        console.error("❌ Error checking permissions:", error)
+        setHasPermission(false)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    checkPermission()
+  }, [requiredPermission])
+
+  // Don't render anything while loading or if no permission
+  if (isLoading || !hasPermission) return null
+
+  return (
+    <Link href={href} legacyBehavior passHref>
+      <NavigationMenuLink
+        className={cn(
+          "block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
+          pathname === href && "bg-accent text-accent-foreground",
+          className,
+        )}
+      >
+        {children}
+      </NavigationMenuLink>
+    </Link>
+  )
+}

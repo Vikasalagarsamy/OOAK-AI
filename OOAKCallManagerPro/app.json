@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "OOAK Call Manager Pro",
+    "slug": "ooak-call-manager-pro",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#2196F3"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "updates": {
+      "enabled": false
+    },
+    "runtimeVersion": {
+      "policy": "sdkVersion"
+    }
+  }
+}

@@ -1,7 +1,10 @@
 // Permission checker that integrates with the role manager system
-import { createClient } from "@/lib/supabase-browser"
+import { query, transaction } from "@/lib/postgresql-client"
 import { getCurrentUser } from "@/actions/auth-actions"
-import { extractMenuStructure, type PermissionMenuItem } from "@/lib/menu-extractor"
+import { ENTERPRISE_MENU_CONFIG, type MenuItemConfig } from "@/lib/menu-system"
+
+// Legacy type alias for backwards compatibility
+export type PermissionMenuItem = MenuItemConfig
 
 interface UserPermissions {
   [menuId: string]: {
@@ -32,19 +35,18 @@ export async function getUserPermissions(): Promise<UserPermissions> {
 
     console.log("Getting permissions for user:", user.username, "role:", user.roleId)
 
-    const supabase = createClient()
-    
     // Get role permissions from the roles table (your role manager data)
-    const { data: roleData, error } = await supabase
-      .from("roles")
-      .select("permissions")
-      .eq("id", user.roleId)
-      .single()
+    const roleResult = await query(
+      "SELECT permissions FROM roles WHERE id = $1",
+      [user.roleId]
+    )
 
-    if (error) {
-      console.error("Error fetching role permissions:", error)
+    if (!roleResult.rows || roleResult.rows.length === 0) {
+      console.error("Error fetching role permissions: Role not found")
       return {}
     }
+
+    const roleData = roleResult.rows[0]
 
     if (!roleData?.permissions) {
       console.log("No permissions found for role:", user.roleId)
@@ -79,9 +81,8 @@ export async function hasMenuPermission(menuId: string, permission: 'view' | 'ed
     
     if (!menuPermission) {
       // Check parent permission if this is a child item
-      const menuStructure = extractMenuStructure()
-      for (const section of menuStructure) {
-        if (section.children?.some(child => child.id === menuId)) {
+      for (const section of ENTERPRISE_MENU_CONFIG) {
+        if (section.items?.some((child: MenuItemConfig) => child.id === menuId)) {
           // Check if parent section has permission
           const parentPermission = permissions[section.id]
           return parentPermission?.[permission] || false
@@ -98,7 +99,7 @@ export async function hasMenuPermission(menuId: string, permission: 'view' | 'ed
 }
 
 // Filter menu items based on user permissions
-export async function filterMenuByPermissions(menuItems: PermissionMenuItem[]): Promise<PermissionMenuItem[]> {
+export async function filterMenuByPermissions(menuItems: MenuItemConfig[]): Promise<MenuItemConfig[]> {
   try {
     const permissions = await getUserPermissions()
     const user = await getCurrentUser()
@@ -108,14 +109,14 @@ export async function filterMenuByPermissions(menuItems: PermissionMenuItem[]): 
       return menuItems
     }
 
-    const filteredItems: PermissionMenuItem[] = []
+    const filteredItems: MenuItemConfig[] = []
 
     for (const item of menuItems) {
       const itemPermission = permissions[item.id]
       
       // Check if user has view permission for this item
       if (itemPermission?.view) {
-        const filteredItem: PermissionMenuItem = { ...item }
+        const filteredItem: MenuItemConfig = { ...item }
 
         // Filter children if they exist
         if (item.children) {
@@ -129,8 +130,8 @@ export async function filterMenuByPermissions(menuItems: PermissionMenuItem[]): 
           
           // Only include the section if it has visible children or is directly accessible
           if (filteredChildren.length > 0 || item.path) {
-            filteredItem.children = filteredChildren
-            filteredItems.push(filteredItem)
+            const itemWithChildren = { ...filteredItem, children: filteredChildren }
+            filteredItems.push(itemWithChildren)
           }
         } else {
           // No children, include if user has permission

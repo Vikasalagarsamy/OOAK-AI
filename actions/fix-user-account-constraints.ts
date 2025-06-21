@@ -1,139 +1,176 @@
 "use server"
 
-import { createClient } from "@/lib/supabase/server"
+import { query } from "@/lib/postgresql-client"
 import { revalidatePath } from "next/cache"
 
 export async function checkUserAccountConstraints(accountId: string) {
-  const supabase = createClient()
-
   try {
-    // Check if the function exists first
-    const { data: functionExists, error: functionCheckError } = await supabase.rpc("function_exists", {
-      function_name: "can_delete_user_account",
-    })
+    console.log(`🔍 [USER_CONSTRAINTS] Checking constraints for account ${accountId} via PostgreSQL...`)
 
-    if (functionCheckError || !functionExists) {
-      console.log("Function doesn't exist, creating it...")
-      // Create the function (simplified version)
-      const createFunctionSQL = `
-        CREATE OR REPLACE FUNCTION can_delete_user_account(account_id integer)
-        RETURNS json AS $$
-        DECLARE
-          result json;
-        BEGIN
-          result := json_build_object(
-            'can_delete', true,
-            'account_id', account_id
-          );
-          RETURN result;
-        END;
-        $$ LANGUAGE plpgsql;
-      `
-
-      const { error: createError } = await supabase.rpc("exec_sql", { sql: createFunctionSQL })
-
-      if (createError) {
-        console.error("Error creating function:", createError)
-        return {
-          success: false,
-          error: "Could not create helper function",
-          canDelete: false,
-        }
-      }
-    }
-
-    // Now call the function
-    const { data, error } = await supabase.rpc("can_delete_user_account", { account_id: Number.parseInt(accountId) })
-
-    if (error) {
-      console.error("Error checking constraints:", error)
+    const accountIdNum = parseInt(accountId)
+    if (isNaN(accountIdNum)) {
       return {
         success: false,
-        error: error.message,
+        error: "Invalid account ID",
         canDelete: false,
       }
     }
 
+    // Check if the account exists
+    const accountCheckResult = await query(`
+      SELECT id, username, email, is_active 
+      FROM user_accounts 
+      WHERE id = $1
+    `, [accountIdNum])
+
+    if (accountCheckResult.rows.length === 0) {
+      return {
+        success: false,
+        error: "Account not found",
+        canDelete: false,
+      }
+    }
+
+    const account = accountCheckResult.rows[0]
+
+    // Check for dependencies that would prevent deletion
+    const dependenciesResult = await query(`
+      SELECT 
+        (SELECT COUNT(*) FROM auth_logs WHERE user_id = $1) as auth_logs_count,
+        (SELECT COUNT(*) FROM leads WHERE assigned_to = (SELECT employee_id FROM user_accounts WHERE id = $1)) as assigned_leads_count,
+        (SELECT COUNT(*) FROM tasks WHERE assigned_to = (SELECT employee_id FROM user_accounts WHERE id = $1)) as assigned_tasks_count
+    `, [accountIdNum])
+
+    const dependencies = dependenciesResult.rows[0]
+    const totalDependencies = parseInt(dependencies.auth_logs_count || 0) + 
+                             parseInt(dependencies.assigned_leads_count || 0) + 
+                             parseInt(dependencies.assigned_tasks_count || 0)
+
+    console.log(`📊 [USER_CONSTRAINTS] Found ${totalDependencies} total dependencies for account ${accountId}`)
+
+    const canDelete = totalDependencies === 0
+    let reason = canDelete ? "No dependencies found" : "Has dependent records"
+
+    const details = {
+      account_id: accountIdNum,
+      username: account.username,
+      email: account.email,
+      is_active: account.is_active,
+      dependencies: {
+        auth_logs: parseInt(dependencies.auth_logs_count || 0),
+        assigned_leads: parseInt(dependencies.assigned_leads_count || 0),
+        assigned_tasks: parseInt(dependencies.assigned_tasks_count || 0)
+      },
+      can_delete: canDelete,
+      reason: reason
+    }
+
+    console.log(`✅ [USER_CONSTRAINTS] Constraint check completed for account ${accountId}`)
+
     return {
       success: true,
-      canDelete: data.can_delete,
-      reason: data.reason,
-      details: data,
+      canDelete,
+      reason,
+      details,
     }
-  } catch (error) {
-    console.error("Unexpected error in checkUserAccountConstraints:", error)
+  } catch (error: any) {
+    console.error("❌ [USER_CONSTRAINTS] Unexpected error in checkUserAccountConstraints:", error)
     return {
       success: false,
-      error: "An unexpected error occurred",
+      error: `An unexpected error occurred: ${error.message}`,
       canDelete: false,
     }
   }
 }
 
 export async function fixUserAccountConstraints(accountId: string) {
-  const supabase = createClient()
-
   try {
-    // Check if the function exists first
-    const { data: functionExists, error: functionCheckError } = await supabase.rpc("function_exists", {
-      function_name: "fix_user_account_constraints",
-    })
+    console.log(`🔧 [USER_CONSTRAINTS] Fixing constraints for account ${accountId} via PostgreSQL...`)
 
-    if (functionCheckError || !functionExists) {
-      console.log("Function doesn't exist, creating it...")
-      // Create the function (simplified version)
-      const createFunctionSQL = `
-        CREATE OR REPLACE FUNCTION fix_user_account_constraints(account_id integer)
-        RETURNS json AS $$
-        DECLARE
-          result json;
-        BEGIN
-          -- Delete auth_logs for this user if they exist
-          DELETE FROM auth_logs WHERE user_id = account_id;
-          
-          result := json_build_object(
-            'success', true,
-            'account_id', account_id
-          );
-          RETURN result;
-        END;
-        $$ LANGUAGE plpgsql;
-      `
-
-      const { error: createError } = await supabase.rpc("exec_sql", { sql: createFunctionSQL })
-
-      if (createError) {
-        console.error("Error creating function:", createError)
-        return {
-          success: false,
-          error: "Could not create helper function",
-        }
-      }
-    }
-
-    // Now call the function
-    const { data, error } = await supabase.rpc("fix_user_account_constraints", {
-      account_id: Number.parseInt(accountId),
-    })
-
-    if (error) {
-      console.error("Error fixing constraints:", error)
+    const accountIdNum = parseInt(accountId)
+    if (isNaN(accountIdNum)) {
       return {
         success: false,
-        error: error.message,
+        error: "Invalid account ID",
       }
     }
 
+    // Check if the account exists first
+    const accountCheckResult = await query(`
+      SELECT id, username 
+      FROM user_accounts 
+      WHERE id = $1
+    `, [accountIdNum])
+
+    if (accountCheckResult.rows.length === 0) {
+      return {
+        success: false,
+        error: "Account not found",
+      }
+    }
+
+    const account = accountCheckResult.rows[0]
+
+    console.log(`🗑️ [USER_CONSTRAINTS] Cleaning up dependencies for account ${account.username}...`)
+
+    // Delete auth_logs for this user
+    const authLogsResult = await query(`
+      DELETE FROM auth_logs 
+      WHERE user_id = $1
+      RETURNING id
+    `, [accountIdNum])
+
+    const deletedAuthLogs = authLogsResult.rowCount || 0
+
+    // Unassign leads from this user's employee
+    const unassignLeadsResult = await query(`
+      UPDATE leads 
+      SET assigned_to = NULL, updated_at = NOW()
+      WHERE assigned_to = (
+        SELECT employee_id 
+        FROM user_accounts 
+        WHERE id = $1
+      )
+      RETURNING id
+    `, [accountIdNum])
+
+    const unassignedLeads = unassignLeadsResult.rowCount || 0
+
+    // Unassign tasks from this user's employee
+    const unassignTasksResult = await query(`
+      UPDATE tasks 
+      SET assigned_to = NULL, updated_at = NOW()
+      WHERE assigned_to = (
+        SELECT employee_id 
+        FROM user_accounts 
+        WHERE id = $1
+      )
+      RETURNING id
+    `, [accountIdNum])
+
+    const unassignedTasks = unassignTasksResult.rowCount || 0
+
+    console.log(`✅ [USER_CONSTRAINTS] Cleaned up ${deletedAuthLogs} auth logs, ${unassignedLeads} leads, ${unassignedTasks} tasks`)
+
     revalidatePath("/organization/user-accounts")
+
     return {
       success: true,
-      details: data,
+      details: {
+        account_id: accountIdNum,
+        username: account.username,
+        cleaned_up: {
+          auth_logs_deleted: deletedAuthLogs,
+          leads_unassigned: unassignedLeads,
+          tasks_unassigned: unassignedTasks
+        }
+      },
     }
-  } catch (error) {
-    console.error("Unexpected error in fixUserAccountConstraints:", error)
+  } catch (error: any) {
+    console.error("❌ [USER_CONSTRAINTS] Unexpected error in fixUserAccountConstraints:", error)
     return {
       success: false,
-      error: "An unexpected error occurred",
+      error: `An unexpected error occurred: ${error.message}`,
     }
   }
 }

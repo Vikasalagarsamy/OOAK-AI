@@ -139,8 +139,19 @@ export function MyLeadsList() {
 
       const data = await response.json()
 
+      // Handle both new format { success: true, leads: [...] } and old format [...]
+      let leadsArray = []
+      if (data.success && Array.isArray(data.leads)) {
+        leadsArray = data.leads
+      } else if (Array.isArray(data)) {
+        leadsArray = data
+      } else {
+        console.error("Unexpected API response format:", data)
+        throw new Error("Invalid response format from server")
+      }
+
       // Additional client-side filtering to ensure rejected leads are excluded
-      const filteredData = data.filter((lead) => lead.status !== "REJECTED")
+      const filteredData = leadsArray.filter((lead) => lead.status !== "REJECTED")
       setLeads(filteredData || [])
     } catch (err) {
       console.error("Error fetching leads:", err)

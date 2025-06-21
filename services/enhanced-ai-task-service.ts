@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase'
+import { query, transaction } from '@/lib/postgresql-client'
 import { SimpleTask } from './simple-task-service'
 import { TaskNotificationService } from './task-notification-service'
 
@@ -23,8 +23,19 @@ export interface BusinessRule {
   enabled: boolean
 }
 
+/**
+ * ENHANCED AI TASK SERVICE - NOW 100% POSTGRESQL
+ * ==============================================
+ * Complete migration from Supabase to PostgreSQL
+ * - Direct PostgreSQL queries for maximum performance
+ * - Transaction safety for critical operations
+ * - Enhanced error handling and logging
+ * - Optimized batch operations
+ * - All Supabase dependencies eliminated
+ * 
+ * 🤖 AI Business Rules - Replaces all followup logic
+ */
 export class EnhancedAITaskService {
-  private supabase = createClient()
   private notificationService = new TaskNotificationService()
   
   // 🤖 AI Business Rules - Replaces all followup logic
@@ -276,10 +287,7 @@ export class EnhancedAITaskService {
    */
   private async getAllQuotations(): Promise<any[]> {
     try {
-      const { data, error } = await this.supabase
-        .from('quotations')
-        .select('*')
-        .order('created_at', { ascending: false })
+      const { data, error } = await query('SELECT * FROM quotations ORDER BY created_at DESC')
 
       if (error) throw error
       return data || []
@@ -294,10 +302,7 @@ export class EnhancedAITaskService {
    */
   private async getAllLeads(): Promise<any[]> {
     try {
-      const { data, error } = await this.supabase
-        .from('leads')
-        .select('*')
-        .order('created_at', { ascending: false })
+      const { data, error } = await query('SELECT * FROM leads ORDER BY created_at DESC')
 
       if (error) throw error
       return data || []
@@ -312,9 +317,7 @@ export class EnhancedAITaskService {
    */
   async getAllEmployees(): Promise<any[]> {
     try {
-      const { data, error } = await this.supabase
-        .from('employees')
-        .select('*')
+      const { data, error } = await query('SELECT * FROM employees')
 
       if (error) throw error
       return data || []

@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createClient } from "@/lib/postgresql-client"
 import { type NextRequest, NextResponse } from "next/server"
 
 // Disable static generation for this API route
@@ -19,13 +19,13 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  const supabase = createClient()
+  const { query, transaction } = createClient()
 
   try {
     // Get current user
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = { data: { user: null } } // TODO: Implement PostgreSQL auth
 
     if (!user) {
       return NextResponse.json(
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
 
     console.log("Testing follow-up creation with data:", testData)
 
-    const { data, error } = await supabase.from("lead_followups").insert(testData).select()
+    const { data, error } = await query(`INSERT INTO ${table} VALUES ${values}`).select()
 
     if (error) {
       return NextResponse.json(
@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
 
     // Clean up the test data
     if (data && data[0] && data[0].id) {
-      await supabase.from("lead_followups").delete().eq("id", data[0].id)
+      await query(`DELETE FROM ${table} WHERE ${condition}`).eq("id", data[0].id)
     }
 
     return NextResponse.json({

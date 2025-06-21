@@ -1,22 +1,95 @@
-import { createClient as createSupabaseClient } from "@supabase/supabase-js"
-import { Database } from "@/types/database.types"
+import { createClient as createSupabaseClient } from "@/lib/postgresql-client-unified"
+import { type Database } from "@/types/database"
+import { cookies } from "next/headers"
+
+// Get environment variables with fallbacks
+function getSupabaseConfig() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY
+  
+  console.log('🔧 Supabase config check:', {
+    hasUrl: !!supabaseUrl,
+    hasKey: !!supabaseAnonKey,
+    urlPreview: supabaseUrl ? supabaseUrl.substring(0, 30) + '...' : 'MISSING',
+    keyPreview: supabaseAnonKey ? supabaseAnonKey.substring(0, 20) + '...' : 'MISSING'
+  })
+  
+  if (!supabaseUrl) {
+    throw new Error('❌ NEXT_PUBLIC_SUPABASE_URL is missing from environment variables')
+  }
+  
+  if (!supabaseAnonKey) {
+    throw new Error('❌ NEXT_PUBLIC_SUPABASE_ANON_KEY is missing from environment variables')
+  }
+  
+  return { supabaseUrl, supabaseAnonKey }
+}
 
 // Create a singleton Supabase client
 let supabaseInstance: ReturnType<typeof createSupabaseClient<Database>> | null = null
 
 export function createClient() {
   if (!supabaseInstance) {
-    const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ""
-    const supabaseKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
+    try {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-    supabaseInstance = createSupabaseClient<Database>(supabaseUrl, supabaseKey, {
-      auth: {
-        persistSession: false,
-      },
-    })
+      if (!supabaseUrl || !supabaseAnonKey) {
+        throw new Error("Missing Supabase environment variables")
+      }
+
+      supabaseInstance = createSupabaseClient<Database>(supabaseUrl, supabaseAnonKey, {
+        auth: {
+          persistSession: true,
+          storageKey: 'app-supabase-auth',
+          storage: typeof window !== "undefined" ? window.localStorage : undefined,
+          autoRefreshToken: true,
+          detectSessionInUrl: true,
+          flowType: "pkce",
+        },
+      })
+
+      console.log("✅ Supabase client created successfully")
+    } catch (error) {
+      console.error("❌ Failed to create Supabase client:", error)
+      throw error
+    }
   }
 
   return supabaseInstance
+}
+
+// Server-side Supabase client (uses service role key when available)
+export function createServiceClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
+  const supabaseServiceKey = 
+    process.env.SUPABASE_SERVICE_ROLE_KEY || 
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error('Missing Supabase environment variables')
+  }
+
+  return createSupabaseClient<Database>(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false
+    },
+  })
+}
+
+// Export a singleton instance
+export const supabase = createClient()
+
+// IMPORTANT: Export createClient for backward compatibility
+export function createClientOld() {
+  try {
+    return createServiceClient()
+  } catch (error) {
+    console.error("Error creating Supabase service client:", error)
+    // Fallback to regular client
+    return createClient()
+  }
 }
 
 // Define types for better type safety
@@ -46,7 +119,7 @@ function createSupabaseClientOld(): SupabaseClient {
   const { supabaseUrl, supabaseAnonKey } = getSupabaseCredentials()
 
   // Create a new client with explicit configuration
-  clientSingleton = createSupabaseClient(supabaseUrl, supabaseAnonKey, {
+  clientSingleton = createSupabaseClient<Database>(supabaseUrl, supabaseAnonKey, {
     auth: {
       persistSession: true,
       storageKey: "app-supabase-auth",
@@ -56,69 +129,5 @@ function createSupabaseClientOld(): SupabaseClient {
   return clientSingleton
 }
 
-// Export a singleton instance
-export const supabase = createClient()
-
-// Server-side Supabase client (uses service role key)
-export function createServiceClient() {
-  // Use environment variables with fallbacks
-  const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseServiceKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-  // Log available keys for debugging (remove in production)
-  console.log("Available env vars:", {
-    hasUrl: !!supabaseUrl,
-    hasServiceKey: !!supabaseServiceKey,
-  })
-
-  // Use anon key as fallback if service key is not available
-  if (!supabaseUrl) {
-    console.error("Supabase URL is missing from environment variables")
-    // Return a mock client that won't throw errors but won't work either
-    return createMockClient()
-  }
-
-  if (!supabaseServiceKey) {
-    console.warn("Supabase service role key is missing, falling back to anon key")
-    // Continue with anon key as fallback
-  }
-
-  return createSupabaseClient(supabaseUrl, supabaseServiceKey || "", {
-    auth: {
-      persistSession: false,
-    },
-  })
-}
-
-// Create a mock client that won't throw errors
-function createMockClient() {
-  return {
-    from: () => ({
-      select: () => ({
-        order: () => ({
-          limit: () => ({
-            then: () => Promise.resolve({ data: [], error: null }),
-          }),
-        }),
-      }),
-    }),
-    insert: () => Promise.resolve({ data: null, error: new Error("Mock client - no connection") }),
-    update: () => Promise.resolve({ data: null, error: new Error("Mock client - no connection") }),
-    delete: () => Promise.resolve({ data: null, error: new Error("Mock client - no connection") }),
-  } as unknown as SupabaseClient
-}
-
-// IMPORTANT: Export createClient for backward compatibility
-// This is the function used by employee-actions.ts and other services
-export function createClientOld() {
-  try {
-    return createServiceClient()
-  } catch (error) {
-    console.error("Error creating Supabase client:", error)
-    return createMockClient()
-  }
-}
-
-// Also export the original createClient from supabase for maximum compatibility
+// Also export the original createClient from database client for maximum compatibility
 export const originalCreateClient = createSupabaseClient

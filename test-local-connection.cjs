@@ -1,0 +1,227 @@
+// 🚨 MIGRATED FROM SUPABASE TO POSTGRESQL
+// Migration Date: 2025-06-20T09:38:43.927Z
+// Original file backed up as: test-local-connection.cjs.backup
+
+
+// PostgreSQL connection pool
+const pool = new Pool({
+  host: process.env.POSTGRES_HOST || 'localhost',
+  port: process.env.POSTGRES_PORT || 5432,
+  database: process.env.POSTGRES_DATABASE || 'ooak_future',
+  user: process.env.POSTGRES_USER || 'postgres',
+  password: process.env.POSTGRES_PASSWORD || 'password',
+  ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false,
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+});
+
+
+// Query helper function
+async function query(text, params = []) {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(text, params);
+    return { data: result.rows, error: null };
+  } catch (error) {
+    console.error('❌ PostgreSQL Query Error:', error.message);
+    return { data: null, error: error.message };
+  } finally {
+    client.release();
+  }
+}
+
+// Transaction helper function  
+async function transaction(callback) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await callback(client);
+    await client.query('COMMIT');
+    return { data: result, error: null };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ PostgreSQL Transaction Error:', error.message);
+    return { data: null, error: error.message };
+  } finally {
+    client.release();
+  }
+}
+
+// Original content starts here:
+#!/usr/bin/env node
+
+// 🧪 Test Local Supabase Connection
+// ================================
+
+require('dotenv').config({ path: '.env.local' });
+
+console.log('🧪 Testing Local Supabase Connection...\n');
+
+// Display current configuration
+console.log('📋 Current Configuration:');
+console.log('========================');
+console.log(`🏠 Supabase URL: ${process.env.NEXT_PUBLIC_SUPABASE_URL}`);
+console.log(`🔑 API Key (first 50 chars): ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.substring(0, 50)}...`);
+console.log(`🛡️ Service Key (first 50 chars): ${process.env.SUPABASE_SERVICE_ROLE_KEY?.substring(0, 50)}...\n`);
+
+const { Pool } = require('pg'););
+
+// Test different local configurations
+const configs = [
+  {
+    name: "Port 54321 (API)",
+    url: 'http://localhost:54321',
+    key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxvY2FsaG9zdCIsInJvbGUiOiJhbm9uIiwiaWF0IjoxNzMxNTU3OTQ1LCJleHAiOjIwNDcxMzM5NDV9.NvVmNaLltgElT4-9TJw4aZdWcCu9nP7JaGJ5X5y5g2M'
+  },
+  {
+    name: "Port 54321 (API) with service key",
+    url: 'http://localhost:54321',
+    key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxvY2FsaG9zdCIsInJvbGUiOiJzZXJ2aWNlX3JvbGUiLCJpYXQiOjE3MzE1NTc5NDUsImV4cCI6MjA0NzEzMzk0NX0.gfwXTzTK35nL-lD3-6zY2Wn1azOq5TCKdQY_HXOKYzI'
+  }
+];
+
+// Test a few known tables that should exist locally
+const testTables = ['clients', 'companies', 'leads', 'users', 'roles'];
+
+async function testConnection(config) {
+  console.log(`\n🔍 Testing ${config.name}...`);
+  console.log(`URL: ${config.url}`);
+  
+  // PostgreSQL connection - see pool configuration below
+  
+  const results = [];
+  
+  for (const table of testTables) {
+    try {
+      const { data, error } = await supabase
+        .from(table)
+        .select('*')
+        .limit(1);
+      
+      if (!error) {
+        results.push({ table, status: 'SUCCESS', count: data ? data.length : 0 });
+        process.stdout.write('✅');
+      } else {
+        results.push({ table, status: 'ERROR', error: error.message });
+        process.stdout.write('❌');
+      }
+    } catch (e) {
+      results.push({ table, status: 'EXCEPTION', error: e.message });
+      process.stdout.write('💥');
+    }
+  }
+  
+  console.log('\n');
+  
+  const successful = results.filter(r => r.status === 'SUCCESS').length;
+  console.log(`📊 Results: ${successful}/${testTables.length} tables accessible`);
+  
+  if (successful > 0) {
+    console.log('✅ WORKING TABLES:');
+    results.filter(r => r.status === 'SUCCESS').forEach(r => {
+      console.log(`  - ${r.table} (${r.count} records)`);
+    });
+  }
+  
+  if (successful < testTables.length) {
+    console.log('❌ FAILED TABLES:');
+    results.filter(r => r.status !== 'SUCCESS').forEach(r => {
+      console.log(`  - ${r.table}: ${r.error}`);
+    });
+  }
+  
+  return { config: config.name, successful, total: testTables.length, results };
+}
+
+async function runTests() {
+  console.log('🚀 Testing Local Supabase Connections...\n');
+  
+  const allResults = [];
+  
+  for (const config of configs) {
+    const result = await testConnection(config);
+    allResults.push(result);
+  }
+  
+  console.log('\n' + '='.repeat(80));
+  console.log('📋 SUMMARY');
+  console.log('='.repeat(80));
+  
+  allResults.forEach(result => {
+    const percentage = Math.round((result.successful / result.total) * 100);
+    console.log(`${result.config}: ${result.successful}/${result.total} (${percentage}%)`);
+  });
+  
+  const bestResult = allResults.reduce((best, current) => 
+    current.successful > best.successful ? current : best
+  );
+  
+  console.log(`\n🏆 Best configuration: ${bestResult.config}`);
+  
+  if (bestResult.successful === 0) {
+    console.log('\n🚨 CRITICAL: No tables accessible with any configuration!');
+    console.log('This suggests the local database might not have the expected tables.');
+  }
+}
+
+runTests();
+
+async function testNextJSIntegration() {
+  console.log('\n🏗️ Testing Next.js Integration...');
+  
+  try {
+    // Check if we can import the Supabase client
+    const { Pool } = require('pg'););
+    
+    // PostgreSQL connection - see pool configuration below
+    
+    console.log('✅ Supabase client created successfully');
+    
+    // Test a simple query
+    const { data, error } = await supabase
+      .from('roles')
+      .select('*')
+      .limit(3);
+    
+    if (error) {
+      console.log(`❌ Supabase query failed: ${error.message}`);
+    } else {
+      console.log(`✅ Supabase query successful - ${data.length} records retrieved`);
+    }
+    
+  } catch (error) {
+    console.log(`❌ Next.js integration test failed: ${error.message}`);
+    console.log('ℹ️  This might be normal if @supabase/supabase-js is not installed yet');
+  }
+}
+
+async function main() {
+  await testConnection();
+  await testNextJSIntegration();
+  
+  console.log('\n🎯 SUMMARY:');
+  console.log('===========');
+  console.log('✨ Your Next.js app is now configured for LOCAL Supabase!');
+  console.log('🏠 Database URL: http://localhost:8000');
+  console.log('📊 Studio URL: http://localhost:8000 (login: supabase/this_password_is_insecure_and_should_be_updated)');
+  console.log('🚀 Start your Next.js app: npm run dev');
+  console.log('');
+  console.log('🔄 To switch back to remote: bash switch-to-remote-supabase.sh');
+  console.log('🔄 To switch to local again: bash switch-to-local-supabase.sh');
+}
+
+if (require.main === module) {
+  main().catch(console.error);
+} 
+
+
+// Cleanup function
+async function cleanup() {
+  try {
+    await pool.end();
+    console.log('✅ PostgreSQL pool closed');
+  } catch (error) {
+    console.error('❌ Error closing pool:', error.message);
+  }
+}

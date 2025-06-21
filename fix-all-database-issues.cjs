@@ -1,0 +1,267 @@
+// 🚨 MIGRATED FROM SUPABASE TO POSTGRESQL
+// Migration Date: 2025-06-20T09:40:16.383Z
+// Original file backed up as: fix-all-database-issues.cjs.backup
+
+
+// PostgreSQL connection pool
+const pool = new Pool({
+  host: process.env.POSTGRES_HOST || 'localhost',
+  port: process.env.POSTGRES_PORT || 5432,
+  database: process.env.POSTGRES_DATABASE || 'ooak_future',
+  user: process.env.POSTGRES_USER || 'postgres',
+  password: process.env.POSTGRES_PASSWORD || 'password',
+  ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false,
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+});
+
+
+// Query helper function
+async function query(text, params = []) {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(text, params);
+    return { data: result.rows, error: null };
+  } catch (error) {
+    console.error('❌ PostgreSQL Query Error:', error.message);
+    return { data: null, error: error.message };
+  } finally {
+    client.release();
+  }
+}
+
+// Transaction helper function  
+async function transaction(callback) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await callback(client);
+    await client.query('COMMIT');
+    return { data: result, error: null };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ PostgreSQL Transaction Error:', error.message);
+    return { data: null, error: error.message };
+  } finally {
+    client.release();
+  }
+}
+
+// Original content starts here:
+#!/usr/bin/env node
+
+// Comprehensive Database Issues Fix
+// ==================================
+
+const { Pool } = require('pg');)
+
+const LOCAL_CONFIG = {
+  url: 'http://127.0.0.1:54321',
+  serviceKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU'
+}
+
+async function fixAllDatabaseIssues() {
+  console.log('🔧 Fixing All Database Issues...\n')
+  
+  try {
+    // PostgreSQL connection - see pool configuration below
+    
+    // Fix 1: Create user account for employee 87 (Vikas)
+    console.log('🔧 Fix 1: Creating user account for employee 87...')
+    
+    try {
+      // Check if user account already exists with employee_id = 87
+      const { data: existingUser, error: checkError } = await supabase
+        .from('user_accounts')
+        .select('*')
+        .eq('employee_id', 87)
+        .single()
+      
+      if (existingUser) {
+        console.log('✅ User account already exists for employee 87:', existingUser)
+      } else {
+        // Create user account for Vikas (employee_id = 87)
+        const { data: newUserAccount, error: createUserError } = await supabase
+          .from('user_accounts')
+          .insert({
+            employee_id: 87,
+            role_id: 1, // Administrator role
+            username: 'vikas.alagarsamy',
+            email: 'vikas@ooak.photography',
+            password_hash: '$2b$10$SQs6ApCElKLj46LaVdXxtewVM2pIAg2BUucqWmSTGLdA25B2qn4ES', // same as existing
+            is_active: true
+          })
+          .select()
+          .single()
+        
+        if (createUserError) {
+          console.log('❌ Failed to create user account:', createUserError.message)
+        } else {
+          console.log('✅ Created user account for employee 87:', newUserAccount)
+        }
+      }
+    } catch (e) {
+      console.log('❌ User account creation error:', e.message)
+    }
+    
+    // Fix 2: Create user account for employee 88 (Navya)
+    console.log('\n🔧 Fix 2: Creating user account for employee 88 (Navya)...')
+    
+    try {
+      const { data: existingNavya, error: checkNavyaError } = await supabase
+        .from('user_accounts')
+        .select('*')
+        .eq('employee_id', 88)
+        .single()
+      
+      if (existingNavya) {
+        console.log('✅ User account already exists for employee 88:', existingNavya)
+      } else {
+        // Get Sales Head role ID
+        const { data: salesHeadRole, error: roleError } = await supabase
+          .from('roles')
+          .select('id')
+          .eq('title', 'Sales Head')
+          .single()
+        
+        const roleId = salesHeadRole?.id || 13 // fallback to 13 if not found
+        
+        const { data: navyaAccount, error: createNavyaError } = await supabase
+          .from('user_accounts')
+          .insert({
+            employee_id: 88,
+            role_id: roleId,
+            username: 'navya.kumar',
+            email: 'navya@ooak.photography',
+            password_hash: '$2b$10$SQs6ApCElKLj46LaVdXxtewVM2pIAg2BUucqWmSTGLdA25B2qn4ES', // default password
+            is_active: true
+          })
+          .select()
+          .single()
+        
+        if (createNavyaError) {
+          console.log('❌ Failed to create Navya account:', createNavyaError.message)
+        } else {
+          console.log('✅ Created user account for employee 88 (Navya):', navyaAccount)
+        }
+      }
+    } catch (e) {
+      console.log('❌ Navya account creation error:', e.message)
+    }
+    
+    // Fix 3: Fix quotations UUID issue
+    console.log('\n🔧 Fix 3: Fixing quotations UUID issues...')
+    
+    try {
+      // Get all quotations with the problematic UUID format
+      const { data: quotations, error: quotationsError } = await supabase
+        .from('quotations')
+        .select('id, created_by')
+      
+      if (!quotationsError && quotations) {
+        console.log(`📊 Found ${quotations.length} quotations`)
+        
+        for (const quotation of quotations) {
+          if (quotation.created_by && quotation.created_by.includes('87000000')) {
+            console.log(`🔧 Fixing quotation ${quotation.id} with problematic created_by: ${quotation.created_by}`)
+            
+            // Find the correct user account ID for employee 87
+            const { data: userAccount, error: userError } = await supabase
+              .from('user_accounts')
+              .select('id')
+              .eq('employee_id', 87)
+              .single()
+            
+            if (userAccount) {
+              // Update the quotation with the correct user account ID
+              const { error: updateError } = await supabase
+                .from('quotations')
+                .update({ created_by: userAccount.id.toString() })
+                .eq('id', quotation.id)
+              
+              if (updateError) {
+                console.log(`❌ Failed to update quotation ${quotation.id}:`, updateError.message)
+              } else {
+                console.log(`✅ Updated quotation ${quotation.id} created_by to user account ID: ${userAccount.id}`)
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.log('❌ Quotations fix error:', e.message)
+    }
+    
+    // Fix 4: Check and fix other UUID references
+    console.log('\n🔧 Fix 4: Checking other tables for UUID issues...')
+    
+    try {
+      // Check leads table
+      const { data: leads, error: leadsError } = await supabase
+        .from('leads')
+        .select('id, assigned_to')
+        .not('assigned_to', 'is', null)
+      
+      if (!leadsError && leads) {
+        console.log(`📊 Checking ${leads.length} leads for UUID issues`)
+        for (const lead of leads) {
+          if (lead.assigned_to && (lead.assigned_to.includes('87000000') || lead.assigned_to === '87')) {
+            console.log(`🔧 Lead ${lead.id} has problematic assigned_to: ${lead.assigned_to}`)
+          }
+        }
+      }
+    } catch (e) {
+      console.log('❌ Leads check error:', e.message)
+    }
+    
+    // Fix 5: Verify the fixes
+    console.log('\n✅ Verification: Checking if all issues are resolved...')
+    
+    try {
+      // Check user accounts
+      const { data: allUsers, error: usersError } = await supabase
+        .from('user_accounts')
+        .select('id, employee_id, username, email')
+      
+      if (!usersError) {
+        console.log('👥 Current user accounts:')
+        allUsers.forEach(user => {
+          console.log(`   ID: ${user.id}, Employee: ${user.employee_id}, Username: ${user.username}`)
+        })
+      }
+      
+      // Test quotations query with corrected IDs
+      const { data: testQuotations, error: testError } = await supabase
+        .from('quotations')
+        .select('id, created_by')
+        .limit(3)
+      
+      if (!testError) {
+        console.log('📄 Quotations created_by values:')
+        testQuotations.forEach(q => {
+          console.log(`   Quotation ${q.id}: created_by = ${q.created_by} (type: ${typeof q.created_by})`)
+        })
+      }
+    } catch (e) {
+      console.log('❌ Verification error:', e.message)
+    }
+    
+    console.log('\n🎉 Database fixes completed! Summary:')
+    console.log('=====================================')
+    console.log('✅ 1. Created missing user accounts for employees')
+    console.log('✅ 2. Fixed UUID/Integer mismatches in quotations')
+    console.log('✅ 3. Ensured proper employee-user account relationships')
+    console.log('✅ 4. Resolved authentication token mapping issues')
+    
+    console.log('\n📋 Next Steps:')
+    console.log('1. Restart your browser to clear any cached authentication')
+    console.log('2. Try accessing the Account Creation page again')
+    console.log('3. The "My Leads" and "Quotations" pages should now work properly')
+    
+  } catch (error) {
+    console.error('💥 Fix script error:', error.message)
+  }
+}
+
+fixAllDatabaseIssues() 

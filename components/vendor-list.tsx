@@ -20,7 +20,7 @@ import { EditVendorDialog } from "./edit-vendor-dialog"
 import { DeleteVendorDialog } from "./delete-vendor-dialog"
 import { useToast } from "@/components/ui/use-toast"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { supabase } from "@/lib/supabase"
+import { query } from "@/lib/postgresql-client"
 
 // Define the Vendor type if it's not imported
 // type Vendor = {
@@ -60,22 +60,29 @@ export function VendorList() {
   const fetchVendors = async () => {
     setIsLoading(true)
     try {
-      const { data, error } = await supabase.from("vendors").select("*").order("name")
+      console.log('🔍 Fetching vendors from database...')
+      
+      const result = await query(`
+        SELECT * FROM vendors 
+        ORDER BY name ASC
+      `)
 
-      if (error) {
+      if (!result.success) {
         // Check if the error is because the table doesn't exist
-        if (error.message.includes("relation") && error.message.includes("does not exist")) {
+        if (result.error?.includes("relation") && result.error?.includes("does not exist")) {
+          console.log('⚠️ Vendors table does not exist')
           setTableExists(false)
           return
         }
-        throw error
+        throw new Error(result.error || 'Failed to fetch vendors')
       }
 
-      setVendors(data || [])
-      setFilteredVendors(data || [])
+      console.log(`✅ Loaded ${result.data?.length || 0} vendors`)
+      setVendors(result.data || [])
+      setFilteredVendors(result.data || [])
       setTableExists(true)
     } catch (error) {
-      console.error("Error fetching vendors:", error)
+      console.error("❌ Error fetching vendors:", error)
       toast({
         title: "Error",
         description: "Failed to load vendors. Please try again.",
@@ -89,8 +96,9 @@ export function VendorList() {
   const createVendorsTable = async () => {
     setIsCreatingTable(true)
     try {
-      // Execute the SQL directly instead of using RPC
-      const { error } = await supabase.query(`
+      console.log('🔨 Creating vendors table...')
+      
+      const result = await query(`
         CREATE TABLE IF NOT EXISTS vendors (
           id SERIAL PRIMARY KEY,
           vendor_code VARCHAR(20) UNIQUE NOT NULL,
@@ -130,8 +138,11 @@ export function VendorList() {
         EXECUTE FUNCTION update_vendor_timestamp();
       `)
 
-      if (error) throw error
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to create vendors table')
+      }
 
+      console.log('✅ Vendors table created successfully')
       toast({
         title: "Success",
         description: "Vendors table created successfully.",
@@ -140,7 +151,7 @@ export function VendorList() {
       setTableExists(true)
       fetchVendors()
     } catch (error) {
-      console.error("Error creating vendors table:", error)
+      console.error("❌ Error creating vendors table:", error)
       toast({
         title: "Error",
         description: "Failed to create vendors table. Please try again.",

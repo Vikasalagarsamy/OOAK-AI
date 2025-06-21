@@ -1,0 +1,273 @@
+// 🚨 MIGRATED FROM SUPABASE TO POSTGRESQL
+// Migration Date: 2025-06-20T09:51:57.551Z
+// Original file backed up as: monitor-whatsapp-live.js.backup
+
+
+// PostgreSQL connection pool
+const pool = new Pool({
+  host: process.env.POSTGRES_HOST || 'localhost',
+  port: process.env.POSTGRES_PORT || 5432,
+  database: process.env.POSTGRES_DATABASE || 'ooak_future',
+  user: process.env.POSTGRES_USER || 'postgres',
+  password: process.env.POSTGRES_PASSWORD || 'password',
+  ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false,
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+});
+
+
+// Query helper function
+async function query(text, params = []) {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(text, params);
+    return { data: result.rows, error: null };
+  } catch (error) {
+    console.error('❌ PostgreSQL Query Error:', error.message);
+    return { data: null, error: error.message };
+  } finally {
+    client.release();
+  }
+}
+
+// Transaction helper function  
+async function transaction(callback) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await callback(client);
+    await client.query('COMMIT');
+    return { data: result, error: null };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ PostgreSQL Transaction Error:', error.message);
+    return { data: null, error: error.message };
+  } finally {
+    client.release();
+  }
+}
+
+// Original content starts here:
+#!/usr/bin/env node
+
+/**
+ * OPTIMIZED WHATSAPP MONITOR
+ * Reduced polling frequency to prevent system overload
+ */
+
+const express = require('express')
+const { Pool } = require('pg');)
+
+// Configuration - OPTIMIZED INTERVALS
+const BUSINESS_NUMBER = '+919677362524'
+const MONITOR_PORT = 3001
+const WEBHOOK_URL = 'https://edf3-60-243-52-206.ngrok-free.app/api/webhooks/whatsapp'
+
+// Initialize Supabase client
+// PostgreSQL connection - see pool configuration below
+
+console.log('🔴 OPTIMIZED WHATSAPP MONITOR STARTING...')
+console.log('⚠️  REDUCED POLLING TO PREVENT SYSTEM OVERLOAD')
+console.log('=' .repeat(50))
+console.log(`📱 Business Number: ${BUSINESS_NUMBER}`)
+console.log(`🔗 Webhook URL: ${WEBHOOK_URL}`)
+console.log(`👀 Monitor Port: ${MONITOR_PORT}`)
+console.log('=' .repeat(50))
+
+class WhatsAppLiveMonitor {
+  constructor() {
+    this.messageCount = 0
+    this.startTime = Date.now()
+    this.lastMessages = []
+    this.intervals = []
+  }
+
+  async startMonitoring() {
+    console.log('\n🚀 Starting OPTIMIZED real-time monitoring...')
+    console.log('📱 Send a message to +919677362524 from your personal WhatsApp!')
+    console.log('👀 Watching for incoming messages (every 30 seconds)...\n')
+
+    // Monitor database changes - REDUCED FREQUENCY
+    this.startDatabaseMonitoring()
+    
+    // Monitor webhook logs
+    this.startWebhookMonitoring()
+    
+    // Start status updates
+    this.startStatusUpdates()
+
+    console.log('✅ Optimized monitoring active!')
+    console.log('💬 Send messages now and watch them appear here...\n')
+  }
+
+  startDatabaseMonitoring() {
+    // OPTIMIZED: Poll every 30 seconds instead of 2 seconds
+    const interval1 = setInterval(async () => {
+      try {
+        const { data: newMessages } = await supabase
+          .from('communications')
+          .select('*')
+          .eq('platform', 'whatsapp')
+          .eq('from_phone', BUSINESS_NUMBER.replace('+', ''))
+          .order('timestamp', { ascending: false })
+          .limit(1)
+
+        if (newMessages && newMessages.length > 0) {
+          const latestMessage = newMessages[0]
+          const messageId = latestMessage.id || latestMessage.message_id
+
+          // Check if this is a new message
+          if (!this.lastMessages.find(m => m.id === messageId)) {
+            this.handleNewMessage(latestMessage)
+            this.lastMessages.unshift(latestMessage)
+            if (this.lastMessages.length > 10) this.lastMessages.pop()
+          }
+        }
+      } catch (error) {
+        // Silently handle database errors
+      }
+    }, 30000) // CHANGED: 30 seconds instead of 2 seconds
+    
+    this.intervals.push(interval1)
+  }
+
+  startWebhookMonitoring() {
+    // This would require webhook log access
+    console.log('📡 Webhook monitoring active...')
+  }
+
+  handleNewMessage(message) {
+    this.messageCount++
+    const timestamp = new Date().toLocaleTimeString()
+    
+    console.log('🔔 NEW WHATSAPP MESSAGE RECEIVED!')
+    console.log(`⏰ Time: ${timestamp}`)
+    console.log(`📱 From: ${message.from_phone || 'Unknown'}`)
+    console.log(`💬 Content: "${message.content || message.text || 'No content'}"`)
+    console.log(`🆔 Message ID: ${message.id || message.message_id}`)
+    console.log('─'.repeat(40))
+
+    // Test AI reading the message - with throttling
+    this.testAIReading(message)
+  }
+
+  async testAIReading(message) {
+    console.log('🤖 Testing AI reading of this message...')
+    
+    try {
+      const aiResponse = await fetch('http://localhost:3000/api/ai-simple-test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: `What did the user say in their recent WhatsApp message? Analyze: "${message.content || message.text}"`,
+          userId: 'live_test'
+        })
+      })
+
+      const aiResult = await aiResponse.json()
+      
+      if (aiResult.success) {
+        console.log('✅ AI Successfully Analyzed Message!')
+        console.log(`📊 Confidence: ${aiResult.confidence}`)
+        console.log(`🧠 AI Response: ${aiResult.response.substring(0, 150)}...`)
+      } else {
+        console.log('❌ AI failed to analyze message')
+        console.log(`Error: ${aiResult.error}`)
+      }
+    } catch (error) {
+      console.log('❌ AI testing error:', error.message)
+    }
+    
+    console.log('═'.repeat(50))
+  }
+
+  startStatusUpdates() {
+    // OPTIMIZED: Status update every 2 minutes instead of 30 seconds
+    const interval2 = setInterval(() => {
+      const uptime = Math.floor((Date.now() - this.startTime) / 1000)
+      console.log(`\n📊 OPTIMIZED STATUS - Uptime: ${uptime}s | Messages: ${this.messageCount} | Monitoring: ✅`)
+    }, 120000) // CHANGED: 2 minutes instead of 30 seconds
+    
+    this.intervals.push(interval2)
+  }
+
+  async testAIBusinessQuery() {
+    console.log('\n🧠 Testing AI Business Intelligence...')
+    
+    try {
+      const response = await fetch('http://localhost:3000/api/ai-simple-test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: 'Show me recent WhatsApp communications and business insights',
+          userId: 'live_test'
+        })
+      })
+
+      const result = await response.json()
+      
+      if (result.success) {
+        console.log('✅ AI Business Query Working!')
+        console.log(`📊 Confidence: ${result.confidence}`)
+        console.log(`📱 WhatsApp Messages Found: ${result.context_used.whatsapp_messages}`)
+        console.log(`💼 Business Context: ${result.context_used.summary}`)
+      }
+    } catch (error) {
+      console.log('❌ AI business query error:', error.message)
+    }
+  }
+
+  // Instructions for user
+  showInstructions() {
+    console.log('\n' + '🔥'.repeat(25) + ' INSTRUCTIONS ' + '🔥'.repeat(25))
+    console.log('1. 📱 Open WhatsApp on your phone')
+    console.log('2. 💬 Start a new chat with: +919677362524')
+    console.log('3. ✉️  Send any message (e.g., "Hi, testing real-time integration!")')
+    console.log('4. 👀 Watch this console for real-time message detection')
+    console.log('5. 🤖 See AI analyze your messages automatically')
+    console.log('6. 🔄 Send more messages to test continuous monitoring')
+    console.log('═'.repeat(70))
+    console.log('💡 TIP: Try sending business-related messages to test AI responses!')
+    console.log('Example: "I need a quotation for wedding photography"')
+    console.log('⚠️  OPTIMIZED: Reduced polling frequency to prevent system overload')
+    console.log('═'.repeat(70))
+  }
+
+  // Graceful shutdown
+  stop() {
+    console.log('\n🛑 Stopping all monitoring intervals...')
+    this.intervals.forEach(interval => clearInterval(interval))
+    this.intervals = []
+    console.log('✅ All intervals cleared')
+  }
+}
+
+// Start the live monitor
+const monitor = new WhatsAppLiveMonitor()
+
+// Show instructions
+monitor.showInstructions()
+
+// Start monitoring
+monitor.startMonitoring()
+
+// OPTIMIZED: Test AI every 5 minutes instead of 60 seconds
+const aiTestInterval = setInterval(() => {
+  monitor.testAIBusinessQuery()
+}, 300000) // CHANGED: 5 minutes instead of 1 minute
+
+monitor.intervals.push(aiTestInterval)
+
+// Handle graceful shutdown
+process.on('SIGINT', () => {
+  console.log('\n🛑 Live monitoring stopped')
+  console.log(`📊 Total messages processed: ${monitor.messageCount}`)
+  monitor.stop()
+  process.exit(0)
+})
+
+process.on('SIGTERM', () => {
+  monitor.stop()
+  process.exit(0)
+})

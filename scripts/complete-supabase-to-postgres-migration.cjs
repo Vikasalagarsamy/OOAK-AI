@@ -1,0 +1,483 @@
+// 🚨 MIGRATED FROM SUPABASE TO POSTGRESQL
+// Migration Date: 2025-06-20T09:51:57.553Z
+// Original file backed up as: scripts/complete-supabase-to-postgres-migration.cjs.backup
+
+
+// PostgreSQL connection pool
+const pool = new Pool({
+  host: process.env.POSTGRES_HOST || 'localhost',
+  port: process.env.POSTGRES_PORT || 5432,
+  database: process.env.POSTGRES_DATABASE || 'ooak_future',
+  user: process.env.POSTGRES_USER || 'postgres',
+  password: process.env.POSTGRES_PASSWORD || 'password',
+  ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false,
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+});
+
+
+// Query helper function
+async function query(text, params = []) {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(text, params);
+    return { data: result.rows, error: null };
+  } catch (error) {
+    console.error('❌ PostgreSQL Query Error:', error.message);
+    return { data: null, error: error.message };
+  } finally {
+    client.release();
+  }
+}
+
+// Transaction helper function  
+async function transaction(callback) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await callback(client);
+    await client.query('COMMIT');
+    return { data: result, error: null };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ PostgreSQL Transaction Error:', error.message);
+    return { data: null, error: error.message };
+  } finally {
+    client.release();
+  }
+}
+
+// Original content starts here:
+#!/usr/bin/env node
+
+/**
+ * 🎯 COMPLETE SUPABASE TO POSTGRESQL MIGRATION
+ * Phase 12.4 - Replace all Supabase client usage with direct PostgreSQL connections
+ */
+
+const fs = require('fs')
+const path = require('path')
+const { execSync } = require('child_process')
+
+console.log('🚀 Starting Phase 12.4: Complete Supabase to PostgreSQL Migration')
+
+// PostgreSQL connection configuration
+const PG_CONFIG = {
+  host: 'localhost',
+  port: 5432,
+  database: 'postgres',
+  user: 'postgres',
+  password: 'postgres'
+}
+
+// 1. Create centralized PostgreSQL client
+const pgClientContent = `import { Pool } from 'pg'
+
+// Centralized PostgreSQL connection pool
+export const pool = new Pool({
+  host: '${PG_CONFIG.host}',
+  port: ${PG_CONFIG.port},
+  database: '${PG_CONFIG.database}',
+  user: '${PG_CONFIG.user}',
+  password: '${PG_CONFIG.password}',
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+})
+
+// Helper function for single queries
+export async function query(text: string, params?: any[]) {
+  const client = await pool.connect()
+  try {
+    const result = await client.query(text, params)
+    return result
+  } finally {
+    client.release()
+  }
+}
+
+// Helper function for transactions
+export async function transaction(callback: (client: any) => Promise<any>) {
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const result = await callback(client)
+    await client.query('COMMIT')
+    return result
+  } catch (error) {
+    await client.query('ROLLBACK')
+    throw error
+  } finally {
+    client.release()
+  }
+}
+
+// Connection health check
+export async function healthCheck() {
+  try {
+    const result = await query('SELECT NOW() as current_time')
+    console.log('✅ PostgreSQL connection healthy:', result.rows[0].current_time)
+    return true
+  } catch (error) {
+    console.error('❌ PostgreSQL connection failed:', error.message)
+    return false
+  }
+}
+`
+
+async function createPostgreSQLClient() {
+  console.log('📝 Creating centralized PostgreSQL client...')
+  
+  const libDir = path.join(process.cwd(), 'lib')
+  if (!fs.existsSync(libDir)) {
+    fs.mkdirSync(libDir, { recursive: true })
+  }
+  
+  const clientPath = path.join(libDir, 'postgresql-client.ts')
+  fs.writeFileSync(clientPath, pgClientContent)
+  
+  console.log('✅ Created lib/postgresql-client.ts')
+}
+
+async function testPostgreSQLConnection() {
+  console.log('🔍 Testing PostgreSQL connection...')
+  
+  try {
+    // Try to require pg module
+    let Pool
+    try {
+      Pool = require('pg').Pool
+    } catch (error) {
+      console.log('📦 Installing pg dependency...')
+      execSync('npm install pg @types/pg', { stdio: 'inherit' })
+      Pool = require('pg').Pool
+    }
+    
+    const testPool = new Pool(PG_CONFIG)
+    
+    const result = await testPool.query('SELECT NOW() as current_time, version() as pg_version')
+    console.log('✅ PostgreSQL connection successful!')
+    console.log('   Time:', result.rows[0].current_time)
+    console.log('   Version:', result.rows[0].pg_version.split(' ')[0])
+    
+    await testPool.end()
+    return true
+  } catch (error) {
+    console.error('❌ PostgreSQL connection failed:', error.message)
+    return false
+  }
+}
+
+async function generateMigrationReport() {
+  console.log('📊 Generating migration status report...')
+  
+  const supabaseFiles = []
+  
+  function scanDirectory(dir) {
+    try {
+      const files = fs.readdirSync(dir)
+      
+      files.forEach(file => {
+        const filePath = path.join(dir, file)
+        const stat = fs.statSync(filePath)
+        
+        if (stat.isDirectory() && !file.startsWith('.') && file !== 'node_modules') {
+          scanDirectory(filePath)
+        } else if (file.endsWith('.ts') || file.endsWith('.tsx') || file.endsWith('.js')) {
+          const content = fs.readFileSync(filePath, 'utf8')
+          if (content.includes('supabase') || content.includes('@supabase')) {
+            supabaseFiles.push(filePath.replace(process.cwd() + '/', ''))
+          }
+        }
+      })
+    } catch (error) {
+      // Skip directories we can't read
+    }
+  }
+  
+  scanDirectory(process.cwd())
+  
+  const report = `# SUPABASE MIGRATION STATUS REPORT
+Generated: ${new Date().toISOString()}
+
+## FILES STILL USING SUPABASE: ${supabaseFiles.length}
+
+${supabaseFiles.slice(0, 50).map(file => `- ${file}`).join('\n')}
+${supabaseFiles.length > 50 ? `\n... and ${supabaseFiles.length - 50} more files` : ''}
+
+## MIGRATION PRIORITY:
+
+### HIGH PRIORITY (Core Services):
+- services/dashboard-service.ts
+- services/bug-service.ts  
+- services/notification-service.ts
+- services/activity-service.ts
+- actions/dashboard-actions.ts
+- actions/user-role-actions.ts
+
+### MEDIUM PRIORITY (Components & Actions):
+- All remaining /actions/*.ts files
+- Components using Supabase queries
+- API routes still using Supabase
+
+### LOW PRIORITY (Scripts & Tests):
+- Legacy .js scripts
+- Test files
+- Migration utilities
+
+## NEXT ACTIONS REQUIRED:
+1. Complete migration of high-priority files
+2. Replace Supabase queries with direct PostgreSQL
+3. Update all imports to use lib/postgresql-client.ts
+4. Remove Supabase dependencies when complete
+
+## ESTIMATED COMPLETION TIME: 
+- High priority: 1-2 days
+- Medium priority: 3-4 days  
+- Low priority: 1-2 days
+- Testing & validation: 1 day
+
+Total: **1 week**
+`
+
+  fs.writeFileSync('SUPABASE_MIGRATION_REPORT.md', report)
+  console.log(`✅ Generated migration report: ${supabaseFiles.length} files need migration`)
+  
+  return supabaseFiles
+}
+
+async function createSampleMigration() {
+  console.log('📝 Creating sample service migration...')
+  
+  // Create a sample migrated service to show the pattern
+  const sampleServiceContent = `// 🎯 MIGRATED: Dashboard Service - PostgreSQL Version
+// Original: services/dashboard-service.ts (Supabase)
+// Migrated: Direct PostgreSQL queries
+
+import { query, transaction } from "@/lib/postgresql-client"
+
+export async function getDashboardStats() {
+  try {
+    // Replace: const { count: companies } = await supabase.from("companies").select("*", { count: "exact", head: true })
+    const companiesResult = await query('SELECT COUNT(*) as count FROM companies')
+    const companies = parseInt(companiesResult.rows[0].count)
+
+    // Replace: const { count: branches } = await supabase.from("branches").select("*", { count: "exact", head: true })  
+    const branchesResult = await query('SELECT COUNT(*) as count FROM branches')
+    const branches = parseInt(branchesResult.rows[0].count)
+
+    // Replace: const { count: employees } = await supabase.from("employees").select("*", { count: "exact", head: true })
+    const employeesResult = await query('SELECT COUNT(*) as count FROM employees')
+    const employees = parseInt(employeesResult.rows[0].count)
+
+    // Replace: const { count: clients } = await supabase.from("clients").select("*", { count: "exact", head: true })
+    const clientsResult = await query('SELECT COUNT(*) as count FROM clients')
+    const clients = parseInt(clientsResult.rows[0].count)
+
+    return {
+      companies,
+      branches, 
+      employees,
+      clients,
+      timestamp: new Date().toISOString()
+    }
+  } catch (error) {
+    console.error('Dashboard stats error:', error)
+    throw new Error('Failed to fetch dashboard statistics')
+  }
+}
+
+// Example transaction usage
+export async function createCompanyWithBranch(companyData: any, branchData: any) {
+  return await transaction(async (client) => {
+    // Insert company
+    const companyResult = await client.query(
+      'INSERT INTO companies (name, email, phone) VALUES ($1, $2, $3) RETURNING id',
+      [companyData.name, companyData.email, companyData.phone]
+    )
+    
+    const companyId = companyResult.rows[0].id
+    
+    // Insert branch
+    const branchResult = await client.query(
+      'INSERT INTO branches (company_id, name, location) VALUES ($1, $2, $3) RETURNING id',
+      [companyId, branchData.name, branchData.location]
+    )
+    
+    return {
+      company_id: companyId,
+      branch_id: branchResult.rows[0].id
+    }
+  })
+}
+`
+
+  const samplePath = path.join(process.cwd(), 'services', 'dashboard-service-postgresql.ts')
+  fs.writeFileSync(samplePath, sampleServiceContent)
+  console.log('✅ Created sample migrated service: services/dashboard-service-postgresql.ts')
+}
+
+async function createMigrationGuide() {
+  console.log('📖 Creating migration guide...')
+  
+  const guideContent = `# 🎯 SUPABASE TO POSTGRESQL MIGRATION GUIDE
+
+## Phase 12.4 - Complete Migration Strategy
+
+### ✅ COMPLETED STEPS:
+1. Created centralized PostgreSQL client (lib/postgresql-client.ts)
+2. Tested PostgreSQL connection
+3. Generated migration report
+4. Created sample migration patterns
+
+### 🔄 IN PROGRESS:
+- Manual migration of core services
+- Replacing Supabase queries with SQL
+
+### ⚠️ IMPORTANT PATTERNS:
+
+#### BEFORE (Supabase):
+\`\`\`typescript
+const { Pool } = require('pg');
+// PostgreSQL connection - see pool configuration below
+
+const { data, error } = await supabase
+  .from('users')
+  .select('*')
+  .eq('active', true)
+\`\`\`
+
+#### AFTER (PostgreSQL):
+\`\`\`typescript
+import { query } from '@/lib/postgresql-client'
+
+const result = await query(
+  'SELECT * FROM users WHERE active = $1',
+  [true]
+)
+const data = result.rows
+\`\`\`
+
+### 🛠️ MIGRATION STEPS FOR EACH FILE:
+
+1. **Replace imports:**
+   - Remove: \`const { Pool } = require('pg');\`
+   - Add: \`import { query, transaction } from '@/lib/postgresql-client'\`
+
+2. **Replace queries:**
+   - \`.select()\` → \`SELECT\` SQL
+   - \`.insert()\` → \`INSERT\` SQL  
+   - \`.update()\` → \`UPDATE\` SQL
+   - \`.delete()\` → \`DELETE\` SQL
+
+3. **Handle errors:**
+   - PostgreSQL throws exceptions instead of returning error objects
+   - Use try/catch blocks
+
+4. **Use transactions:**
+   - For multi-table operations
+   - Replace Supabase RPC with transaction function
+
+### 🚀 NEXT ACTIONS:
+
+1. **High Priority Migration (Today):**
+   - [ ] services/dashboard-service.ts
+   - [ ] actions/dashboard-actions.ts
+   - [ ] services/notification-service.ts
+
+2. **Medium Priority (This Week):**
+   - [ ] All /actions/*.ts files
+   - [ ] Core /services/*.ts files
+   - [ ] Main components using database
+
+3. **Testing & Validation:**
+   - [ ] All APIs return same data
+   - [ ] Performance benchmarks
+   - [ ] Error handling works correctly
+
+4. **Cleanup (Final Step):**
+   - [ ] Remove Supabase dependencies
+   - [ ] Update environment variables
+   - [ ] Update documentation
+
+### 📊 PROGRESS TRACKING:
+- Total files with Supabase: [Check SUPABASE_MIGRATION_REPORT.md]
+- High priority files: 6
+- Estimated completion: 1 week
+- Current status: **MIGRATION IN PROGRESS**
+
+### 🔧 TOOLS AVAILABLE:
+- \`lib/postgresql-client.ts\` - Centralized database client
+- \`services/dashboard-service-postgresql.ts\` - Migration example
+- \`SUPABASE_MIGRATION_REPORT.md\` - Complete file list
+
+---
+**Next:** Start migrating high-priority services manually using the patterns above.
+`
+
+  fs.writeFileSync('MIGRATION_GUIDE_12.4.md', guideContent)
+  console.log('✅ Created comprehensive migration guide: MIGRATION_GUIDE_12.4.md')
+}
+
+async function main() {
+  try {
+    console.log('🏗️  Phase 12.4: Complete Supabase to PostgreSQL Migration')
+    console.log('=' .repeat(60))
+    
+    // Step 1: Test PostgreSQL connection
+    console.log('\n1️⃣  Testing PostgreSQL connection...')
+    const connectionOk = await testPostgreSQLConnection()
+    if (!connectionOk) {
+      console.error('❌ Cannot proceed without PostgreSQL connection')
+      console.log('💡 Make sure your PostgreSQL container is running:')
+      console.log('   docker-compose up -d')
+      process.exit(1)
+    }
+    
+    // Step 2: Create PostgreSQL client
+    console.log('\n2️⃣  Creating centralized PostgreSQL client...')
+    await createPostgreSQLClient()
+    
+    // Step 3: Generate migration status report
+    console.log('\n3️⃣  Analyzing codebase for Supabase usage...')
+    const supabaseFiles = await generateMigrationReport()
+    
+    // Step 4: Create sample migration
+    console.log('\n4️⃣  Creating migration examples...')
+    await createSampleMigration()
+    
+    // Step 5: Create comprehensive guide
+    console.log('\n5️⃣  Creating migration guide...')
+    await createMigrationGuide()
+    
+    console.log('\n' + '=' .repeat(60))
+    console.log('🎉 Phase 12.4 Setup Complete!')
+    console.log('=' .repeat(60))
+    
+    console.log('\n📊 MIGRATION STATUS:')
+    console.log(`   • Files needing migration: ${supabaseFiles.length}`)
+    console.log(`   • PostgreSQL client ready: ✅`)
+    console.log(`   • Migration tools created: ✅`)
+    console.log(`   • Documentation generated: ✅`)
+    
+    console.log('\n📋 IMMEDIATE NEXT STEPS:')
+    console.log('   1. Review MIGRATION_GUIDE_12.4.md')
+    console.log('   2. Review SUPABASE_MIGRATION_REPORT.md') 
+    console.log('   3. Start with high-priority services:')
+    console.log('      • services/dashboard-service.ts')
+    console.log('      • actions/dashboard-actions.ts')
+    console.log('      • services/notification-service.ts')
+    console.log('   4. Test each migration thoroughly')
+    console.log('   5. Continue with remaining files')
+    
+    console.log('\n🚀 Ready to proceed to manual migration phase!')
+    
+  } catch (error) {
+    console.error('❌ Migration setup failed:', error.message)
+    process.exit(1)
+  }
+}
+
+// Run migration setup
+main().catch(console.error) 

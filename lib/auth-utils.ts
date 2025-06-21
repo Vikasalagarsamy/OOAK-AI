@@ -1,31 +1,19 @@
-import { jwtVerify } from "jose" // Using jose instead of jsonwebtoken
+import { jwtVerify, SignJWT } from "jose"
 import { cookies } from "next/headers"
-import { createClient } from "@/lib/supabase"
-import { createClient as createSupabaseClient } from "@supabase/supabase-js"
-
-// Create a Supabase client for auth operations
-export function createAuthClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
-
-  return createSupabaseClient(supabaseUrl, supabaseKey)
-}
-
-// Check if a user is authenticated
-export async function isAuthenticated() {
-  const supabase = createAuthClient()
-  const { data, error } = await supabase.auth.getSession()
-
-  if (error || !data.session) {
-    return false
-  }
-
-  return true
-}
+import { query, transaction } from "@/lib/postgresql-client"
 
 // Helper to verify auth token
-export async function verifyAuth(token: string) {
+export async function verifyAuth(token?: string) {
   try {
+    if (!token) {
+      const cookieStore = await cookies()
+      token = cookieStore.get("auth_token")?.value
+    }
+    
+    if (!token) {
+      return { success: false, error: "No authentication token found", user: null }
+    }
+
     const secret = process.env.JWT_SECRET || "fallback-secret-only-for-development"
     const secretKey = new TextEncoder().encode(secret)
 
@@ -34,99 +22,135 @@ export async function verifyAuth(token: string) {
         algorithms: ["HS256"],
       })
 
-      // Verify that the user still exists and is active
-      const supabase = createClient()
-      const { data, error } = await supabase.from("user_accounts").select("is_active").eq("id", payload.sub).single()
+      // Verify that the user still exists and is active using PostgreSQL
+      const result = await query(
+        "SELECT id, name, email, is_active FROM employees WHERE id = $1",
+        [payload.sub]
+      )
 
-      if (error) {
-        console.error("User verification error:", error.message)
-        // Don't immediately invalidate on DB errors - allow grace period
-        return { valid: true, payload, warningFlag: true }
+      if (result.rows.length === 0) {
+        console.error("❌ [AUTH] User not found during verification:", payload.sub)
+        return { success: false, error: "User not found", user: null }
       }
 
-      if (!data || !data.is_active) {
-        return { valid: false, payload: null }
+      const user = result.rows[0]
+
+      if (!user.is_active) {
+        console.error("❌ [AUTH] User is inactive:", payload.sub)
+        return { success: false, error: "User is inactive", user: null }
       }
 
-      return { valid: true, payload }
-    } catch (jwtError) {
-      console.error("JWT verification error:", jwtError)
+      console.log("✅ [AUTH] Token verification successful for user:", payload.sub)
+      return { 
+        success: true, 
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          ...payload
+        },
+        error: null
+      }
+    } catch (error) {
+      console.error("❌ [AUTH] JWT verification error:", error)
 
       // If token is expired but not by more than 10 minutes, still consider it valid
       // This gives frontend time to refresh the token
-      if (jwtError.code === "ERR_JWT_EXPIRED") {
+      if (error instanceof Error && error.name === "JWTExpired") {
         const tokenData = JSON.parse(Buffer.from(token.split(".")[1], "base64").toString())
         const expTime = tokenData.exp * 1000
         const gracePeriod = 10 * 60 * 1000 // 10 minutes
 
         if (Date.now() - expTime < gracePeriod) {
-          return { valid: true, payload: tokenData, expired: true }
+          console.log("⚠️ [AUTH] Token expired but within grace period")
+          return { 
+            success: true, 
+            user: { id: tokenData.sub, ...tokenData }, 
+            error: null,
+            expired: true 
+          }
         }
       }
 
-      return { valid: false, payload: null }
+      return { success: false, error: "Invalid or expired token", user: null }
     }
   } catch (error) {
-    console.error("Token verification error:", error)
-    return { valid: false, payload: null }
+    console.error("❌ [AUTH] Token verification error:", error)
+    return { success: false, error: "Token verification failed", user: null }
   }
+}
+
+// Create a session token
+export async function createSessionToken(user: any) {
+  const secret = process.env.JWT_SECRET || "fallback-secret-only-for-development"
+  const secretKey = new TextEncoder().encode(secret)
+
+  return await new SignJWT({
+    sub: user.id.toString(),
+    username: user.username,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    email: user.email,
+    employeeId: user.employeeId,
+    role: user.roleId,
+    roleName: user.roleName,
+    isAdmin: user.isAdmin,
+    iat: Math.floor(Date.now() / 1000),
+    jti: `${user.id}-${Date.now()}`,
+  })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("7d")
+    .sign(secretKey)
 }
 
 // Check user's permission for a specific resource and action
 export async function checkPermission(resourceName: string, actionType: string) {
   try {
+    console.log(`🔐 [AUTH] Checking permission: ${resourceName}:${actionType}`)
+
     const cookieStore = await cookies()
     const token = cookieStore.get("auth_token")?.value
 
     if (!token) {
-      console.log("No auth token found")
+      console.log("❌ [AUTH] No auth token found")
       return false
     }
 
-    const { valid, payload } = await verifyAuth(token)
+    const authResult = await verifyAuth(token)
 
-    if (!valid || !payload) {
-      console.log("Invalid token or payload")
+    if (!authResult.success || !authResult.user) {
+      console.log("❌ [AUTH] Invalid token or payload")
       return false
     }
+
+    const payload = authResult.user
 
     // Administrator role has all permissions
     if (payload.roleName === "Administrator") {
-      console.log("User is Administrator, granting permission automatically")
+      console.log("✅ [AUTH] User is Administrator, granting permission automatically")
       return true
     }
 
-    // For other roles, check specific permissions
-    const supabase = createClient()
-    const { data, error } = await supabase
-      .from("role_permissions")
-      .select(`
-        permissions:permission_id (
-          resource,
-          action
-        )
-      `)
-      .eq("role_id", payload.role)
-      .eq("status", "ACTIVE")
+    // For other roles, check specific permissions using PostgreSQL
+    const result = await query(`
+      SELECT 
+        p.resource,
+        p.action
+      FROM role_permissions rp
+      JOIN permissions p ON rp.permission_id = p.id
+      WHERE rp.role_id = $1 
+      AND rp.status = 'ACTIVE'
+      AND p.resource = $2 
+      AND p.action = $3
+    `, [payload.role, resourceName, actionType])
 
-    if (error) {
-      console.error("Permission check error:", error)
-      return false
-    }
-
-    if (!data || data.length === 0) {
-      console.log("No permissions found for role:", payload.role)
-      return false
-    }
-
-    // Check if user has the specific permission
-    const hasPermission = data.some(
-      (rp) => rp.permissions?.resource === resourceName && rp.permissions?.action === actionType,
-    )
-    console.log(`Permission check for ${resourceName}:${actionType} - Result: ${hasPermission}`)
+    const hasPermission = result.rows.length > 0
+    
+    console.log(`${hasPermission ? '✅' : '❌'} [AUTH] Permission check for ${resourceName}:${actionType} - Result: ${hasPermission}`)
     return hasPermission
   } catch (error) {
-    console.error("Permission check error:", error)
+    console.error("❌ [AUTH] Permission check error:", error)
     return false
   }
 }
@@ -138,17 +162,21 @@ export function createProtectedAction<T, A extends any[]>(
 ) {
   return async (...args: A): Promise<T | { error: string }> => {
     try {
+      console.log("🔒 [AUTH] Protected action called")
+
       // First check authentication
       const cookieStore = await cookies()
       const token = cookieStore.get("auth_token")?.value
 
       if (!token) {
+        console.log("❌ [AUTH] Authentication required")
         return { error: "Authentication required" }
       }
 
-      const { valid, payload } = await verifyAuth(token)
+      const authResult = await verifyAuth(token)
 
-      if (!valid || !payload) {
+      if (!authResult.success || !authResult.user) {
+        console.log("❌ [AUTH] Invalid or expired session")
         return { error: "Invalid or expired session" }
       }
 
@@ -157,124 +185,86 @@ export function createProtectedAction<T, A extends any[]>(
         const hasPermission = await checkPermission(requiredPermission.resource, requiredPermission.action)
 
         if (!hasPermission) {
+          console.log("❌ [AUTH] Insufficient permissions")
           return { error: "Insufficient permissions" }
         }
       }
 
+      console.log("✅ [AUTH] Protected action authorized, proceeding...")
       // If all checks pass, execute the action
       return await action(...args)
     } catch (error) {
-      console.error("Protected action error:", error)
-      return { error: "An error occurred while processing your request" }
+      console.error("❌ [AUTH] Protected action error:", error)
+      return { error: "Internal server error" }
     }
   }
 }
 
-// Helper to get the current user
 export async function getCurrentUser() {
   try {
     const cookieStore = await cookies()
     const token = cookieStore.get("auth_token")?.value
 
     if (!token) {
-      // Try to get user ID from user_id cookie as fallback
-      const userId = cookieStore.get("user_id")?.value
-      if (userId) {
-        // Create a minimal user object with admin privileges
-        return {
-          id: userId,
-          username: "admin",
-          email: "admin@example.com",
-          employeeId: null,
-          roleId: 1,
-          roleName: "Administrator",
-          isAdmin: true,
-        }
-      }
-
-      // If no user ID cookie, use default admin user
-      return {
-        id: "1",
-        username: "admin",
-        email: "admin@example.com",
-        employeeId: null,
-        roleId: 1,
-        roleName: "Administrator",
-        isAdmin: true,
-      }
+      return null
     }
 
-    const secret = process.env.JWT_SECRET || "fallback-secret-only-for-development"
-    const secretKey = new TextEncoder().encode(secret)
+    const authResult = await verifyAuth(token)
 
-    const { payload } = await jwtVerify(token, secretKey, {
-      algorithms: ["HS256"],
-    })
-
-    const supabase = createClient()
-    const { data: user, error } = await supabase
-      .from("user_accounts")
-      .select(`
-        id, 
-        username, 
-        email, 
-        is_active, 
-        employee_id, 
-        role_id,
-        roles:role_id (
-          id, 
-          title
-        )
-      `)
-      .eq("id", payload.sub)
-      .single()
-
-    if (error || !user) {
-      console.log("Error fetching user or user not found, using admin fallback")
-      return {
-        id: "1",
-        username: "admin",
-        email: "admin@example.com",
-        employeeId: null,
-        roleId: 1,
-        roleName: "Administrator",
-        isAdmin: true,
-      }
+    if (!authResult.success || !authResult.user) {
+      return null
     }
 
-    if (!user.is_active) {
-      console.log("User account is not active, using admin fallback")
-      return {
-        id: "1",
-        username: "admin",
-        email: "admin@example.com",
-        employeeId: null,
-        roleId: 1,
-        roleName: "Administrator",
-        isAdmin: true,
-      }
+    const payload = authResult.user
+
+    // Fetch complete user data using PostgreSQL
+    const result = await query(`
+      SELECT 
+        e.*,
+        r.title as role_name
+      FROM employees e
+      LEFT JOIN roles r ON e.role_id = r.id
+      WHERE e.id = $1 AND e.is_active = true
+    `, [payload.sub])
+
+    if (result.rows.length === 0) {
+      console.log("❌ [AUTH] User not found or inactive")
+      return null
     }
+
+    const user = result.rows[0]
 
     return {
       id: user.id,
       username: user.username,
-      email: user.email || "",
-      employeeId: user.employee_id,
+      email: user.email,
+      firstName: user.first_name,
+      lastName: user.last_name,
+      employeeId: user.id,
       roleId: user.role_id,
-      roleName: user.roles?.title || "",
-      isAdmin: user.roles?.title === "Administrator" || user.role_id === 1,
+      roleName: user.role_name,
+      isAdmin: user.role_name === "Administrator" || user.role_id === 1,
     }
   } catch (error) {
-    console.error("Error getting current user:", error)
-    // Return a default admin user as fallback
-    return {
-      id: "1",
-      username: "admin",
-      email: "admin@example.com",
-      employeeId: null,
-      roleId: 1,
-      roleName: "Administrator",
-      isAdmin: true,
+    console.error("❌ [AUTH] Error getting current user:", error)
+    return null
+  }
+}
+
+// Check if a user is authenticated (simplified version)
+export async function isAuthenticated() {
+  try {
+    const cookieStore = await cookies()
+    const token = cookieStore.get("auth_token")?.value
+
+    if (!token) {
+      return false
     }
+
+    const authResult = await verifyAuth(token)
+    return authResult.success
+  } catch (error) {
+    console.error("❌ [AUTH] Authentication check error:", error)
+    return false
   }
 }

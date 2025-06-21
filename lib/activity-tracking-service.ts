@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/postgresql-client'
 
 // Activity Tracking Service for Real-Time Performance Monitoring
 export class ActivityTrackingService {
@@ -199,19 +199,29 @@ export class ActivityTrackingService {
   // 🔄 Core activity logging function
   private static async logActivity(activityData: any) {
     try {
-      const supabase = createClient()
+      const { query } = createClient()
       
-      const { error } = await supabase
-        .from('sales_activities')
-        .insert({
-          ...activityData,
-          activity_date: new Date().toISOString(),
-          created_at: new Date().toISOString()
-        })
+      await query(`
+        INSERT INTO sales_activities (
+          employee_id, quotation_id, activity_type, activity_description,
+          activity_outcome, time_spent_minutes, client_name, deal_value,
+          notes, activity_date, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      `, [
+        activityData.employee_id,
+        activityData.quotation_id,
+        activityData.activity_type,
+        activityData.activity_description,
+        activityData.activity_outcome,
+        activityData.time_spent_minutes,
+        activityData.client_name,
+        activityData.deal_value,
+        activityData.notes,
+        new Date().toISOString(),
+        new Date().toISOString()
+      ])
 
-      if (error) {
-        console.error('❌ Database error logging activity:', error)
-      }
+      console.log('✅ Activity logged successfully')
 
     } catch (error) {
       console.error('❌ Error in core activity logging:', error)
@@ -221,7 +231,7 @@ export class ActivityTrackingService {
   // 📊 Get activity summary for a sales rep
   static async getActivitySummary(userId: string, period: string = 'current_month') {
     try {
-      const supabase = createClient()
+      const { query } = createClient()
       
       // Calculate date range
       const now = new Date()
@@ -241,14 +251,21 @@ export class ActivityTrackingService {
           startDate = new Date(now.getFullYear(), now.getMonth(), 1)
       }
 
-      const { data: activities } = await supabase
-        .from('sales_activities')
-        .select('*')
-        .eq('employee_id', userId)
-        .gte('activity_date', startDate.toISOString())
-        .order('activity_date', { ascending: false })
+      console.log(`📊 Fetching activity summary for user ${userId} since ${startDate.toISOString()}`)
 
-      if (!activities) return null
+      const result = await query(`
+        SELECT * FROM sales_activities 
+        WHERE employee_id = $1 
+        AND activity_date >= $2
+        ORDER BY activity_date DESC
+      `, [userId, startDate.toISOString()])
+
+      const activities = result.rows
+
+      if (!activities || activities.length === 0) {
+        console.log('No activities found for this period')
+        return null
+      }
 
       // Calculate activity metrics
       const summary = {
@@ -267,6 +284,7 @@ export class ActivityTrackingService {
         period
       }
 
+      console.log(`✅ Activity summary calculated: ${summary.total_activities} activities`)
       return summary
 
     } catch (error) {
@@ -278,7 +296,7 @@ export class ActivityTrackingService {
   // 📈 Get team-wide activity metrics
   static async getTeamActivityMetrics(period: string = 'current_month') {
     try {
-      const supabase = createClient()
+      const { query } = createClient()
       
       const now = new Date()
       let startDate: Date
@@ -297,12 +315,19 @@ export class ActivityTrackingService {
           startDate = new Date(now.getFullYear(), now.getMonth(), 1)
       }
 
-      const { data: activities } = await supabase
-        .from('sales_activities')
-        .select('*')
-        .gte('activity_date', startDate.toISOString())
+      console.log(`📈 Fetching team activity metrics since ${startDate.toISOString()}`)
 
-      if (!activities) return null
+      const result = await query(`
+        SELECT * FROM sales_activities 
+        WHERE activity_date >= $1
+      `, [startDate.toISOString()])
+
+      const activities = result.rows
+
+      if (!activities || activities.length === 0) {
+        console.log('No team activities found for this period')
+        return null
+      }
 
       // Group by employee
       const teamMetrics = new Map()
@@ -343,6 +368,8 @@ export class ActivityTrackingService {
         }
       }
 
+      console.log(`✅ Team metrics calculated for ${teamMetrics.size} employees`)
+
       return {
         period,
         team_metrics: Array.from(teamMetrics.values()),
@@ -364,12 +391,14 @@ export class ActivityTrackingService {
     try {
       if (newStatus === 'approved' && oldStatus !== 'approved') {
         // Get quotation details
-        const supabase = createClient()
-        const { data: quotation } = await supabase
-          .from('quotations')
-          .select('total_amount, client_name')
-          .eq('id', quotationId)
-          .single()
+        const { query } = createClient()
+        const result = await query(`
+          SELECT total_amount, client_name 
+          FROM quotations 
+          WHERE id = $1
+        `, [quotationId])
+
+        const quotation = result.rows[0]
 
         if (quotation) {
           await this.logDealWon(quotationId, quotation.total_amount, userId)

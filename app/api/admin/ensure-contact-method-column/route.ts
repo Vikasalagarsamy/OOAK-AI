@@ -1,8 +1,8 @@
-import { createClient } from "@/lib/supabase/server"
+import { createClient } from "@/lib/postgresql-client"
 import { NextResponse } from "next/server"
 
 export async function POST() {
-  const supabase = createClient()
+  const { query, transaction } = createClient()
 
   try {
     // Try to use the exec_sql function if it exists
@@ -26,7 +26,7 @@ export async function POST() {
     if (addColumnError) {
       // If exec_sql fails, we'll try a different approach
       // Check if the column exists by trying to select it
-      const { error: columnCheckError } = await supabase.from("lead_followups").select("contact_method").limit(1)
+      const { error: columnCheckError } = await query(`SELECT ${params} FROM ${table}`).limit(1)
 
       if (columnCheckError) {
         // Column doesn't exist, but we can't add it directly without raw SQL

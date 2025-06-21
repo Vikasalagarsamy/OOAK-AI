@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { getSupabaseServerClient } from "@/lib/supabase-helpers"
+import { getSupabaseServerClient } from "@/lib/postgresql-helpers"
 
 export async function POST() {
   try {
@@ -7,7 +7,7 @@ export async function POST() {
     const supabase = getSupabaseServerClient()
 
     // Rest of the function remains the same
-    const { data, error } = await supabase.from("menu_items").select("*").order("display_order", { ascending: true })
+    const { data, error } = await query(`SELECT ${params} FROM ${table}`).order("display_order", { ascending: true })
 
     if (error) {
       console.error("Error fetching menu items:", error)

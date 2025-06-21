@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { query, transaction } from '@/lib/postgresql-client'
 import type { WorkflowStatus } from '@/types/quotation-workflow'
 
 interface NotificationRequest {
@@ -22,8 +22,6 @@ export class EnhancedNotificationService {
   // 🎯 SMART NOTIFICATION CREATION WITH BATCHING
   
   static async createNotification(request: NotificationRequest): Promise<boolean> {
-    const supabase = createClient()
-    
     try {
       // Performance timing
       const startTime = Date.now()
@@ -59,12 +57,17 @@ export class EnhancedNotificationService {
         }
       }
 
-      const { error } = await supabase.from('notifications').insert(notificationData)
-      
-      if (error) {
-        console.error(`❌ Failed to create notification:`, error)
-        return false
-      }
+      await query(
+        `INSERT INTO notifications (
+          id, user_id, type, title, message, priority, is_read, created_at, metadata
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [
+          notificationData.id, notificationData.user_id, notificationData.type,
+          notificationData.title, notificationData.message, notificationData.priority,
+          notificationData.is_read, notificationData.created_at, 
+          JSON.stringify(notificationData.metadata)
+        ]
+      )
       
       // Log performance metric
       const duration = Date.now() - startTime
@@ -87,18 +90,24 @@ export class EnhancedNotificationService {
     batchKey: string,
     windowMinutes: number = 15
   ): Promise<boolean> {
-    const supabase = createClient()
-    
     try {
-      const { data } = await supabase
-        .rpc('should_batch_notification', {
-          p_user_id: userId,
-          p_type: type,
-          p_batch_key: batchKey,
-          p_batch_window_minutes: windowMinutes
-        })
+      // Check if there are recent notifications of the same type
+      const recentCount = await query(
+        `SELECT COUNT(*) as count 
+         FROM notifications 
+         WHERE user_id = $1 
+           AND type = $2 
+           AND created_at > $3
+           AND metadata->>'batch_key' = $4`,
+        [
+          userId, 
+          type, 
+          new Date(Date.now() - windowMinutes * 60 * 1000).toISOString(),
+          batchKey
+        ]
+      )
       
-      return data || false
+      return parseInt(recentCount.rows[0]?.count || '0') > 0
     } catch (error) {
       console.error('Error checking batching:', error)
       return false // Don't batch if there's an error
@@ -238,14 +247,12 @@ export class EnhancedNotificationService {
   // 📊 PERFORMANCE MONITORING
   
   private static async logPerformanceMetric(metric: string, value: number): Promise<void> {
-    const supabase = createClient()
-    
     try {
-      await supabase.rpc('log_performance_metric', {
-        metric_name: metric,
-        metric_value: value,
-        metric_unit: 'ms'
-      })
+      await query(
+        `INSERT INTO performance_metrics (metric_name, metric_value, metric_unit, created_at) 
+         VALUES ($1, $2, $3, $4)`,
+        [metric, value, 'ms', new Date().toISOString()]
+      )
     } catch (error) {
       // Don't fail the main operation if logging fails
       console.warn('Failed to log performance metric:', error)
@@ -255,16 +262,16 @@ export class EnhancedNotificationService {
   // 🔧 UTILITY METHODS
   
   private static async getUsersByRole(roles: string[]): Promise<NotificationRecipient[]> {
-    const supabase = createClient()
-    
     try {
-      const { data: employees } = await supabase
-        .from('employees')
-        .select('id, email, role')
-        .in('role', roles)
-        .eq('is_active', true)
+      const result = await query(
+        `SELECT id, email, role 
+         FROM employees 
+         WHERE role = ANY($1) 
+           AND is_active = true`,
+        [roles]
+      )
       
-      return employees?.map(emp => ({
+      return result.rows?.map(emp => ({
         user_id: emp.id,
         role: emp.role,
         email: emp.email
@@ -295,20 +302,17 @@ export class EnhancedNotificationService {
   // 📈 NOTIFICATION ANALYTICS
   
   static async getNotificationStats(userId?: number): Promise<any> {
-    const supabase = createClient()
-    
     try {
-      let query = supabase.from('user_notification_summary').select('*')
+      let queryText = 'SELECT * FROM user_notification_summary'
+      let params: any[] = []
       
       if (userId) {
-        query = query.eq('user_id', userId)
+        queryText += ' WHERE user_id = $1'
+        params = [userId]
       }
       
-      const { data, error } = await query
-      
-      if (error) throw error
-      
-      return data
+      const result = await query(queryText, params)
+      return result.rows
     } catch (error) {
       console.error('Error fetching notification stats:', error)
       return null
@@ -318,11 +322,14 @@ export class EnhancedNotificationService {
   // 🧹 CLEANUP OPERATIONS
   
   static async cleanupOldNotifications(): Promise<number> {
-    const supabase = createClient()
-    
     try {
-      const { data } = await supabase.rpc('archive_old_notifications')
-      return data || 0
+      const result = await query(
+        `DELETE FROM notifications 
+         WHERE created_at < $1 
+         RETURNING id`,
+        [new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()] // 30 days old
+      )
+      return result.rows?.length || 0
     } catch (error) {
       console.error('Error cleaning up notifications:', error)
       return 0

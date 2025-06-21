@@ -4,7 +4,7 @@ import { useState } from "react"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
 import { Menu, X } from "lucide-react"
-import { SidebarNavigation } from "./sidebar-navigation"
+import SidebarNavigation from "./sidebar-navigation"
 import { useCurrentUser } from "@/hooks/use-current-user"
 
 export function MobileNavigation() {
@@ -23,7 +23,11 @@ export function MobileNavigation() {
         <div className="flex flex-col h-full">
           <div className="border-b p-4 flex items-center justify-between">
             <h2 className="font-semibold">
-              {user?.username ? `${user.username.toUpperCase()}'S WORKSPACE` : 'WORKSPACE'}
+              {user?.firstName && user?.lastName 
+                ? `${user.firstName.toUpperCase()} ${user.lastName.toUpperCase()}'S WORKSPACE` 
+                : user?.username 
+                  ? `${user.username.toUpperCase()}'S WORKSPACE` 
+                  : 'WORKSPACE'}
             </h2>
             <Button variant="ghost" size="icon" onClick={() => setOpen(false)}>
               <X className="h-4 w-4" />

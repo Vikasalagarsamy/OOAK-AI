@@ -22,23 +22,20 @@ export async function GET() {
 export async function POST() {
   try {
     const cookieStore = await cookies()
+    
+    // Clear all auth-related cookies
     cookieStore.delete("auth_token")
-
-    return NextResponse.json(
-      {
-        success: true,
-        message: "Logged out successfully",
-      },
-      { status: 200 }
-    )
+    cookieStore.delete("user_id")
+    
+    return NextResponse.json({ 
+      success: true, 
+      message: "Logged out successfully" 
+    })
   } catch (error) {
     console.error("Logout error:", error)
-    return NextResponse.json(
-      {
-        success: false,
-        error: "Failed to log out",
-      },
-      { status: 500 }
-    )
+    return NextResponse.json({ 
+      success: false, 
+      message: "Error during logout" 
+    }, { status: 500 })
   }
 }

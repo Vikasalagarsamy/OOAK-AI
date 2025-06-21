@@ -1,0 +1,40 @@
+import { createClient } from '../lib/supabase.js';
+
+const supabase = createClient();
+
+async function fixQuotationAssignment() {
+  console.log('🔧 Fixing quotation assignment...');
+  
+  try {
+    // Update quotation to assign to Vikas (ID 87) and change status
+    const { data, error } = await supabase
+      .from('quotations')
+      .update({ 
+        assigned_to: 87,
+        status: 'pending_approval'
+      })
+      .eq('id', 19)
+      .select();
+      
+    if (error) {
+      console.error('❌ Error:', error);
+      return;
+    }
+    
+    console.log('✅ Updated quotation:', data);
+    
+    // Verify the update
+    const { data: verification } = await supabase
+      .from('quotations')
+      .select('id, client_name, total_amount, status, assigned_to')
+      .eq('id', 19)
+      .single();
+      
+    console.log('🔍 Verification:', verification);
+    
+  } catch (error) {
+    console.error('❌ Script error:', error);
+  }
+}
+
+fixQuotationAssignment(); 

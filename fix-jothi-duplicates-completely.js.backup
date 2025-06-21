@@ -1,0 +1,178 @@
+#!/usr/bin/env node
+
+/**
+ * Fix Jothi Alagarsamy Duplicates Completely
+ * ==========================================
+ * Remove ALL duplicate tasks and keep only ONE logical task
+ */
+
+import { createClient } from '@supabase/supabase-js'
+
+const supabaseUrl = 'http://127.0.0.1:54321'
+const supabaseKey = 'yJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhdm9mcWR6amh5Zmp5Z2t4eW5xIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NTA5ODkxNCwiZXhwIjoyMDYwNjc0OTE0fQ.EDdXANDTnC8zjWciG_p6JORec0KyMVZQe2c0Ca6HfLY'
+
+async function fixJothiDuplicatesCompletely() {
+  try {
+    const supabase = createClient(supabaseUrl, supabaseKey)
+    
+    console.log('🎯 FIXING JOTHI ALAGARSAMY DUPLICATE TASKS COMPLETELY')
+    console.log('=' * 70)
+    
+    // 1. Get all Jothi tasks
+    const { data: jothiTasks, error } = await supabase
+      .from('ai_tasks')
+      .select('*')
+      .or('task_title.ilike.%Jothi%,client_name.ilike.%Jothi%')
+      .order('created_at', { ascending: false })
+    
+    if (error) {
+      console.error('❌ Error fetching Jothi tasks:', error)
+      return
+    }
+    
+    console.log(`🔍 FOUND ${jothiTasks.length} TASKS FOR JOTHI ALAGARSAMY:`)
+    console.log('=' * 70)
+    
+    jothiTasks.forEach(task => {
+      console.log(`📋 Task ${task.id}: "${task.task_title}"`)
+      console.log(`   Status: ${task.status}`)
+      console.log(`   Value: ₹${task.estimated_value || 0}`)
+      console.log(`   Quotation ID: ${task.quotation_id || 'None'}`)
+      console.log(`   Created: ${new Date(task.created_at).toLocaleDateString()}`)
+      console.log()
+    })
+    
+    // 2. Determine which task to keep (logical analysis)
+    console.log('🧠 LOGICAL ANALYSIS - WHICH TASK TO KEEP:')
+    console.log('=' * 70)
+    
+    const completedTasks = jothiTasks.filter(t => t.status === 'completed')
+    const pendingTasks = jothiTasks.filter(t => t.status === 'pending')
+    const inProgressTasks = jothiTasks.filter(t => t.status === 'in_progress')
+    
+    console.log(`✅ Completed tasks: ${completedTasks.length}`)
+    console.log(`⏳ Pending tasks: ${pendingTasks.length}`)
+    console.log(`🔄 In progress tasks: ${inProgressTasks.length}`)
+    
+    // Decision logic: Keep the most recent task with highest value and valid quotation_id
+    const taskToKeep = jothiTasks
+      .filter(t => t.status !== 'completed') // Don't keep completed tasks
+      .filter(t => t.estimated_value > 0) // Must have valid value
+      .sort((a, b) => {
+        // Sort by quotation_id existence, then by value, then by date
+        if (a.quotation_id && !b.quotation_id) return -1
+        if (!a.quotation_id && b.quotation_id) return 1
+        if (a.estimated_value !== b.estimated_value) {
+          return (b.estimated_value || 0) - (a.estimated_value || 0)
+        }
+        return new Date(b.created_at) - new Date(a.created_at)
+      })[0]
+    
+    if (!taskToKeep) {
+      console.log('❌ No valid task found to keep!')
+      return
+    }
+    
+    console.log(`\n✅ DECISION: Keep Task ${taskToKeep.id}`)
+    console.log(`   "${taskToKeep.task_title}"`)
+    console.log(`   Status: ${taskToKeep.status}`)
+    console.log(`   Value: ₹${taskToKeep.estimated_value}`)
+    console.log(`   Quotation ID: ${taskToKeep.quotation_id}`)
+    
+    // 3. Archive/delete all other tasks
+    const tasksToRemove = jothiTasks.filter(t => t.id !== taskToKeep.id)
+    
+    console.log(`\n🗑️  REMOVING ${tasksToRemove.length} DUPLICATE TASKS:`)
+    console.log('=' * 70)
+    
+    for (const task of tasksToRemove) {
+      console.log(`🗑️  Removing Task ${task.id}: "${task.task_title}" (${task.status})`)
+      
+      // Delete the task completely
+      const { error: deleteError } = await supabase
+        .from('ai_tasks')
+        .delete()
+        .eq('id', task.id)
+      
+      if (deleteError) {
+        console.error(`❌ Error deleting task ${task.id}:`, deleteError)
+      } else {
+        console.log(`✅ Deleted Task ${task.id}`)
+      }
+    }
+    
+    // 4. Update the remaining task to be clear and actionable
+    console.log(`\n🔧 UPDATING REMAINING TASK FOR CLARITY:`)
+    console.log('=' * 70)
+    
+    const updatedTaskData = {
+      task_title: 'Review and approve quotation for Jothi Alagarsamy',
+      task_description: `Review the ₹${taskToKeep.estimated_value.toLocaleString()} quotation for Jothi Alagarsamy. This is the ONLY active task for this client - previous contact and preparation steps are complete.`,
+      status: 'pending',
+      priority: 'high',
+      metadata: {
+        ...taskToKeep.metadata,
+        deduplicated: true,
+        previous_task_count: jothiTasks.length,
+        consolidation_date: new Date().toISOString(),
+        note: 'Consolidated from multiple duplicate tasks - now single clear task'
+      }
+    }
+    
+    const { error: updateError } = await supabase
+      .from('ai_tasks')
+      .update(updatedTaskData)
+      .eq('id', taskToKeep.id)
+    
+    if (updateError) {
+      console.error('❌ Error updating remaining task:', updateError)
+    } else {
+      console.log(`✅ Updated Task ${taskToKeep.id} with clear instructions`)
+    }
+    
+    // 5. Verify the fix
+    console.log(`\n🔍 VERIFICATION - CHECKING CURRENT JOTHI TASKS:`)
+    console.log('=' * 70)
+    
+    const { data: verificationTasks, error: verifyError } = await supabase
+      .from('ai_tasks')
+      .select('*')
+      .or('task_title.ilike.%Jothi%,client_name.ilike.%Jothi%')
+    
+    if (verifyError) {
+      console.error('❌ Verification failed:', verifyError)
+    } else {
+      console.log(`📊 RESULT: ${verificationTasks.length} task(s) remaining for Jothi Alagarsamy`)
+      
+      if (verificationTasks.length === 1) {
+        const task = verificationTasks[0]
+        console.log(`✅ SUCCESS: Single task remaining`)
+        console.log(`   Task ${task.id}: "${task.task_title}"`)
+        console.log(`   Status: ${task.status}`)
+        console.log(`   Value: ₹${task.estimated_value?.toLocaleString()}`)
+        console.log(`   Priority: ${task.priority}`)
+      } else {
+        console.log(`❌ STILL HAVE DUPLICATES: ${verificationTasks.length} tasks`)
+        verificationTasks.forEach(task => {
+          console.log(`   • Task ${task.id}: ${task.task_title} (${task.status})`)
+        })
+      }
+    }
+    
+    console.log('\n🎯 SUMMARY:')
+    console.log('=' * 70)
+    console.log('✅ Problem: Jothi Alagarsamy had 3 duplicate tasks')
+    console.log('✅ Solution: Deleted duplicates, kept 1 logical task')
+    console.log('✅ Result: Clear, single task with proper priority')
+    console.log('✅ Employee clarity: No more confusion about which task to do')
+    console.log('✅ Next action: Employee can focus on the ONE task that matters')
+    
+    return verificationTasks
+    
+  } catch (error) {
+    console.error('❌ Complete fix failed:', error)
+  }
+}
+
+// Run the complete fix
+fixJothiDuplicatesCompletely() 

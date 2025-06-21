@@ -1,0 +1,56 @@
+import { createClient } from '@supabase/supabase-js';
+
+// Get environment variables
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://your-project.supabase.co';
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'your-anon-key';
+
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+async function fixQuotationUserAssignment() {
+  console.log('🔧 Fixing quotation user assignment bug...');
+  
+  try {
+    // 1. Update the Jothi Alagarsamy quotation to be assigned to Vikas (ID 87)
+    const { data: updatedQuotation, error: updateError } = await supabase
+      .from('quotations')
+      .update({ 
+        created_by: "87",  // Assign to Vikas's actual employee ID
+        assigned_to: 87,   // Also set assigned_to field
+        status: 'pending_approval'  // Change status from draft
+      })
+      .eq('id', 19)
+      .select();
+      
+    if (updateError) {
+      console.error('❌ Error updating quotation:', updateError);
+      return;
+    }
+    
+    console.log('✅ Updated quotation:', updatedQuotation);
+    
+    // 2. Verify the fix
+    const { data: verification } = await supabase
+      .from('quotations')
+      .select('id, client_name, total_amount, status, created_by, assigned_to')
+      .eq('id', 19)
+      .single();
+      
+    console.log('🔍 Verification after fix:', verification);
+    
+    // 3. Check current quotations list
+    console.log('\n📋 Current quotations list:');
+    const { data: allQuotations } = await supabase
+      .from('quotations')
+      .select('id, quotation_number, client_name, total_amount, status, created_by, assigned_to')
+      .order('created_at', { ascending: false });
+      
+    allQuotations?.forEach(q => {
+      console.log(`  • ${q.quotation_number}: ${q.client_name} - ₹${q.total_amount} (created_by: ${q.created_by}, assigned_to: ${q.assigned_to}, status: ${q.status})`);
+    });
+    
+  } catch (error) {
+    console.error('❌ Script error:', error);
+  }
+}
+
+fixQuotationUserAssignment(); 

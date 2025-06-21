@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import { hasMenuPermission } from "@/lib/permission-checker"
-import { extractMenuStructure } from "@/lib/menu-extractor"
+import { UNIFIED_MENU_CONFIG, getFlatMenuItems } from "@/lib/unified-menu-config"
 import { getCurrentUser } from "@/actions/auth-actions"
 import { AlertCircle, Shield, Loader2 } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -115,11 +115,10 @@ export function RouteProtector({ children, fallbackPath = "/dashboard" }: RouteP
       }
 
       // Find the menu item that corresponds to this route
-      const menuStructure = extractMenuStructure()
       let menuId: string | null = null
 
       // Find matching menu item
-      for (const section of menuStructure) {
+      for (const section of UNIFIED_MENU_CONFIG) {
         if (section.path === pathname) {
           menuId = section.id
           break

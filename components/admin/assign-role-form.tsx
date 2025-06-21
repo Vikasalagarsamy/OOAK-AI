@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2, AlertCircle, CheckCircle2 } from "lucide-react"
-import { createClient } from "@/lib/supabase-singleton"
+import { query, transaction } from "@/lib/postgresql-client"
 
 interface Employee {
   id: number
@@ -32,7 +32,6 @@ export function AssignRoleForm() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [success, setSuccess] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const supabase = createClient()
 
   // Load employees and roles
   useEffect(() => {
@@ -40,49 +39,55 @@ export function AssignRoleForm() {
       setLoading(true)
       setError(null)
       try {
-        // Load employees with their current roles
-        const { data: employeesData, error: employeesError } = await supabase
-          .from("employees")
-          .select(`
-            id, 
-            first_name, 
-            last_name,
-            user_accounts!employee_id (
-              role_id,
-              roles!role_id (
-                id,
-                title
-              )
-            )
-          `)
-          .order("first_name, last_name")
+        console.log('🔍 Loading employees and roles...')
 
-        if (employeesError) throw new Error(`Failed to fetch employees: ${employeesError.message}`)
+        // Load employees with their current roles in one optimized query
+        const employeesResult = await query(`
+          SELECT 
+            e.id, 
+            e.first_name, 
+            e.last_name,
+            ua.role_id,
+            r.id as role_id,
+            r.title as role_title
+          FROM employees e
+          LEFT JOIN user_accounts ua ON e.id = ua.employee_id
+          LEFT JOIN roles r ON ua.role_id = r.id
+          ORDER BY e.first_name, e.last_name
+        `)
 
-        const transformedEmployees = employeesData.map((employee) => {
-          // Extract role information if available
-          const userAccount = employee.user_accounts?.[0]
-          const role = userAccount?.roles || null
+        if (!employeesResult.success) {
+          throw new Error(`Failed to fetch employees: ${employeesResult.error}`)
+        }
 
-          return {
-            id: employee.id,
-            name: `${employee.first_name} ${employee.last_name}`,
-            current_role: role,
-          }
-        })
+        const transformedEmployees = (employeesResult.data || []).map((employee) => ({
+          id: employee.id,
+          name: `${employee.first_name} ${employee.last_name}`,
+          current_role: employee.role_id ? {
+            id: employee.role_id,
+            title: employee.role_title
+          } : null,
+        }))
 
-        setEmployees(transformedEmployees || [])
+        setEmployees(transformedEmployees)
+        console.log(`✅ Loaded ${transformedEmployees.length} employees`)
 
         // Load roles with descriptions
-        const { data: rolesData, error: rolesError } = await supabase
-          .from("roles")
-          .select("id, title, description")
-          .order("title")
+        const rolesResult = await query(`
+          SELECT id, title, description 
+          FROM roles 
+          ORDER BY title
+        `)
 
-        if (rolesError) throw new Error(`Failed to fetch roles: ${rolesError.message}`)
-        setRoles(rolesData || [])
+        if (!rolesResult.success) {
+          throw new Error(`Failed to fetch roles: ${rolesResult.error}`)
+        }
+
+        setRoles(rolesResult.data || [])
+        console.log(`✅ Loaded ${rolesResult.data?.length || 0} roles`)
+
       } catch (error: any) {
-        console.error("Error loading data:", error)
+        console.error("❌ Error loading data:", error)
         setError(`Failed to load data: ${error.message}`)
       } finally {
         setLoading(false)
@@ -106,101 +111,106 @@ export function AssignRoleForm() {
       const employeeId = Number.parseInt(selectedEmployee, 10)
       const roleId = Number.parseInt(selectedRole, 10)
 
-      // Check if user account exists for this employee
-      const { data: existingUser, error: userCheckError } = await supabase
-        .from("user_accounts")
-        .select("id, role_id")
-        .eq("employee_id", employeeId)
-        .maybeSingle()
+      console.log(`🔄 Assigning role ${roleId} to employee ${employeeId}`)
 
-      if (userCheckError) throw new Error(`Error checking user account: ${userCheckError.message}`)
+      // Use transaction for atomic role assignment
+      const result = await transaction(async (queryFn) => {
+        // Check if user account exists for this employee
+        const existingUserResult = await queryFn(`
+          SELECT id, role_id 
+          FROM user_accounts 
+          WHERE employee_id = $1
+        `, [employeeId])
 
-      let result
+        const existingUser = existingUserResult.data?.[0]
 
-      if (existingUser) {
-        // Store old role for audit
-        const oldRoleId = existingUser.role_id
+        if (existingUser) {
+          // Store old role for audit
+          const oldRoleId = existingUser.role_id
 
-        // Update existing user account
-        result = await supabase
-          .from("user_accounts")
-          .update({
-            role_id: roleId,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", existingUser.id)
-          .select()
+          // Update existing user account
+          await queryFn(`
+            UPDATE user_accounts 
+            SET role_id = $1, updated_at = CURRENT_TIMESTAMP
+            WHERE id = $2
+          `, [roleId, existingUser.id])
 
-        // Log to audit trail
-        await supabase
-          .from("audit_security.audit_trail")
-          .insert({
-            entity_type: "user_role",
-            entity_id: existingUser.id.toString(),
-            action: "update",
-            old_values: { role_id: oldRoleId },
-            new_values: { role_id: roleId },
-            user_id: "00000000-0000-0000-0000-000000000000", // System user
-            timestamp: new Date().toISOString(),
-          })
-          .select()
-      } else {
-        // Create new user account with default values
-        const employee = employees.find((e) => e.id === employeeId)
-        if (!employee) throw new Error("Employee not found")
+          // Log to audit trail
+          await queryFn(`
+            INSERT INTO audit_security.audit_trail (
+              entity_type, entity_id, action, old_values, new_values, 
+              user_id, timestamp
+            ) VALUES (
+              'user_role', $1, 'update', $2, $3, $4, CURRENT_TIMESTAMP
+            )
+          `, [
+            existingUser.id.toString(),
+            JSON.stringify({ role_id: oldRoleId }),
+            JSON.stringify({ role_id: roleId }),
+            '00000000-0000-0000-0000-000000000000' // System user
+          ])
 
-        const nameParts = employee.name.split(" ")
-        const firstName = nameParts[0].toLowerCase()
-        const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1].toLowerCase() : ""
+          return { action: 'updated', userId: existingUser.id }
+        } else {
+          // Create new user account with default values
+          const employee = employees.find((e) => e.id === employeeId)
+          if (!employee) throw new Error("Employee not found")
 
-        const username = `${firstName}.${lastName}${Math.floor(Math.random() * 1000)}`
-        const email = `${username}@example.com`
-        const defaultPassword = "$2b$10$defaulthashedpasswordxxxxxxxxxxxxxxxxxxx" // Placeholder
+          const nameParts = employee.name.split(" ")
+          const firstName = nameParts[0].toLowerCase()
+          const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1].toLowerCase() : ""
 
-        result = await supabase
-          .from("user_accounts")
-          .insert({
-            employee_id: employeeId,
-            role_id: roleId,
-            username,
-            email,
-            password_hash: defaultPassword,
-            is_active: true,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          })
-          .select()
+          const username = `${firstName}.${lastName}${Math.floor(Math.random() * 1000)}`
+          const email = `${username}@company.com`
+          const defaultPassword = "$2b$10$defaulthashedpasswordxxxxxxxxxxxxxxxxxxx" // Placeholder
 
-        // Log to audit trail
-        if (result.data && result.data[0]) {
-          await supabase
-            .from("audit_security.audit_trail")
-            .insert({
-              entity_type: "user_role",
-              entity_id: result.data[0].id.toString(),
-              action: "create",
-              old_values: null,
-              new_values: { role_id: roleId, employee_id: employeeId },
-              user_id: "00000000-0000-0000-0000-000000000000", // System user
-              timestamp: new Date().toISOString(),
-            })
-            .select()
+          const newUserResult = await queryFn(`
+            INSERT INTO user_accounts (
+              employee_id, role_id, username, email, password_hash, 
+              is_active, created_at, updated_at
+            ) VALUES (
+              $1, $2, $3, $4, $5, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            ) RETURNING id
+          `, [employeeId, roleId, username, email, defaultPassword])
+
+          const newUserId = newUserResult.data?.[0]?.id
+
+          // Log to audit trail
+          await queryFn(`
+            INSERT INTO audit_security.audit_trail (
+              entity_type, entity_id, action, old_values, new_values, 
+              user_id, timestamp
+            ) VALUES (
+              'user_role', $1, 'create', null, $2, $3, CURRENT_TIMESTAMP
+            )
+          `, [
+            newUserId.toString(),
+            JSON.stringify({ role_id: roleId, employee_id: employeeId }),
+            '00000000-0000-0000-0000-000000000000' // System user
+          ])
+
+          return { action: 'created', userId: newUserId }
         }
+      })
+
+      if (!result.success) {
+        throw new Error(`Failed to assign role: ${result.error}`)
       }
 
-      if (result.error) throw new Error(`Failed to update user role: ${result.error.message}`)
-
-      // Get role name for success message
+      // Get role and employee names for success message
       const role = roles.find((r) => r.id === roleId)
       const employee = employees.find((e) => e.id === employeeId)
 
-      setSuccess(`Successfully assigned ${role?.title} role to ${employee?.name}`)
+      const actionText = result.data?.action === 'created' ? 'created account and assigned' : 'assigned'
+      setSuccess(`Successfully ${actionText} ${role?.title} role to ${employee?.name}`)
+
+      console.log(`✅ Role assignment completed: ${actionText} ${role?.title} to ${employee?.name}`)
 
       // Reset form
       setSelectedEmployee("")
       setSelectedRole("")
     } catch (error: any) {
-      console.error("Error assigning role:", error)
+      console.error("❌ Error assigning role:", error)
       setError(`Failed to assign role: ${error.message}`)
     } finally {
       setIsSubmitting(false)
@@ -227,7 +237,7 @@ export function AssignRoleForm() {
         )}
 
         {success && (
-          <Alert variant="success" className="bg-green-50 border-green-200 text-green-800">
+          <Alert variant="default" className="bg-green-50 border-green-200 text-green-800">
             <CheckCircle2 className="h-4 w-4 text-green-500" />
             <AlertDescription>{success}</AlertDescription>
           </Alert>

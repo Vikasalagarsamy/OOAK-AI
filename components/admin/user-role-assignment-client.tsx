@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/use-toast"
-import { createClient } from "@/lib/supabase-browser"
+import { query, transaction } from "@/lib/postgresql-client"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle, UserPlus } from "lucide-react"
@@ -34,43 +34,50 @@ export function UserRoleAssignmentForm() {
   const [loading, setLoading] = useState<boolean>(true)
   const [error, setError] = useState<string | null>(null)
 
-  const supabase = createClient()
-
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true)
       try {
         setError(null)
-        // Fetch employees
-        const { data: employeesData, error: employeesError } = await supabase
-          .from("employees")
-          .select("id, employee_id, first_name, last_name, email")
-          .order("first_name")
+        console.log('🔍 Loading employees and roles...')
 
-        if (employeesError) throw employeesError
+        // Fetch employees and their account status in one optimized query
+        const employeesResult = await query(`
+          SELECT 
+            e.id, 
+            e.employee_id, 
+            e.first_name, 
+            e.last_name, 
+            e.email,
+            CASE WHEN ua.id IS NOT NULL THEN true ELSE false END as has_account
+          FROM employees e
+          LEFT JOIN user_accounts ua ON e.id = ua.employee_id
+          ORDER BY e.first_name
+        `)
+
+        if (!employeesResult.success) {
+          throw new Error(employeesResult.error || 'Failed to fetch employees')
+        }
+
+        setEmployees(employeesResult.data || [])
+        console.log(`✅ Loaded ${employeesResult.data?.length || 0} employees`)
 
         // Fetch roles
-        const { data: rolesData, error: rolesError } = await supabase.from("roles").select("id, title").order("title")
+        const rolesResult = await query(`
+          SELECT id, title 
+          FROM roles 
+          ORDER BY title
+        `)
 
-        if (rolesError) throw rolesError
+        if (!rolesResult.success) {
+          throw new Error(rolesResult.error || 'Failed to fetch roles')
+        }
 
-        // Check which employees already have accounts
-        const { data: userAccounts, error: userAccountsError } = await supabase
-          .from("user_accounts")
-          .select("employee_id")
+        setRoles(rolesResult.data || [])
+        console.log(`✅ Loaded ${rolesResult.data?.length || 0} roles`)
 
-        if (userAccountsError) throw userAccountsError
-
-        // Mark employees that already have accounts
-        const employeesWithAccountFlag = employeesData?.map((employee) => ({
-          ...employee,
-          has_account: userAccounts?.some((account) => account.employee_id === employee.id) || false,
-        }))
-
-        setEmployees(employeesWithAccountFlag || [])
-        setRoles(rolesData || [])
       } catch (err: any) {
-        console.error("Error fetching data:", err)
+        console.error("❌ Error fetching data:", err)
         setError(`Failed to fetch data: ${err.message}`)
         toast({
           title: "Error",
@@ -105,79 +112,87 @@ export function UserRoleAssignmentForm() {
 
       if (!employee) throw new Error("Selected employee not found")
 
-      // Check if the employee already has an account
-      const { data: existingAccount, error: checkError } = await supabase
-        .from("user_accounts")
-        .select("id")
-        .eq("employee_id", employeeId)
-        .single()
+      console.log(`🔄 Processing role assignment for employee ${employee.first_name} ${employee.last_name}`)
 
-      if (checkError && checkError.code !== "PGRST116") {
-        // PGRST116 is the error code for "no rows returned"
-        throw checkError
-      }
+      // Use transaction for atomic user account operations
+      const result = await transaction(async (queryFn) => {
+        // Check if the employee already has an account
+        const existingAccountResult = await queryFn(`
+          SELECT id, role_id 
+          FROM user_accounts 
+          WHERE employee_id = $1
+        `, [employeeId])
 
-      let result
-      if (existingAccount) {
-        // Update existing account
-        const { error: updateError } = await supabase
-          .from("user_accounts")
-          .update({ role_id: roleId })
-          .eq("id", existingAccount.id)
+        const existingAccount = existingAccountResult.data?.[0]
 
-        if (updateError) throw updateError
-        result = { message: `Role updated for ${employee.first_name} ${employee.last_name}` }
-      } else {
-        // Create new account
-        // In a real app, you'd generate a password and send it to the user
-        const tempPassword = Math.random().toString(36).slice(-8)
+        if (existingAccount) {
+          // Update existing account
+          await queryFn(`
+            UPDATE user_accounts 
+            SET role_id = $1, updated_at = CURRENT_TIMESTAMP
+            WHERE id = $2
+          `, [roleId, existingAccount.id])
 
-        const { error: insertError } = await supabase.from("user_accounts").insert({
-          employee_id: employeeId,
-          role_id: roleId,
-          email: employee.email,
-          password_hash: tempPassword, // In a real app, you'd hash this
-          is_active: true,
-          created_at: new Date().toISOString(),
-        })
+          return { 
+            action: 'updated', 
+            message: `Role updated for ${employee.first_name} ${employee.last_name}` 
+          }
+        } else {
+          // Create new account
+          // Generate secure temporary password
+          const tempPassword = Math.random().toString(36).slice(-12) + Math.random().toString(36).slice(-12)
+          
+          await queryFn(`
+            INSERT INTO user_accounts (
+              employee_id, role_id, email, password_hash, 
+              is_active, created_at, updated_at
+            ) VALUES (
+              $1, $2, $3, $4, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            )
+          `, [employeeId, roleId, employee.email, tempPassword]) // In production, hash this password
 
-        if (insertError) throw insertError
-        result = { message: `Account created for ${employee.first_name} ${employee.last_name}` }
+          return { 
+            action: 'created', 
+            message: `Account created for ${employee.first_name} ${employee.last_name}` 
+          }
+        }
+      })
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to process role assignment')
       }
 
       toast({
         title: "Success",
-        description: result.message,
+        description: result.data?.message || 'Role assigned successfully',
       })
+
+      console.log(`✅ ${result.data?.action} account for ${employee.first_name} ${employee.last_name}`)
 
       // Reset form
       setSelectedEmployee("")
       setSelectedRole("")
 
       // Refresh employee list to update has_account flag
-      const { data: refreshedEmployees, error: refreshError } = await supabase
-        .from("employees")
-        .select("id, employee_id, first_name, last_name, email")
-        .order("first_name")
+      const refreshResult = await query(`
+        SELECT 
+          e.id, 
+          e.employee_id, 
+          e.first_name, 
+          e.last_name, 
+          e.email,
+          CASE WHEN ua.id IS NOT NULL THEN true ELSE false END as has_account
+        FROM employees e
+        LEFT JOIN user_accounts ua ON e.id = ua.employee_id
+        ORDER BY e.first_name
+      `)
 
-      if (refreshError) throw refreshError
+      if (refreshResult.success) {
+        setEmployees(refreshResult.data || [])
+      }
 
-      // Check which employees already have accounts
-      const { data: userAccounts, error: userAccountsError } = await supabase
-        .from("user_accounts")
-        .select("employee_id")
-
-      if (userAccountsError) throw userAccountsError
-
-      // Mark employees that already have accounts
-      const employeesWithAccountFlag = refreshedEmployees?.map((employee) => ({
-        ...employee,
-        has_account: userAccounts?.some((account) => account.employee_id === employee.id) || false,
-      }))
-
-      setEmployees(employeesWithAccountFlag || [])
     } catch (err: any) {
-      console.error("Error assigning role:", err)
+      console.error("❌ Error assigning role:", err)
       setError(`Failed to assign role: ${err.message}`)
       toast({
         title: "Error",
@@ -221,7 +236,7 @@ export function UserRoleAssignmentForm() {
                   {employees.map((employee) => (
                     <SelectItem key={employee.id} value={employee.id.toString()}>
                       {employee.first_name} {employee.last_name}
-                      {employee.has_account ? " (Has Account)" : ""}
+                      {employee.has_account ? " (Has Account)" : " (No Account)"}
                     </SelectItem>
                   ))}
                 </SelectContent>

@@ -45,7 +45,6 @@ type ScheduleFollowUpFormProps = {
 
 export function ScheduleFollowUpForm({ leadId, leadName, onSuccess }: ScheduleFollowUpFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [debugInfo, setDebugInfo] = useState<string | null>(null)
   const router = useRouter()
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -62,7 +61,6 @@ export function ScheduleFollowUpForm({ leadId, leadName, onSuccess }: ScheduleFo
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsSubmitting(true)
-    setDebugInfo(null)
 
     try {
       // Log the values being submitted
@@ -85,9 +83,6 @@ export function ScheduleFollowUpForm({ leadId, leadName, onSuccess }: ScheduleFo
       } else {
         console.error("Follow-up creation error details:", result.error)
 
-        // Set debug info for display
-        setDebugInfo(JSON.stringify(result.error, null, 2))
-
         toast({
           title: "Error",
           description: result.message || "Failed to schedule follow-up",
@@ -96,9 +91,6 @@ export function ScheduleFollowUpForm({ leadId, leadName, onSuccess }: ScheduleFo
       }
     } catch (error) {
       console.error("Unexpected error during follow-up creation:", error)
-
-      // Set debug info for display
-      setDebugInfo(typeof error === "object" && error !== null ? JSON.stringify(error, null, 2) : String(error))
 
       toast({
         title: "Error",
@@ -282,15 +274,6 @@ export function ScheduleFollowUpForm({ leadId, leadName, onSuccess }: ScheduleFo
             </FormItem>
           )}
         />
-
-        {debugInfo && (
-          <Alert variant="destructive">
-            <AlertTitle>Debug Information</AlertTitle>
-            <AlertDescription>
-              <pre className="text-xs overflow-auto max-h-40">{debugInfo}</pre>
-            </AlertDescription>
-          </Alert>
-        )}
 
         <Button type="submit" disabled={isSubmitting} className="w-full">
           {isSubmitting ? (

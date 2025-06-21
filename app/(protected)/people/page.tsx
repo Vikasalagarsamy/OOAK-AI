@@ -1,147 +1,139 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Users, Building2, Briefcase } from "lucide-react"
-import { PeopleSubmenu } from "@/components/people/people-submenu"
-import { getCurrentUser, checkPermissions } from "@/lib/permission-utils"
-import { useToast } from "@/components/ui/use-toast"
+import { Users, Building2, Briefcase, Plus, BarChart3 } from "lucide-react"
+import Link from "next/link"
+import { usePermissions } from "@/components/ultra-fast-auth-provider"
 
 export default function PeoplePage() {
-  const [permissions, setPermissions] = useState({
-    employees: true,
-    departments: true,
-    designations: true,
-  })
-  const [loading, setLoading] = useState(true)
-  const { toast } = useToast()
+  // 🔥 INSTANT PERMISSION CHECKS (NO LOADING)
+  const permissions = usePermissions([
+    { resource: '/people/employees' },
+    { resource: '/people/departments' },
+    { resource: '/people/designations' }
+  ])
 
-  useEffect(() => {
-    async function loadPermissions() {
-      try {
-        const user = await getCurrentUser()
-
-        if (!user) {
-          setPermissions({
-            employees: false,
-            departments: false,
-            designations: false,
-          })
-          setLoading(false)
-          return
-        }
-
-        const permissionResults = await checkPermissions(user.id, [
-          { path: "people.employees" },
-          { path: "people.departments" },
-          { path: "people.designations" },
-        ])
-
-        setPermissions({
-          employees: permissionResults["people.employees"],
-          departments: permissionResults["people.departments"],
-          designations: permissionResults["people.designations"],
-        })
-      } catch (error) {
-        console.error("Error loading permissions:", error)
-        toast({
-          title: "Error",
-          description: "Failed to load permissions. Please try again.",
-          variant: "destructive",
-        })
-      } finally {
-        setLoading(false)
-      }
+  const sections = [
+    {
+      title: "Employees",
+      description: "Manage employee information, roles, and assignments",
+      icon: Users,
+      href: "/people/employees",
+      color: "bg-blue-500",
+      enabled: permissions["/people/employees.view"],
+      actions: [
+        { label: "View All", href: "/people/employees" },
+        { label: "Add New", href: "/people/employees/new", icon: Plus },
+      ]
+    },
+    {
+      title: "Departments",
+      description: "Organize and manage company departments",
+      icon: Building2,
+      href: "/people/departments",
+      color: "bg-green-500",
+      enabled: permissions["/people/departments.view"],
+      actions: [
+        { label: "View All", href: "/people/departments" },
+        { label: "Add New", href: "/people/departments/new", icon: Plus },
+      ]
+    },
+    {
+      title: "Designations",
+      description: "Define job titles and position hierarchies",
+      icon: Briefcase,
+      href: "/people/designations",
+      color: "bg-purple-500",
+      enabled: permissions["/people/designations.view"],
+      actions: [
+        { label: "View All", href: "/people/designations" },
+        { label: "Add New", href: "/people/designations/new", icon: Plus },
+      ]
     }
-
-    loadPermissions()
-  }, [toast])
-
-  if (loading) {
-    return (
-      <div className="container mx-auto space-y-6">
-        <div className="flex flex-col gap-2">
-          <h1 className="text-3xl font-bold tracking-tight">People Management</h1>
-          <p className="text-muted-foreground">Loading permissions...</p>
-        </div>
-      </div>
-    )
-  }
+  ]
 
   return (
-    <div className="container mx-auto space-y-6">
-      <div className="flex flex-col gap-2">
+    <div className="space-y-6">
+      <div>
         <h1 className="text-3xl font-bold tracking-tight">People Management</h1>
-        <p className="text-muted-foreground">Manage your organization's employees, departments, and designations.</p>
+        <p className="text-muted-foreground">
+          Manage your organization's people, departments, and roles
+        </p>
       </div>
-
-      {/* The PeopleSubmenu component is kept for legacy purposes but can be optional now */}
-      <PeopleSubmenu />
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {permissions.employees && (
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center">
-                <Users className="mr-2 h-5 w-5" />
-                Employees
-              </CardTitle>
-              <CardDescription>Manage your organization's employees</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="mb-4 text-sm">
-                Add, edit, and manage employee information, including personal details, contact information, and company
-                allocations.
-              </p>
-              <Link href="/people/employees">
-                <Button>Manage Employees</Button>
-              </Link>
-            </CardContent>
-          </Card>
-        )}
+        {sections.map((section) => {
+          if (!section.enabled) return null
 
-        {permissions.departments && (
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center">
-                <Building2 className="mr-2 h-5 w-5" />
-                Departments
-              </CardTitle>
-              <CardDescription>Manage your organization's departments</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="mb-4 text-sm">
-                Create and manage departments within your organization to better organize your workforce.
-              </p>
-              <Link href="/people/departments">
-                <Button>Manage Departments</Button>
-              </Link>
-            </CardContent>
-          </Card>
-        )}
-
-        {permissions.designations && (
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center">
-                <Briefcase className="mr-2 h-5 w-5" />
-                Designations
-              </CardTitle>
-              <CardDescription>Manage job designations</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="mb-4 text-sm">
-                Define and manage job designations and roles within your organization's departments.
-              </p>
-              <Link href="/people/designations">
-                <Button>Manage Designations</Button>
-              </Link>
-            </CardContent>
-          </Card>
-        )}
+          const Icon = section.icon
+          
+          return (
+            <Card key={section.title} className="relative overflow-hidden">
+              <CardHeader className="pb-3">
+                <div className="flex items-center space-x-2">
+                  <div className={`p-2 rounded-lg ${section.color} text-white`}>
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-lg">{section.title}</CardTitle>
+                  </div>
+                </div>
+                <CardDescription className="text-sm">
+                  {section.description}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex flex-col space-y-2">
+                  {section.actions.map((action) => {
+                    const ActionIcon = action.icon
+                    return (
+                      <Button
+                        key={action.label}
+                        variant={action.icon ? "default" : "outline"}
+                        size="sm"
+                        asChild
+                        className="justify-start"
+                      >
+                        <Link href={action.href}>
+                          {ActionIcon && <ActionIcon className="mr-2 h-4 w-4" />}
+                          {action.label}
+                        </Link>
+                      </Button>
+                    )
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )
+        })}
       </div>
+
+      {/* Quick Stats Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center space-x-2">
+            <BarChart3 className="h-5 w-5" />
+            <span>Quick Overview</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="text-center p-4 bg-blue-50 rounded-lg">
+              <div className="text-2xl font-bold text-blue-600">--</div>
+              <div className="text-sm text-blue-600">Total Employees</div>
+            </div>
+            <div className="text-center p-4 bg-green-50 rounded-lg">
+              <div className="text-2xl font-bold text-green-600">--</div>
+              <div className="text-sm text-green-600">Departments</div>
+            </div>
+            <div className="text-center p-4 bg-purple-50 rounded-lg">
+              <div className="text-2xl font-bold text-purple-600">--</div>
+              <div className="text-sm text-purple-600">Designations</div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }

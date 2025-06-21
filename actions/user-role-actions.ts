@@ -1,6 +1,6 @@
 "use server"
 
-import { createClient } from "@/lib/supabase"
+import { query, transaction } from "@/lib/postgresql-client"
 import bcrypt from "bcryptjs"
 
 interface CreateUserAccountParams {
@@ -18,93 +18,108 @@ interface UpdateUserRoleParams {
 
 export async function createUserAccount({ username, email, password, employeeId, roleId }: CreateUserAccountParams) {
   try {
-    const supabase = createClient()
+    console.log('👤 Creating user account for:', username)
 
     // Check if username already exists
-    const { data: existingUser, error: checkError } = await supabase
-      .from("user_accounts")
-      .select("id")
-      .eq("username", username)
-      .maybeSingle()
+    const existingUserResult = await query(
+      "SELECT id FROM user_accounts WHERE username = $1 LIMIT 1",
+      [username]
+    )
 
-    if (checkError) {
-      throw new Error(`Error checking username: ${checkError.message}`)
-    }
-
-    if (existingUser) {
+    if (existingUserResult.rows.length > 0) {
       throw new Error("Username already exists")
     }
 
     // Hash the password
+    console.log('🔐 Hashing password...')
     const passwordHash = await bcrypt.hash(password, 10)
 
     // Create the user account
-    const { data, error } = await supabase.from("user_accounts").insert({
-      username,
-      email,
-      password_hash: passwordHash,
-      employee_id: employeeId,
-      role_id: roleId,
-      is_active: true,
-      created_at: new Date().toISOString(),
-    })
+    console.log('💾 Inserting user account...')
+    const insertResult = await query(
+      `INSERT INTO user_accounts 
+       (username, email, password_hash, employee_id, role_id, is_active, created_at) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7) 
+       RETURNING id`,
+      [
+        username,
+        email,
+        passwordHash,
+        employeeId,
+        roleId,
+        true,
+        new Date().toISOString()
+      ]
+    )
 
-    if (error) {
-      throw new Error(`Error creating user account: ${error.message}`)
-    }
-
+    console.log(`✅ User account created successfully with ID: ${insertResult.rows[0].id}`)
     return { success: true }
   } catch (error: any) {
-    console.error("Error in createUserAccount:", error)
+    console.error("❌ Error in createUserAccount:", error)
     return { success: false, error: error.message }
   }
 }
 
 export async function updateUserRole({ userId, roleId }: UpdateUserRoleParams) {
   try {
-    const supabase = createClient()
+    console.log(`🔄 Updating user role for user ID ${userId} to role ID ${roleId}`)
 
-    const { error } = await supabase.from("user_accounts").update({ role_id: roleId }).eq("id", userId)
+    const updateResult = await query(
+      "UPDATE user_accounts SET role_id = $1 WHERE id = $2",
+      [roleId, userId]
+    )
 
-    if (error) {
-      throw new Error(`Error updating user role: ${error.message}`)
+    if (updateResult.rowCount === 0) {
+      throw new Error("User not found")
     }
 
+    console.log('✅ User role updated successfully')
     return { success: true }
   } catch (error: any) {
-    console.error("Error in updateUserRole:", error)
+    console.error("❌ Error in updateUserRole:", error)
     return { success: false, error: error.message }
   }
 }
 
 export async function getUsersWithRole(roleId: number) {
   try {
-    const supabase = createClient()
+    console.log(`📋 Fetching users with role ID: ${roleId}`)
 
-    const { data, error } = await supabase
-      .from("user_accounts")
-      .select(`
-        id, 
-        username, 
-        email, 
-        employee_id, 
-        last_login, 
-        is_active,
-        employees:employee_id (
-          first_name, 
-          last_name
-        )
-      `)
-      .eq("role_id", roleId)
-      .order("username")
+    const usersResult = await query(
+      `SELECT 
+        u.id, 
+        u.username, 
+        u.email, 
+        u.employee_id, 
+        u.last_login, 
+        u.is_active,
+        e.first_name, 
+        e.last_name
+       FROM user_accounts u
+       LEFT JOIN employees e ON u.employee_id = e.id
+       WHERE u.role_id = $1
+       ORDER BY u.username`,
+      [roleId]
+    )
 
-    if (error) {
-      throw new Error(`Error fetching users: ${error.message}`)
-    }
+    // Format the data to match the expected structure
+    const formattedData = usersResult.rows.map(row => ({
+      id: row.id,
+      username: row.username,
+      email: row.email,
+      employee_id: row.employee_id,
+      last_login: row.last_login,
+      is_active: row.is_active,
+      employees: {
+        first_name: row.first_name,
+        last_name: row.last_name
+      }
+    }))
 
-    return { success: true, data }
+    console.log(`✅ Found ${formattedData.length} users with role ID ${roleId}`)
+    return { success: true, data: formattedData }
   } catch (error: any) {
-    console.error("Error in getUsersWithRole:", error)
+    console.error("❌ Error in getUsersWithRole:", error)
     return { success: false, error: error.message, data: [] }
   }
 }

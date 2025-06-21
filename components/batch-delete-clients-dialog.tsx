@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/components/ui/use-toast"
-import { supabase } from "@/lib/supabase"
+import { query } from "@/lib/postgresql-client"
 import type { Client } from "@/types/client"
 import { logActivity } from "@/services/activity-service"
 
@@ -45,10 +45,15 @@ export function BatchDeleteClientsDialog({
       // Process deletions one by one to track success/failure
       for (const client of selectedClients) {
         try {
-          const { error } = await supabase.from("clients").delete().eq("id", client.id)
-
-          if (error) {
-            throw error
+          console.log(`🗑️ Deleting client: ${client.name} (ID: ${client.id})`)
+          
+          const result = await query(
+            'DELETE FROM clients WHERE id = $1',
+            [client.id]
+          )
+          
+          if (!result.success) {
+            throw new Error(result.error || 'Failed to delete client')
           }
 
           // Log the activity for each successful deletion

@@ -1,0 +1,14 @@
+{
+  "totalConversations": 0,
+  "yourResponsePatterns": {},
+  "communicationStyle": {},
+  "clientJourneyMappings": {},
+  "commonPhrases": [],
+  "responseLength": {
+    "short": 0,
+    "medium": 0,
+    "long": 0
+  },
+  "toneAnalysis": {},
+  "timeBasedPatterns": {}
+}

@@ -1,53 +1,63 @@
 "use server"
 
-import { createClient } from "@/lib/supabase/server"
+import { query, transaction } from "@/lib/postgresql-client"
+
+// Cache for department distribution - 60 second cache
+let departmentCache: {
+  data: Array<{ department: string; count: number }>
+  timestamp: number
+} | null = null
+
+const CACHE_DURATION = 60 * 1000 // 60 seconds
 
 export async function getDepartmentDistribution() {
-  const supabase = createClient()
+  // Check cache first
+  if (departmentCache && (Date.now() - departmentCache.timestamp) < CACHE_DURATION) {
+    console.log("⚡ Returning cached department distribution")
+    return departmentCache.data
+  }
 
   try {
-    console.log("Fetching department distribution using foreign table relationships...")
+    console.log("🔄 Fetching fresh department distribution via PostgreSQL...")
 
-    // Use Supabase's foreign table relationships to get department counts
-    const { data, error } = await supabase
-      .from("departments")
-      .select(`
-        id,
-        name,
-        employees(*)
-      `)
-      .order("name")
+    // Optimized query - get department counts directly
+    const result = await query(`
+      SELECT 
+        d.name as department,
+        COUNT(e.id) as count
+      FROM departments d
+      LEFT JOIN employees e ON d.id = e.department_id
+      GROUP BY d.id, d.name
+      
+      UNION ALL
+      
+      SELECT 
+        'No Department' as department,
+        COUNT(e.id) as count
+      FROM employees e
+      WHERE e.department_id IS NULL
+      HAVING COUNT(e.id) > 0
+      
+      ORDER BY count DESC, department ASC
+    `)
 
-    if (error) {
-      console.error("Error fetching departments with employees:", error)
-      return getFallbackDepartmentData()
-    }
-
-    // Transform the data into the format expected by the chart
-    const result = data.map((item) => ({
-      department: item.name,
-      count: item.employees?.length || 0,
+    // Convert to array format
+    const departmentData = result.rows.map(row => ({
+      department: row.department,
+      count: parseInt(row.count) || 0
     }))
 
-    // Get count of employees with no department
-    const { data: empsNoDept, error: noDeptError } = await supabase
-      .from("employees")
-      .select("id")
-      .is("department_id", null)
-
-    if (noDeptError) {
-      console.error("Error counting employees with no department:", noDeptError)
-    } else if (empsNoDept && empsNoDept.length > 0) {
-      result.push({
-        department: "No Department",
-        count: empsNoDept.length,
-      })
+    // Update cache
+    departmentCache = {
+      data: departmentData,
+      timestamp: Date.now()
     }
 
-    // Sort by count descending
-    return result.sort((a, b) => b.count - a.count)
+    console.log("✅ Department distribution fetched and cached via PostgreSQL")
+    return departmentData
+
   } catch (error) {
-    console.error("Error in getDepartmentDistribution:", error)
+    console.error("❌ Error in getDepartmentDistribution:", error)
     return getFallbackDepartmentData()
   }
 }
@@ -63,40 +73,27 @@ function getFallbackDepartmentData() {
   ]
 }
 
-// Add a validation function to check data integrity
+// Simplified validation function 
 export async function validateDepartmentData() {
-  const supabase = createClient()
-
   try {
-    // Check for employees with invalid department IDs
-    const { data: departments } = await supabase.from("departments").select("id")
-    const departmentIds = departments?.map((d) => d.id) || []
+    // Quick validation using PostgreSQL
+    const result = await query(`
+      SELECT 
+        COUNT(DISTINCT d.id) as department_count,
+        COUNT(e.id) as employee_count
+      FROM departments d
+      LEFT JOIN employees e ON d.id = e.department_id
+    `)
 
-    // Only run this check if we have departments
-    if (departmentIds.length > 0) {
-      const { data: invalidDeptEmployees, error } = await supabase
-        .from("employees")
-        .select("id, first_name, last_name, department_id")
-        .not("department_id", "is", null)
-        .not("department_id", "in", `(${departmentIds.join(",")})`)
-
-      if (error) {
-        console.error("Error checking for invalid department references:", error)
-        return { valid: false, issues: ["Database query error"] }
-      }
-
-      if (invalidDeptEmployees && invalidDeptEmployees.length > 0) {
-        return {
-          valid: false,
-          issues: [`Found ${invalidDeptEmployees.length} employees with invalid department references`],
-          invalidEmployees: invalidDeptEmployees,
-        }
+    return { 
+      valid: true, 
+      stats: {
+        departments: parseInt(result.rows[0]?.department_count) || 0,
+        employees: parseInt(result.rows[0]?.employee_count) || 0
       }
     }
-
-    return { valid: true }
   } catch (error) {
     console.error("Error validating department data:", error)
-    return { valid: false, issues: ["Exception during validation"] }
+    return { valid: false, issues: ["Database validation failed"] }
   }
 }

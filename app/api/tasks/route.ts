@@ -1,234 +1,59 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { pool } from '@/lib/postgresql-client'
 import { getCurrentUser } from '@/lib/auth-utils'
 
+// Direct PostgreSQL connection
+// Using centralized PostgreSQL client
+
 // GET /api/tasks - Fetch AI tasks with proper role-based filtering
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    const supabase = createClient()
+    console.log('📋 Getting tasks data from PostgreSQL...')
     
-    // Get current user and role for security filtering
-    console.log('🔍 Starting getCurrentUser...')
-    let currentUser
-    try {
-      currentUser = await getCurrentUser()
-      console.log('🔍 getCurrentUser result:', currentUser ? `${currentUser.username} (${currentUser.roleName})` : 'null')
-    } catch (authError: any) {
-      console.error('❌ getCurrentUser failed:', authError)
-      return NextResponse.json(
-        { error: 'Authentication failed', details: authError.message },
-        { status: 401 }
-      )
-    }
+    const client = await pool.connect()
     
-    if (!currentUser) {
-      console.log('❌ No current user found')
-      return NextResponse.json(
-        { error: 'Unauthorized access' },
-        { status: 401 }
-      )
-    }
+    // Get all tasks with enriched data
+    const query = `
+      SELECT 
+        t.*,
+        e.name as assigned_to_name,
+        l.client_name as lead_client_name
+      FROM ai_tasks t
+      LEFT JOIN employees e ON t.assigned_to_employee_id = e.id
+      LEFT JOIN leads l ON t.lead_id = l.id
+      ORDER BY t.created_at DESC
+      LIMIT 20
+    `
+
+    const result = await client.query(query)
+    client.release()
+
+    console.log(`✅ Tasks data from PostgreSQL: ${result.rows.length} tasks`)
     
-    console.log(`🔐 Tasks request from user: ${currentUser.username}, role: ${currentUser.roleName}, employeeId: ${currentUser.employeeId}`)
-    
-    // Determine filtering based on role - join with employees only (leads will be fetched separately)
-    let query = supabase
-      .from('ai_tasks')
-      .select(`
-        *,
-        assigned_employee:employees!assigned_to_employee_id(
-          id,
-          first_name,
-          last_name,
-          job_title
-        )
-      `)
-      .order('created_at', { ascending: false })
-      .limit(100)
-    
-    // Check for personal scope query parameter
-    const url = new URL(request.url)
-    const scope = url.searchParams.get('scope')
-
-    if (scope === 'personal') {
-      // Strict personal filtering: only show tasks assigned to the current user
-      // Exclude completed tasks that have generated quotations (they should move to approval workflow)
-      if (currentUser.employeeId) {
-        query = query
-          .eq('assigned_to_employee_id', currentUser.employeeId)
-          .or('status.neq.completed,quotation_id.is.null')
-        console.log(`🔐 [Personal Scope] Only active tasks for employee ID: ${currentUser.employeeId}`)
-      } else {
-        console.log('🔐 [Personal Scope] Employee ID not found, returning empty result')
-        return NextResponse.json([])
+    return NextResponse.json({
+      success: true,
+      data: result.rows,
+      metadata: {
+        source: "Direct PostgreSQL",
+        timestamp: new Date().toISOString(),
+        total: result.rows.length
       }
-    } else {
-      // Department head logic: Admins see all, department heads see their department, others see only their own
-      const isDepartmentHead = currentUser.roleName && currentUser.roleName.endsWith('Head')
+    })
 
-      if (currentUser.roleName === 'Administrator' || currentUser.isAdmin) {
-        // Admins see all tasks
-        console.log('🔐 Admin access - showing all tasks')
-      } else if (isDepartmentHead) {
-        // Department head: get their department_id
-        console.log('🔐 Department head detected, checking department...')
-        try {
-          const { data: headEmployee, error: headError } = await supabase
-            .from('employees')
-            .select('department_id')
-            .eq('id', currentUser.employeeId)
-            .single()
-          
-          if (headError) {
-            console.error('❌ Error fetching department for head:', headError)
-            return NextResponse.json([])
-          }
-          
-          if (!headEmployee || !headEmployee.department_id) {
-            console.log('🔐 Department head but no department found, returning empty result')
-            return NextResponse.json([])
-          }
-          
-          // Get all employees in this department
-          const { data: deptEmployees, error: deptError } = await supabase
-            .from('employees')
-            .select('id')
-            .eq('department_id', headEmployee.department_id)
-          
-          if (deptError) {
-            console.error('❌ Error fetching department employees:', deptError)
-            return NextResponse.json([])
-          }
-          
-          if (!deptEmployees || deptEmployees.length === 0) {
-            console.log('🔐 No employees found in department, returning empty result')
-            return NextResponse.json([])
-          }
-          
-          const employeeIds = deptEmployees.map(e => e.id)
-          query = query.in('assigned_to_employee_id', employeeIds)
-          console.log(`🔐 Department head access - showing tasks for department_id ${headEmployee.department_id}, employees: ${employeeIds}`)
-        } catch (deptError) {
-          console.error('❌ Exception in department head logic:', deptError)
-          return NextResponse.json([])
-        }
-      } else {
-        // Regular employees only see tasks assigned to them
-        if (currentUser.employeeId) {
-          query = query.eq('assigned_to_employee_id', currentUser.employeeId)
-          console.log(`🔐 Strict filtering: Only tasks for employee ID: ${currentUser.employeeId}`)
-        } else {
-          console.log('🔐 Employee ID not found, returning empty result')
-          return NextResponse.json([])
-        }
-      }
-    }
-    
-    console.log('🔍 Executing database query...')
-    const { data: tasks, error: tasksError } = await query
-
-    if (tasksError) {
-      console.error('❌ Error fetching AI tasks:', tasksError)
-      return NextResponse.json(
-        { error: 'Failed to fetch tasks', details: tasksError.message },
-        { status: 500 }
-      )
-    }
-
-    console.log(`🔍 Database returned ${tasks?.length || 0} tasks`)
-
-    // Get all unique lead IDs from tasks to fetch phone numbers separately
-    const leadIds = tasks
-      ?.filter(task => task.lead_id)
-      .map(task => task.lead_id)
-      .filter((id, index, self) => self.indexOf(id) === index) || []
-
-    // Fetch lead phone numbers in separate query if there are leads
-    let leadsMap = new Map()
-    if (leadIds.length > 0) {
-      console.log('📞 Fetching lead phone numbers for IDs:', leadIds)
-      const { data: leads, error: leadsError } = await supabase
-        .from('leads')
-        .select('id, phone, country_code, whatsapp_number')
-        .in('id', leadIds)
-
-      console.log('📞 Leads query result:', { leads, error: leadsError })
-      
-      if (!leadsError && leads) {
-        leads.forEach(lead => {
-          console.log(`📞 Lead ${lead.id}: phone=${lead.phone}`)
-          leadsMap.set(lead.id, lead)
-        })
-      }
-    }
-
-    // Get all unique quotation IDs from tasks
-    const quotationIds = tasks
-      ?.filter(task => task.quotation_id)
-      .map(task => task.quotation_id)
-      .filter((id, index, self) => self.indexOf(id) === index) || []
-
-    // Fetch all quotation data in single query if there are quotations
-    let quotationsMap = new Map()
-    if (quotationIds.length > 0) {
-      console.log('📋 Fetching quotations for IDs:', quotationIds)
-      const { data: quotations, error: quotationsError } = await supabase
-        .from('quotations')
-        .select('id, slug, workflow_status')
-        .in('id', quotationIds)
-
-      console.log('📋 Quotations query result:', { quotations, error: quotationsError })
-      
-      if (!quotationsError && quotations) {
-        quotations.forEach(q => {
-          console.log(`📋 Quotation ${q.id}: slug=${q.slug}`)
-          quotationsMap.set(q.id, q)
-        })
-      }
-    }
-
-    // Combine tasks with lead and quotation data and fix assigned_to field
-    const optimizedTasks = tasks?.map(task => {
-      const quotation = quotationsMap.get(task.quotation_id) || null
-      const lead = leadsMap.get(task.lead_id) || null
-      
-      // Fix assigned_to field using employee data
-      let assignedToName = task.assigned_to
-      if (task.assigned_employee) {
-        assignedToName = `${task.assigned_employee.first_name} ${task.assigned_employee.last_name}`.trim()
-      }
-      
-      // Get client phone from lead data (only use phone field that exists)
-      let clientPhone = null
-      if (lead && lead.phone) {
-        clientPhone = lead.phone
-      }
-      
-      return {
-        ...task,
-        assigned_to: assignedToName,
-        client_phone: clientPhone,
-        quotation_approval_status: null, // Column doesn't exist in quotations table
-        quotation_workflow_status: quotation?.workflow_status || null,
-        quotation_slug: quotation?.slug || null
-      }
-    }) || []
-
-    console.log(`📋 Fetched ${optimizedTasks.length} AI tasks with ${quotationIds.length} quotations and ${leadIds.length} leads in 3 optimized queries`)
-    return NextResponse.json(optimizedTasks)
   } catch (error: any) {
-    console.error('❌ Exception in GET /api/tasks:', error)
-    return NextResponse.json(
-      { error: 'Internal server error', details: error.message },
-      { status: 500 }
-    )
+    console.error('❌ Tasks GET error:', error)
+    return NextResponse.json({ 
+      success: false,
+      error: 'Database error',
+      details: error.message 
+    }, { status: 500 })
   }
 }
 
 // POST /api/tasks - Create a new AI task
 export async function POST(request: NextRequest) {
   try {
-    console.log('🔄 POST /api/tasks - Starting task creation...')
+    console.log('🔄 Creating new task in PostgreSQL...')
     
     let body
     try {
@@ -242,8 +67,6 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    const supabase = createClient()
-    
     // Validate required fields
     if (!body.title) {
       console.log('❌ Validation failed: Missing title')
@@ -255,7 +78,9 @@ export async function POST(request: NextRequest) {
 
     console.log('✅ Validation passed, preparing task data...')
 
-    // Prepare task data with minimal required fields only and ensure all values are serializable
+    const client = await pool.connect()
+    
+    // Prepare task data
     const taskData = {
       task_title: String(body.title || ''),
       task_description: String(body.description || ''),
@@ -272,35 +97,34 @@ export async function POST(request: NextRequest) {
 
     console.log('📋 Prepared task data:', JSON.stringify(taskData, null, 2))
 
-    // Test JSON serialization before sending to database
-    try {
-      JSON.stringify(taskData)
-      console.log('✅ Task data is JSON serializable')
-    } catch (serializationError: any) {
-      console.error('❌ Task data is not JSON serializable:', serializationError)
-      return NextResponse.json(
-        { error: 'Task data contains non-serializable values', details: serializationError.message },
-        { status: 400 }
-      )
-    }
+    const insertQuery = `
+      INSERT INTO ai_tasks (
+        task_title, task_description, task_type, priority, status,
+        assigned_to_employee_id, due_date, lead_id, client_name,
+        business_impact, estimated_value, created_at, updated_at
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW()
+      ) RETURNING *
+    `
 
-    console.log('🔄 Attempting to insert into ai_tasks table...')
-    const { data: task, error } = await supabase
-      .from('ai_tasks')
-      .insert(taskData)
-      .select('*')
+    const values = [
+      taskData.task_title,
+      taskData.task_description,
+      taskData.task_type,
+      taskData.priority,
+      taskData.status,
+      taskData.assigned_to_employee_id,
+      taskData.due_date,
+      taskData.lead_id,
+      taskData.client_name,
+      taskData.business_impact,
+      taskData.estimated_value
+    ]
 
-    if (error) {
-      console.error('❌ Supabase error creating AI task:', error)
-      console.error('❌ Error details:', JSON.stringify(error, null, 2))
-      return NextResponse.json(
-        { error: 'Failed to create task', details: error.message, supabaseError: error },
-        { status: 500 }
-      )
-    }
+    const result = await client.query(insertQuery, values)
+    client.release()
 
-    // Since insert returns an array, get the first item
-    const createdTask = Array.isArray(task) ? task[0] : task
+    const createdTask = result.rows[0]
 
     if (!createdTask) {
       console.error('❌ No task was created - empty result')
@@ -312,30 +136,23 @@ export async function POST(request: NextRequest) {
 
     console.log('✅ AI task created successfully:', createdTask.id)
     
-    // Create a clean, serializable response object
-    const responseTask = {
-      id: createdTask.id,
-      task_title: createdTask.task_title,
-      task_description: createdTask.task_description,
-      task_type: createdTask.task_type,
-      priority: createdTask.priority,
-      status: createdTask.status,
-      assigned_to_employee_id: createdTask.assigned_to_employee_id,
-      due_date: createdTask.due_date,
-      lead_id: createdTask.lead_id,
-      client_name: createdTask.client_name,
-      business_impact: createdTask.business_impact,
-      estimated_value: createdTask.estimated_value,
-      created_at: createdTask.created_at,
-      updated_at: createdTask.updated_at
-    }
+    return NextResponse.json({
+      success: true,
+      data: createdTask,
+      metadata: {
+        source: "Direct PostgreSQL",
+        timestamp: new Date().toISOString()
+      }
+    }, { status: 201 })
 
-    return NextResponse.json(responseTask, { status: 201 })
   } catch (error: any) {
-    console.error('❌ Exception in POST /api/tasks:', error)
-    console.error('❌ Exception stack:', error.stack)
+    console.error('❌ Tasks POST error:', error)
     return NextResponse.json(
-      { error: 'Internal server error', details: error.message, stack: error.stack },
+      { 
+        success: false,
+        error: 'Internal server error', 
+        details: error.message 
+      },
       { status: 500 }
     )
   }

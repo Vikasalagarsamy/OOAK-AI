@@ -1,8 +1,8 @@
-import { createClient } from "@/lib/supabase/server"
+import { createClient } from "@/lib/postgresql-client"
 import { NextResponse } from "next/server"
 
 export async function POST() {
-  const supabase = createClient()
+  const { query, transaction } = createClient()
 
   try {
     // Try to use the exec_sql function if it exists

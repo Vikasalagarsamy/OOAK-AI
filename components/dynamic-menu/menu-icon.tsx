@@ -1,49 +1,109 @@
-"use client"
-
-import {
-  Building,
-  Building2,
-  CircleDot,
-  GitBranch,
+import React from 'react'
+import { 
   LayoutDashboard,
-  Package,
-  Shield,
-  Truck,
-  TrendingUp,
-  User,
-  UserCog,
-  UserPlus,
+  Building2,
   Users,
-  type LucideIcon,
-  type LightbulbIcon as LucideProps,
-} from "lucide-react"
+  BarChart,
+  UserCog,
+  Briefcase,
+  Building,
+  PieChart,
+  GitBranch,
+  TrendingUp,
+  Settings,
+  Calendar,
+  MapPin,
+  ClipboardList,
+  FileText,
+  DollarSign,
+  Clock,
+  AlertCircle,
+  Activity,
+  FileSearch,
+  Shield,
+  Video,
+  Package,
+  BarChart3,
+  CheckCircle,
+  CreditCard,
+  Phone,
+  PhoneCall,
+  History,
+  Target,
+  Bot,
+  RefreshCw,
+  Brain,
+  Calculator,
+  Database,
+  Camera,
+  Folder,
+  Globe,
+  List,
+  ListChecks,
+  FilePlus,
+  XCircle,
+  Workflow,
+  Link as LinkIcon,
+  FileAudio,
+  type LucideIcon
+} from 'lucide-react'
 
-interface MenuIconProps extends LucideProps {
-  name?: string
+const iconMap: Record<string, LucideIcon> = {
+  LayoutDashboard,
+  Building2,
+  Users,
+  BarChart,
+  UserCog,
+  Briefcase,
+  Building,
+  PieChart,
+  GitBranch,
+  TrendingUp,
+  Settings,
+  Calendar,
+  MapPin,
+  ClipboardList,
+  FileText,
+  DollarSign,
+  Clock,
+  AlertCircle,
+  Activity,
+  FileSearch,
+  Shield,
+  Video,
+  Package,
+  BarChart3,
+  CheckCircle,
+  CreditCard,
+  Phone,
+  PhoneCall,
+  History,
+  Target,
+  Bot,
+  RefreshCw,
+  Brain,
+  Calculator,
+  Database,
+  Camera,
+  Folder,
+  Globe,
+  List,
+  ListChecks,
+  FilePlus,
+  XCircle,
+  Workflow,
+  Link: LinkIcon,
+  FileAudio
 }
 
-export function MenuIcon({ name, ...props }: MenuIconProps) {
-  const iconMap: Record<string, LucideIcon> = {
-    building: Building,
-    "building-2": Building2,
-    "circle-dot": CircleDot,
-    "git-branch": GitBranch,
-    "layout-dashboard": LayoutDashboard,
-    package: Package,
-    shield: Shield,
-    truck: Truck,
-    "trending-up": TrendingUp,
-    user: User,
-    "user-cog": UserCog,
-    "user-plus": UserPlus,
-    users: Users,
-  }
-
-  // Convert kebab-case to camelCase for compatibility
-  const normalizedName = name?.toLowerCase().replace(/-([a-z])/g, (_, letter) => letter.toUpperCase())
-
-  // Find the icon component
-  const Icon = name ? iconMap[name] || iconMap[normalizedName || ""] || CircleDot : CircleDot
-
-  return <Icon {...props} />
+interface MenuIconProps {
+  name: string
+  className?: string
 }
+
+export function MenuIcon({ name, className = 'h-5 w-5' }: MenuIconProps) {
+  const IconComponent = iconMap[name] || Settings
+  return <IconComponent className={className} />
+}
+
+export default MenuIcon 

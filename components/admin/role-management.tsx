@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { createClient } from "@/lib/supabase-browser"
+import { query, transaction } from "@/lib/postgresql-client"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { toast } from "@/components/ui/use-toast"
@@ -39,20 +39,27 @@ export function RoleManagement() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [roleToDelete, setRoleToDelete] = useState<Role | null>(null)
 
-  const supabase = createClient()
-
   // Load roles
   useEffect(() => {
     async function loadRoles() {
       try {
         setError(null)
-        const { data, error } = await supabase.from("roles").select("*").order("title")
+        console.log('🔍 Loading roles...')
+        
+        const result = await query(`
+          SELECT id, title, description, created_at, updated_at 
+          FROM roles 
+          ORDER BY title
+        `)
 
-        if (error) throw error
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to load roles')
+        }
 
-        setRoles(data || [])
+        console.log(`✅ Loaded ${result.data?.length || 0} roles`)
+        setRoles(result.data || [])
       } catch (err: any) {
-        console.error("Error loading roles:", err)
+        console.error("❌ Error loading roles:", err)
         setError(err.message || "Failed to load roles")
       } finally {
         setLoading(false)
@@ -77,16 +84,18 @@ export function RoleManagement() {
         throw new Error("Role title is required")
       }
 
-      const { error } = await supabase
-        .from("roles")
-        .update({
-          title: editTitle.trim(),
-          description: editDescription.trim() || null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", editingRole.id)
+      console.log(`🔄 Updating role: ${editingRole.title}`)
+      
+      const result = await query(`
+        UPDATE roles 
+        SET title = $1, description = $2, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $3
+        RETURNING *
+      `, [editTitle.trim(), editDescription.trim() || null, editingRole.id])
 
-      if (error) throw error
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to update role')
+      }
 
       // Update local state
       setRoles((prev) =>
@@ -102,6 +111,7 @@ export function RoleManagement() {
         ),
       )
 
+      console.log(`✅ Role updated: ${editTitle}`)
       toast({
         title: "Role Updated",
         description: `The role "${editTitle}" has been updated successfully.`,
@@ -109,7 +119,7 @@ export function RoleManagement() {
 
       setEditingRole(null)
     } catch (err: any) {
-      console.error("Error updating role:", err)
+      console.error("❌ Error updating role:", err)
       toast({
         title: "Error",
         description: err.message || "Failed to update role",
@@ -130,32 +140,47 @@ export function RoleManagement() {
 
     setIsSubmitting(true)
     try {
+      console.log(`🗑️ Deleting role: ${roleToDelete.title}`)
+      
       // Check if role is in use
-      const { data: usersWithRole, error: checkError } = await supabase
-        .from("user_accounts")
-        .select("id")
-        .eq("role_id", roleToDelete.id)
-        .limit(1)
+      const checkResult = await query(`
+        SELECT COUNT(*) as count 
+        FROM user_accounts 
+        WHERE role_id = $1
+      `, [roleToDelete.id])
 
-      if (checkError) throw checkError
+      if (!checkResult.success) {
+        throw new Error(checkResult.error || 'Failed to check role usage')
+      }
 
-      if (usersWithRole && usersWithRole.length > 0) {
+      const userCount = parseInt(checkResult.data?.[0]?.count || '0')
+      if (userCount > 0) {
         throw new Error("Cannot delete role: It is assigned to one or more users")
       }
 
-      // Delete role permissions first
-      const { error: permError } = await supabase.from("role_menu_permissions").delete().eq("role_id", roleToDelete.id)
+      // Use transaction for atomic deletion
+      const deleteResult = await transaction(async (queryFn) => {
+        // Delete role permissions first
+        await queryFn(`
+          DELETE FROM role_menu_permissions 
+          WHERE role_id = $1
+        `, [roleToDelete.id])
 
-      if (permError) throw permError
+        // Delete the role
+        await queryFn(`
+          DELETE FROM roles 
+          WHERE id = $1
+        `, [roleToDelete.id])
+      })
 
-      // Delete the role
-      const { error } = await supabase.from("roles").delete().eq("id", roleToDelete.id)
-
-      if (error) throw error
+      if (!deleteResult.success) {
+        throw new Error(deleteResult.error || 'Failed to delete role')
+      }
 
       // Update local state
       setRoles((prev) => prev.filter((role) => role.id !== roleToDelete.id))
 
+      console.log(`✅ Role deleted: ${roleToDelete.title}`)
       toast({
         title: "Role Deleted",
         description: `The role "${roleToDelete.title}" has been deleted successfully.`,
@@ -164,7 +189,7 @@ export function RoleManagement() {
       setDeleteDialogOpen(false)
       setRoleToDelete(null)
     } catch (err: any) {
-      console.error("Error deleting role:", err)
+      console.error("❌ Error deleting role:", err)
       toast({
         title: "Error",
         description: err.message || "Failed to delete role",

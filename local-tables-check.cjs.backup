@@ -1,0 +1,115 @@
+const { createClient } = require('@supabase/supabase-js');
+
+// Local Supabase configuration
+const LOCAL_URL = 'http://localhost:54321';
+const LOCAL_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxvY2FsaG9zdCIsInJvbGUiOiJzZXJ2aWNlX3JvbGUiLCJpYXQiOjE3MzE1NTc5NDUsImV4cCI6MjA0NzEzMzk0NX0.gfwXTzTK35nL-lD3-6zY2Wn1azOq5TCKdQY_HXOKYzI';
+
+const localSupabase = createClient(LOCAL_URL, LOCAL_KEY);
+
+// All tables that should exist based on remote
+const ALL_REMOTE_TABLES = [
+  'accounting_workflows', 'action_recommendations', 'activities', 
+  'ai_behavior_settings', 'ai_configurations', 'ai_contacts',
+  'ai_decision_log', 'ai_insights_summary', 'ai_performance_tracking',
+  'ai_prompt_templates', 'ai_recommendations', 'ai_tasks',
+  'analytics_cache', 'analytics_metrics', 'auditions', 'branches',
+  'bug_attachments', 'bug_comments', 'bugs', 'business_trends',
+  'call_analytics', 'call_insights', 'call_transcriptions', 'chat_logs',
+  'client_insights', 'clients', 'companies', 'company_partners',
+  'deliverable_master', 'deliverables', 'department_instructions',
+  'departments', 'designations', 'email_notification_templates',
+  'employee_companies', 'employees', 'events', 'follow_up_auditions',
+  'instruction_approvals', 'lead_drafts', 'lead_followups',
+  'lead_sources', 'lead_task_performance', 'leads', 'management_insights',
+  'menu_items', 'menu_items_tracking', 'ml_model_performance',
+  'mv_user_roles_fast', 'notification_batches', 'notification_engagement',
+  'notification_patterns', 'notification_performance_metrics',
+  'notification_preferences', 'notification_recipients', 'notification_rules',
+  'notification_settings', 'notifications', 'partners', 'payments',
+  'permissions', 'personalization_learning', 'post_sale_confirmations',
+  'post_sales_workflows', 'predictive_insights', 'profiles',
+  'query_performance_logs', 'quotation_approvals', 'quotation_events',
+  'quotation_predictions', 'quotation_revisions', 'quotation_workflow_history',
+  'quotations', 'quote_components', 'quote_deliverables_snapshots',
+  'quote_services_snapshot', 'recent_business_notifications',
+  'rejected_leads_view', 'revenue_forecasts', 'role_menu_permissions',
+  'role_permissions', 'roles', 'sales_activities', 'sales_performance_metrics',
+  'sales_team_members', 'sequence_rules', 'sequence_steps',
+  'service_packages', 'services', 'suppliers', 'system_logs',
+  'task_generation_log', 'task_performance_metrics', 'task_sequence_templates',
+  'task_status_history', 'team_members', 'team_performance_trends',
+  'teams', 'user_accounts', 'user_activity_history', 'user_ai_profiles',
+  'user_behavior_analytics', 'user_engagement_analytics',
+  'user_engagement_summary', 'user_id_mapping', 'user_menu_permissions',
+  'user_notification_summary', 'user_preferences', 'user_roles',
+  'users', 'v_package_deliverables', 'v_package_services',
+  'vendors', 'webhook_logs', 'whatsapp_config', 'whatsapp_messages',
+  'whatsapp_templates'
+];
+
+async function checkLocalTables() {
+  console.log('🔍 Checking what tables exist in local database...\n');
+  
+  const existingLocal = [];
+  const missingLocal = [];
+  
+  console.log(`📊 Testing ${ALL_REMOTE_TABLES.length} tables...`);
+  
+  for (const tableName of ALL_REMOTE_TABLES) {
+    try {
+      const { data, error } = await localSupabase
+        .from(tableName)
+        .select('*')
+        .limit(1);
+      
+      if (!error) {
+        existingLocal.push(tableName);
+        process.stdout.write('✅');
+      } else {
+        missingLocal.push(tableName);
+        process.stdout.write('❌');
+      }
+    } catch (e) {
+      missingLocal.push(tableName);
+      process.stdout.write('❌');
+    }
+  }
+  
+  console.log('\n\n' + '='.repeat(80));
+  console.log('📊 LOCAL DATABASE STATUS');
+  console.log('='.repeat(80));
+  console.log(`✅ Tables that exist locally: ${existingLocal.length}`);
+  console.log(`❌ Tables missing locally: ${missingLocal.length}`);
+  console.log(`📊 Total remote tables: ${ALL_REMOTE_TABLES.length}`);
+  
+  if (existingLocal.length > 0) {
+    console.log('\n✅ EXISTING LOCAL TABLES:');
+    existingLocal.forEach((table, i) => {
+      console.log(`${i + 1}. ${table}`);
+    });
+  }
+  
+  if (missingLocal.length > 0) {
+    console.log('\n❌ MISSING LOCAL TABLES:');
+    missingLocal.forEach((table, i) => {
+      console.log(`${i + 1}. ${table}`);
+    });
+  }
+  
+  console.log('\n🎯 CONCLUSION:');
+  if (missingLocal.length === ALL_REMOTE_TABLES.length) {
+    console.log('💥 NO REMOTE TABLES exist locally! Your databases are completely out of sync.');
+    console.log('🚨 CRITICAL: You should NOT delete the remote database yet!');
+  } else if (missingLocal.length > 0) {
+    console.log(`⚠️  ${missingLocal.length} tables are missing locally.`);
+    console.log('🚨 You should copy these table structures before deleting remote database.');
+  } else {
+    console.log('✅ All remote tables exist locally. Safe to proceed with deletion after data sync.');
+  }
+  
+  return { existingLocal, missingLocal };
+}
+
+checkLocalTables().then(({ existingLocal, missingLocal }) => {
+  console.log(`\n🎯 Summary: ${existingLocal.length} existing, ${missingLocal.length} missing`);
+}); 

@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { query, transaction } from '@/lib/postgresql-client'
 import type { 
   Notification, 
   NotificationType, 
@@ -24,7 +24,6 @@ export class NotificationService {
     try {
       console.log('🔍 NotificationService - Creating notification with params:', params)
       
-      const supabase = createClient()
       const notificationId = `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
       
       console.log('🔍 NotificationService - Generated ID:', notificationId)
@@ -47,14 +46,18 @@ export class NotificationService {
 
       console.log('🔍 NotificationService - Insert data:', insertData)
 
-      const { error } = await supabase
-        .from('notifications')
-        .insert(insertData)
-
-      if (error) {
-        console.error('🔍 NotificationService - Database error:', error)
-        return null
-      }
+      await query(
+        `INSERT INTO notifications (
+          id, user_id, type, priority, title, message, quotation_id, 
+          is_read, created_at, expires_at, action_url, action_label, metadata
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+        [
+          insertData.id, insertData.user_id, insertData.type, insertData.priority,
+          insertData.title, insertData.message, insertData.quotation_id,
+          insertData.is_read, insertData.created_at, insertData.expires_at,
+          insertData.action_url, insertData.action_label, JSON.stringify(insertData.metadata)
+        ]
+      )
 
       console.log('🔍 NotificationService - Successfully created notification:', notificationId)
       return notificationId
@@ -201,21 +204,16 @@ export class NotificationService {
   // Cleanup expired notifications
   static async cleanupExpiredNotifications(): Promise<number> {
     try {
-      const supabase = createClient()
-      const { data, error } = await supabase
-        .from('notifications')
-        .delete()
-        .lt('expires_at', new Date().toISOString())
-        .select()
+      const result = await query(
+        `DELETE FROM notifications 
+         WHERE expires_at < $1 
+         RETURNING id`,
+        [new Date().toISOString()]
+      )
 
-      if (error) {
-        console.error('Error cleaning up expired notifications:', error)
-        return 0
-      }
-
-      return (data || []).length
+      return result.rows?.length || 0
     } catch (error) {
-      console.error('Error in cleanupExpiredNotifications:', error)
+      console.error('Error cleaning up expired notifications:', error)
       return 0
     }
   }

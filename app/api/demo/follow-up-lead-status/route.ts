@@ -1,3 +1,4 @@
+import { createClient } from '@/lib/postgresql-client'
 import { NextResponse } from "next/server"
 import { updateFollowUpWithLeadStatus } from "@/actions/follow-up-actions"
 import { getSuggestedLeadStatuses } from "@/lib/follow-up-utils"

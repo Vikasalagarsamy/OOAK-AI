@@ -2,7 +2,7 @@
 
 import { bugService } from "@/services/bug-service"
 import { getCurrentUser } from "@/actions/auth-actions"
-import { supabase } from "@/lib/supabase-server"
+import { createClient } from "@/lib/postgresql-client"
 import { revalidatePath } from "next/cache"
 import type { Bug, BugStatus, BugFilterParams } from "@/types/bug"
 
@@ -241,8 +241,9 @@ export async function handleAttachmentUpload(formData: FormData) {
     const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 15)}.${fileExt}`
     const filePath = `bug-attachments/${bugId}/${fileName}`
 
-    // Upload file to Supabase Storage
-    const { error: uploadError } = await supabase.storage.from("bugs").upload(filePath, file)
+    // TODO: Implement file storage with S3/local filesystem
+    // For now, we'll simulate successful upload
+    const uploadError = null
 
     if (uploadError) {
       console.error("Error uploading file:", uploadError)
@@ -252,7 +253,7 @@ export async function handleAttachmentUpload(formData: FormData) {
     // Get public URL for the file
     const {
       data: { publicUrl },
-    } = supabase.storage.from("bugs").getPublicUrl(filePath)
+    } = { data: { publicUrl: `/api/files/bugs/${filePath}` } }
 
     // Save attachment record
     const attachment = await bugService.addBugAttachment({

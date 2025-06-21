@@ -1,0 +1,81 @@
+const { createClient } = require('@supabase/supabase-js')
+
+// Load environment variables
+require('dotenv').config()
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+if (!supabaseUrl || !serviceKey) {
+  console.error('❌ Missing environment variables')
+  process.exit(1)
+}
+
+const supabase = createClient(supabaseUrl, serviceKey)
+
+async function checkEmployeesAndTasks() {
+  try {
+    console.log('🔍 Checking employees in database...')
+    
+    // Get all employees
+    const { data: employees, error: empError } = await supabase
+      .from('employees')
+      .select('id, employee_id, first_name, last_name, name, email')
+      .order('id')
+
+    if (empError) {
+      console.error('❌ Error fetching employees:', empError)
+      return
+    }
+
+    console.log('\n📋 Employees in database:')
+    employees.forEach(emp => {
+      console.log(`  ID: ${emp.id}, employee_id: ${emp.employee_id}, Name: ${emp.first_name} ${emp.last_name}`)
+    })
+
+    // Check task assignments
+    console.log('\n🔍 Checking task assignments...')
+    const { data: taskAssignments, error: taskError } = await supabase
+      .from('ai_tasks')
+      .select('assigned_to_employee_id, count(*)')
+      .not('assigned_to_employee_id', 'is', null)
+      .group('assigned_to_employee_id')
+
+    if (taskError) {
+      console.error('❌ Error fetching task assignments:', taskError)
+      return
+    }
+
+    console.log('\n📊 Task assignments by employee_id:')
+    for (const assignment of taskAssignments || []) {
+      const employee = employees.find(e => e.id === assignment.assigned_to_employee_id)
+      console.log(`  Employee ID ${assignment.assigned_to_employee_id}: ${assignment.count} tasks`)
+      if (employee) {
+        console.log(`    → ${employee.first_name} ${employee.last_name} (${employee.employee_id})`)
+      } else {
+        console.log(`    → ⚠️ No employee found with ID ${assignment.assigned_to_employee_id}`)
+      }
+    }
+
+    // Check current user mapping
+    console.log('\n🔍 Checking user accounts...')
+    const { data: users, error: userError } = await supabase
+      .from('user_accounts')
+      .select('id, email, username, employee_id')
+      .limit(5)
+
+    if (userError) {
+      console.error('❌ Error fetching users:', userError)
+    } else {
+      console.log('\n👤 User accounts:')
+      users.forEach(user => {
+        console.log(`  User: ${user.username} (${user.email}), employee_id: ${user.employee_id}`)
+      })
+    }
+
+  } catch (error) {
+    console.error('❌ Script error:', error)
+  }
+}
+
+checkEmployeesAndTasks() 

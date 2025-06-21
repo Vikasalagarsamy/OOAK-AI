@@ -1,6 +1,57 @@
+// 🚨 MIGRATED FROM SUPABASE TO POSTGRESQL
+// Migration Date: 2025-06-20T09:50:05.788Z
+// Original file backed up as: scripts/add-package-pricing-to-services.js.backup
+
+
+// PostgreSQL connection pool
+const pool = new Pool({
+  host: process.env.POSTGRES_HOST || 'localhost',
+  port: process.env.POSTGRES_PORT || 5432,
+  database: process.env.POSTGRES_DATABASE || 'ooak_future',
+  user: process.env.POSTGRES_USER || 'postgres',
+  password: process.env.POSTGRES_PASSWORD || 'password',
+  ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false,
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+});
+
+
+// Query helper function
+async function query(text, params = []) {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(text, params);
+    return { data: result.rows, error: null };
+  } catch (error) {
+    console.error('❌ PostgreSQL Query Error:', error.message);
+    return { data: null, error: error.message };
+  } finally {
+    client.release();
+  }
+}
+
+// Transaction helper function  
+async function transaction(callback) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await callback(client);
+    await client.query('COMMIT');
+    return { data: result, error: null };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ PostgreSQL Transaction Error:', error.message);
+    return { data: null, error: error.message };
+  } finally {
+    client.release();
+  }
+}
+
+// Original content starts here:
 #!/usr/bin/env node
 
-const { createClient } = require('@supabase/supabase-js')
+const { Pool } = require('pg');)
 
 async function addPackagePricingColumns() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -17,7 +68,7 @@ async function addPackagePricingColumns() {
     process.exit(1)
   }
 
-  const supabase = createClient(supabaseUrl, supabaseServiceKey)
+  // PostgreSQL connection - see pool configuration below
 
   try {
     console.log('🔄 Checking current services table structure...')
@@ -81,7 +132,7 @@ async function addPackagePricingColumns() {
           ]
           
           for (const query of alterQueries) {
-            const { error } = await supabase.rpc('exec_sql', { sql: query })
+            const { error } = await supabasequery('SELECT exec_sql( sql: query )')
             if (error) {
               console.error(`❌ Error executing: ${query}`, error)
             } else {

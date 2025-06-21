@@ -1,0 +1,249 @@
+// 🚨 MIGRATED FROM SUPABASE TO POSTGRESQL
+// Migration Date: 2025-06-20T09:50:05.785Z
+// Original file backed up as: inspect-local-database.cjs.backup
+
+
+// PostgreSQL connection pool
+const pool = new Pool({
+  host: process.env.POSTGRES_HOST || 'localhost',
+  port: process.env.POSTGRES_PORT || 5432,
+  database: process.env.POSTGRES_DATABASE || 'ooak_future',
+  user: process.env.POSTGRES_USER || 'postgres',
+  password: process.env.POSTGRES_PASSWORD || 'password',
+  ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false,
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+});
+
+
+// Query helper function
+async function query(text, params = []) {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(text, params);
+    return { data: result.rows, error: null };
+  } catch (error) {
+    console.error('❌ PostgreSQL Query Error:', error.message);
+    return { data: null, error: error.message };
+  } finally {
+    client.release();
+  }
+}
+
+// Transaction helper function  
+async function transaction(callback) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await callback(client);
+    await client.query('COMMIT');
+    return { data: result, error: null };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ PostgreSQL Transaction Error:', error.message);
+    return { data: null, error: error.message };
+  } finally {
+    client.release();
+  }
+}
+
+// Original content starts here:
+#!/usr/bin/env node
+
+// Local Database Structure Inspector
+// ==================================
+
+const { Pool } = require('pg');)
+
+// Local Supabase configuration
+const LOCAL_CONFIG = {
+  url: 'http://127.0.0.1:54321',
+  serviceKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU'
+}
+
+async function inspectDatabase() {
+  console.log('🔍 Inspecting Local Supabase Database Structure...\n')
+  
+  try {
+    // Use service role key for full access
+    // PostgreSQL connection - see pool configuration below
+    
+    console.log('✅ Connected to local Supabase with service role')
+    console.log(`📍 Database URL: ${LOCAL_CONFIG.url}`)
+    
+    // Get all tables in public schema
+    console.log('\n📋 Step 1: Getting all tables...')
+    const { data: tables, error: tablesError } = await supabase
+      query('SELECT get_schema_tables( schema_name: 'public' )')
+      .catch(async () => {
+        // If RPC doesn't exist, use direct query
+        return await supabase
+          .from('information_schema.tables')
+          .select('table_name')
+          .eq('table_schema', 'public')
+          .order('table_name')
+      })
+    
+    if (tablesError) {
+      // Alternative method - query information_schema directly
+      console.log('ℹ️  Using alternative method to get tables...')
+      
+      const { data: schemaInfo, error: schemaError } = await supabase
+        query('SELECT exec_sql( 
+          sql: `
+            SELECT table_name 
+            FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            AND table_type = 'BASE TABLE'
+            ORDER BY table_name;
+          `
+        )')
+        .catch(() => null)
+      
+      if (schemaError || !schemaInfo) {
+        // Manual table discovery by trying known tables
+        console.log('ℹ️  Discovering tables manually...')
+        
+        const knownTables = [
+          'companies', 'branches', 'employees', 'leads', 'lead_sources',
+          'designations', 'departments', 'roles', 'users', 'notifications',
+          'employee_companies', 'whatsapp_templates', 'vendors', 'quotations'
+        ]
+        
+        const discoveredTables = []
+        
+        for (const tableName of knownTables) {
+          try {
+            const { data, error } = await supabase
+              .from(tableName)
+              .select('*')
+              .limit(1)
+            
+            if (!error) {
+              discoveredTables.push(tableName)
+            }
+          } catch (e) {
+            // Table doesn't exist, continue
+          }
+        }
+        
+        await inspectTables(supabase, discoveredTables)
+        return
+      }
+    }
+    
+    const tableList = tables?.map(t => t.table_name) || []
+    await inspectTables(supabase, tableList)
+    
+  } catch (error) {
+    console.error('💥 Error inspecting database:', error)
+  }
+}
+
+async function inspectTables(supabase, tableNames) {
+  console.log(`\n📊 Found ${tableNames.length} tables:`)
+  tableNames.forEach((table, index) => {
+    console.log(`   ${index + 1}. ${table}`)
+  })
+  
+  console.log('\n🔍 Step 2: Inspecting table structures and data...\n')
+  
+  for (const tableName of tableNames) {
+    try {
+      console.log(`\n${'='.repeat(50)}`)
+      console.log(`📋 TABLE: ${tableName.toUpperCase()}`)
+      console.log(`${'='.repeat(50)}`)
+      
+      // Get table structure
+      console.log('\n📝 Column Structure:')
+      const { data: columns, error: columnsError } = await supabase
+        .rpc('exec_sql', {
+          sql: `
+            SELECT 
+              column_name,
+              data_type,
+              is_nullable,
+              column_default
+            FROM information_schema.columns 
+            WHERE table_name = '${tableName}' 
+            AND table_schema = 'public'
+            ORDER BY ordinal_position;
+          `
+        })
+        .catch(() => null)
+      
+      if (columns && columns.length > 0) {
+        columns.forEach(col => {
+          const nullable = col.is_nullable === 'YES' ? '(nullable)' : '(required)'
+          const defaultVal = col.column_default ? ` [default: ${col.column_default}]` : ''
+          console.log(`   • ${col.column_name}: ${col.data_type} ${nullable}${defaultVal}`)
+        })
+      } else {
+        // Alternative: Get sample data to infer structure
+        const { data: sample, error: sampleError } = await supabase
+          .from(tableName)
+          .select('*')
+          .limit(1)
+        
+        if (sample && sample.length > 0) {
+          console.log('   Fields (inferred from sample data):')
+          Object.keys(sample[0]).forEach(field => {
+            const value = sample[0][field]
+            const type = typeof value
+            console.log(`   • ${field}: ${type} (value: ${value})`)
+          })
+        } else {
+          console.log('   ⚠️  Could not determine structure')
+        }
+      }
+      
+      // Get row count and sample data
+      const { data: rowData, error: rowError, count } = await supabase
+        .from(tableName)
+        .select('*', { count: 'exact' })
+        .limit(3)
+      
+      if (!rowError) {
+        console.log(`\n📊 Row Count: ${count || rowData?.length || 0}`)
+        
+        if (rowData && rowData.length > 0) {
+          console.log('\n📄 Sample Data (first 3 rows):')
+          rowData.forEach((row, index) => {
+            console.log(`\n   Row ${index + 1}:`)
+            Object.entries(row).forEach(([key, value]) => {
+              let displayValue = value
+              if (typeof value === 'string' && value.length > 50) {
+                displayValue = value.substring(0, 50) + '...'
+              }
+              console.log(`     ${key}: ${displayValue}`)
+            })
+          })
+        } else {
+          console.log('\n📄 No data found in this table')
+        }
+      } else {
+        console.log(`\n❌ Error querying ${tableName}:`, rowError.message)
+      }
+      
+    } catch (error) {
+      console.log(`\n❌ Error inspecting ${tableName}:`, error.message)
+    }
+  }
+  
+  console.log('\n' + '='.repeat(60))
+  console.log('🎯 DATABASE INSPECTION COMPLETE')
+  console.log('='.repeat(60))
+  console.log('\n💡 Summary:')
+  console.log(`• Total tables discovered: ${tableNames.length}`)
+  console.log('• Structure and sample data shown above')
+  console.log('• This is your local development database')
+  console.log('• Safe to experiment with - no production impact')
+  
+  console.log('\n🔧 Next steps:')
+  console.log('• Use this structure info to build/debug your frontend')
+  console.log('• Field names are now confirmed for your queries')
+  console.log('• Studio available at: http://127.0.0.1:54323')
+}
+
+inspectDatabase() 

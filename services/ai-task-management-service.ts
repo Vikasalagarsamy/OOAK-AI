@@ -1,5 +1,11 @@
-import { createClient } from '@/lib/supabase'
+// 🎯 MIGRATED: AI Task Management Service - PostgreSQL Version
+// Original: services/ai-task-management-service.ts (Supabase)
+// Migrated: Direct PostgreSQL queries for intelligent task management
+
+import { query, transaction } from "@/lib/postgresql-client"
 import { AIBusinessIntelligenceService, ComprehensiveBusinessData } from './ai-business-intelligence-service'
+import { getUserIdForDatabase } from '@/lib/uuid-helpers'
+import type { LeadStatus } from '@/types/follow-up'
 
 export interface AITask {
   id?: string
@@ -40,7 +46,6 @@ export interface TaskPerformance {
 }
 
 export class AITaskManagementService {
-  private supabase = createClient()
   private biService = new AIBusinessIntelligenceService()
 
   /**
@@ -49,7 +54,7 @@ export class AITaskManagementService {
    */
   async generateAITasks(): Promise<{ tasksCreated: number; tasks: AITask[] }> {
     try {
-      console.log("🤖 AI Task Generator: Starting intelligent task analysis...")
+      console.log("🤖 AI Task Generator: Starting intelligent task analysis with PostgreSQL...")
 
       // 1. Get comprehensive business data
       const businessData = await this.biService.getComprehensiveBusinessData()
@@ -254,29 +259,39 @@ export class AITaskManagementService {
    */
   private async smartAssignment(taskType: string, context: any): Promise<{ id: number; name: string } | null> {
     try {
-      // Get employees with their current workload
-      const { data: employees, error } = await this.supabase
-        .from('employees')
-        .select(`
-          id, 
-          first_name, 
-          last_name, 
-          job_title,
-          departments:department_id (name)
-        `)
+      console.log(`🎯 Smart assignment for task type: ${taskType}`)
 
-      if (error) throw error
+      // Get employees with their current workload from PostgreSQL
+      const employeesResult = await query(`
+        SELECT 
+          e.id, 
+          e.first_name, 
+          e.last_name, 
+          e.job_title,
+          d.name as department_name
+        FROM employees e
+        LEFT JOIN departments d ON e.department_id = d.id
+        WHERE e.is_active = true
+        ORDER BY e.created_at ASC
+      `)
+
+      const employees = employeesResult.rows
+
+      if (!employees || employees.length === 0) {
+        console.warn('⚠️ No active employees found for task assignment')
+        return null
+      }
 
       // Assignment logic based on task type
       switch (taskType) {
         case 'quotation_follow_up':
         case 'payment_follow_up':
           // Prefer Sales Head, fallback to any sales member
-          return this.findBestEmployee(employees, ['SALES HEAD', 'SEO'], 'SALES')
+          return this.findBestEmployee(employees, ['SALES HEAD', 'SEO'], 'Sales')
         
         case 'quotation_approval':
-          // Prefer Sales Manager or CTO
-          return this.findBestEmployee(employees, ['CTO', 'SALES MANAGER'], 'SALES')
+          // ONLY assign to Sales Head - quotation approvals should not go to sales resources
+          return this.findBestEmployee(employees, ['Sales Head', 'SALES HEAD'], 'Sales')
         
         default:
           return employees && employees.length > 0 ? {
@@ -285,7 +300,7 @@ export class AITaskManagementService {
           } : null
       }
     } catch (error) {
-      console.error('Error in smart assignment:', error)
+      console.error('❌ Error in smart assignment:', error)
       return null
     }
   }
@@ -296,12 +311,13 @@ export class AITaskManagementService {
   private findBestEmployee(employees: any[], preferredTitles: string[], fallbackDepartment: string): { id: number; name: string } | null {
     if (!employees || employees.length === 0) return null
 
-    // First try preferred job titles
+    // First try preferred job titles (exact matches)
     for (const title of preferredTitles) {
       const employee = employees.find(emp => 
         emp.job_title?.toUpperCase().includes(title.toUpperCase())
       )
       if (employee) {
+        console.log(`✅ Assigned to ${employee.first_name} ${employee.last_name} (${employee.job_title})`)
         return {
           id: employee.id,
           name: `${employee.first_name} ${employee.last_name}`
@@ -309,23 +325,35 @@ export class AITaskManagementService {
       }
     }
 
-    // Fallback to department
+    // For quotation approval tasks, don't fall back to department - only exact role matches
+    if (preferredTitles.some(title => title.toLowerCase().includes('sales head'))) {
+      console.warn('⚠️ No Sales Head found for quotation approval task - task will not be assigned')
+      return null
+    }
+
+    // Fallback to department for other task types
     const employee = employees.find(emp => 
-      emp.departments?.name === fallbackDepartment
+      emp.department_name === fallbackDepartment
     )
     
     if (employee) {
+      console.log(`✅ Assigned to ${employee.first_name} ${employee.last_name} (${employee.department_name})`)
       return {
         id: employee.id,
         name: `${employee.first_name} ${employee.last_name}`
       }
     }
 
-    // Final fallback to first employee
-    return {
-      id: employees[0].id,
-      name: `${employees[0].first_name} ${employees[0].last_name}`
+    // Final fallback to first employee (except for approval tasks)
+    if (!preferredTitles.some(title => title.toLowerCase().includes('head'))) {
+      console.log(`✅ Assigned to ${employees[0].first_name} ${employees[0].last_name} (default)`)
+      return {
+        id: employees[0].id,
+        name: `${employees[0].first_name} ${employees[0].last_name}`
+      }
     }
+
+    return null
   }
 
   /**
@@ -358,20 +386,22 @@ export class AITaskManagementService {
   }
 
   /**
-   * Check if task already exists
+   * Check if task already exists using PostgreSQL
    */
   private async checkExistingTask(taskType: string, quotationId: string): Promise<boolean> {
     try {
-      const { data, error } = await this.supabase
-        .from('ai_tasks')
-        .select('id')
-        .eq('task_type', taskType)
-        .eq('quotation_id', quotationId)
-        .eq('status', 'pending')
-        .single()
+      const result = await query(`
+        SELECT id 
+        FROM ai_tasks 
+        WHERE task_type = $1 
+        AND quotation_id = $2 
+        AND status = 'pending'
+        LIMIT 1
+      `, [taskType, quotationId])
 
-      return !!data && !error
-    } catch {
+      return result.rows.length > 0
+    } catch (error) {
+      console.error('❌ Error checking existing task:', error)
       return false
     }
   }
@@ -404,45 +434,109 @@ export class AITaskManagementService {
   }
 
   /**
-   * Save tasks to database
+   * Save tasks to PostgreSQL database
    */
   private async saveTasks(tasks: AITask[]): Promise<AITask[]> {
     try {
-      const { data, error } = await this.supabase
-        .from('ai_tasks')
-        .insert(tasks.map(task => ({
-          ...task,
-          id: undefined // Let database generate ID
-        })))
-        .select()
+      console.log(`💾 Saving ${tasks.length} tasks to PostgreSQL...`)
 
-      if (error) throw error
+      const savedTasks: AITask[] = []
 
-      return data || []
+      // Use transaction for atomicity
+      await transaction(async (client) => {
+        for (const task of tasks) {
+          const result = await client.query(`
+            INSERT INTO ai_tasks (
+              task_title,
+              task_description,
+              task_type,
+              priority,
+              status,
+              assigned_to_employee_id,
+              quotation_id,
+              client_name,
+              due_date,
+              estimated_duration_minutes,
+              business_impact,
+              estimated_value,
+              ai_reasoning,
+              ai_confidence_score,
+              created_at,
+              updated_at
+            ) VALUES (
+              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+            ) RETURNING *
+          `, [
+            task.title,
+            task.description,
+            task.task_type,
+            task.priority,
+            task.status,
+            task.assigned_to_employee_id,
+            task.quotation_id,
+            task.client_name,
+            task.due_date,
+            task.estimated_duration_minutes,
+            task.business_impact,
+            task.estimated_value,
+            task.ai_reasoning,
+            task.ai_confidence_score,
+            new Date().toISOString(),
+            new Date().toISOString()
+          ])
+
+          if (result.rows[0]) {
+            savedTasks.push({
+              id: result.rows[0].id,
+              ...task
+            })
+          }
+        }
+      })
+
+      console.log(`✅ Successfully saved ${savedTasks.length} tasks to PostgreSQL`)
+      return savedTasks
+
     } catch (error) {
-      console.error('Error saving tasks:', error)
+      console.error('❌ Error saving tasks to PostgreSQL:', error)
       return []
     }
   }
 
   /**
-   * Generate reminders for tasks
+   * Generate reminders for tasks using PostgreSQL
    */
   private async generateReminders(tasks: AITask[]): Promise<void> {
     try {
-      const reminders = []
+      console.log(`📅 Generating reminders for ${tasks.length} tasks...`)
+
+      const reminders: Array<{
+        task_id: string
+        reminder_type: string
+        scheduled_at: string
+        notification_channel: string
+        recipient_employee_id: number | undefined
+        recipient_user_id: string | null
+        message_template: string
+      }> = []
 
       for (const task of tasks) {
+        if (!task.id) continue
+
         // Create reminder 1 day before due date
         const reminderDate = new Date(task.due_date)
         reminderDate.setDate(reminderDate.getDate() - 1)
+
+        // Convert employee ID to UUID format if needed for notifications
+        const employeeUuid = task.assigned_to_employee_id ? getUserIdForDatabase(task.assigned_to_employee_id) : null
 
         reminders.push({
           task_id: task.id,
           reminder_type: 'due_soon',
           scheduled_at: reminderDate.toISOString(),
           notification_channel: 'in_app',
-          recipient_employee_id: task.assigned_to_employee_id,
+          recipient_employee_id: task.assigned_to_employee_id, // Keep as integer for task system
+          recipient_user_id: employeeUuid, // UUID format for notifications
           message_template: `Reminder: Task "${task.title}" is due tomorrow`
         })
 
@@ -452,66 +546,107 @@ export class AITaskManagementService {
           reminder_type: 'overdue',
           scheduled_at: task.due_date,
           notification_channel: 'in_app',
-          recipient_employee_id: task.assigned_to_employee_id,
+          recipient_employee_id: task.assigned_to_employee_id, // Keep as integer for task system
+          recipient_user_id: employeeUuid, // UUID format for notifications
           message_template: `OVERDUE: Task "${task.title}" is now overdue`
         })
       }
 
-      const { error } = await this.supabase
-        .from('task_reminders')
-        .insert(reminders)
+      // Insert reminders into PostgreSQL
+      if (reminders.length > 0) {
+        await transaction(async (client) => {
+          for (const reminder of reminders) {
+            await client.query(`
+              INSERT INTO task_reminders (
+                task_id,
+                reminder_type,
+                scheduled_at,
+                notification_channel,
+                recipient_employee_id,
+                recipient_user_id,
+                message_template,
+                created_at
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            `, [
+              reminder.task_id,
+              reminder.reminder_type,
+              reminder.scheduled_at,
+              reminder.notification_channel,
+              reminder.recipient_employee_id,
+              reminder.recipient_user_id,
+              reminder.message_template,
+              new Date().toISOString()
+            ])
+          }
+        })
 
-      if (error) throw error
+        console.log(`✅ Generated ${reminders.length} reminders in PostgreSQL`)
+      }
+
     } catch (error) {
-      console.error('Error creating reminders:', error)
+      console.error('❌ Error creating reminders in PostgreSQL:', error)
     }
   }
 
   /**
-   * Get active task rules
+   * Get active task rules from PostgreSQL
    */
   private async getActiveTaskRules(): Promise<TaskRule[]> {
     try {
-      const { data, error } = await this.supabase
-        .from('ai_task_rules')
-        .select('*')
-        .eq('is_active', true)
+      const result = await query(`
+        SELECT * 
+        FROM ai_task_rules 
+        WHERE is_active = true 
+        ORDER BY priority DESC
+      `)
 
-      if (error) throw error
-
-      return data || []
+      return result.rows || []
     } catch (error) {
-      console.error('Error fetching task rules:', error)
+      console.error('❌ Error fetching task rules from PostgreSQL:', error)
       return []
     }
   }
 
   /**
-   * Get tasks for a specific employee
+   * Get tasks for a specific employee from PostgreSQL
    */
   async getEmployeeTasks(employeeId: number): Promise<AITask[]> {
     try {
-      const { data, error } = await this.supabase
-        .from('ai_tasks')
-        .select('*')
-        .eq('assigned_to_employee_id', employeeId)
-        .order('priority', { ascending: false })
-        .order('due_date', { ascending: true })
+      console.log(`📋 Fetching tasks for employee ${employeeId} from PostgreSQL...`)
 
-      if (error) throw error
+      const result = await query(`
+        SELECT 
+          t.*,
+          t.task_title as title,
+          t.task_description as description
+        FROM ai_tasks t
+        WHERE t.assigned_to_employee_id = $1
+        ORDER BY 
+          CASE t.priority 
+            WHEN 'urgent' THEN 4
+            WHEN 'high' THEN 3
+            WHEN 'medium' THEN 2
+            WHEN 'low' THEN 1
+            ELSE 0
+          END DESC,
+          t.due_date ASC
+      `, [employeeId])
 
-      return data || []
+      console.log(`✅ Found ${result.rows.length} tasks for employee ${employeeId}`)
+      return result.rows || []
     } catch (error) {
-      console.error('Error fetching employee tasks:', error)
+      console.error('❌ Error fetching employee tasks from PostgreSQL:', error)
       return []
     }
   }
 
   /**
-   * Update task status
+   * Update task status in PostgreSQL
    */
   async updateTaskStatus(taskId: string, status: string, completionNotes?: string): Promise<boolean> {
     try {
+      console.log(`📝 Updating task ${taskId} status to ${status}`)
+
       const updateData: any = {
         status,
         updated_at: new Date().toISOString()
@@ -522,71 +657,68 @@ export class AITaskManagementService {
         updateData.completion_notes = completionNotes
       }
 
-      const { error } = await this.supabase
-        .from('ai_tasks')
-        .update(updateData)
-        .eq('id', taskId)
+      let updateQuery = `
+        UPDATE ai_tasks 
+        SET status = $1, updated_at = $2`
+      let queryParams = [status, updateData.updated_at]
 
-      return !error
+      if (status === 'completed') {
+        updateQuery += `, completed_at = $3, completion_notes = $4`
+        queryParams.push(updateData.completed_at, completionNotes || null)
+        updateQuery += ` WHERE id = $5`
+        queryParams.push(taskId)
+      } else {
+        updateQuery += ` WHERE id = $3`
+        queryParams.push(taskId)
+      }
+
+      const result = await query(updateQuery, queryParams)
+
+      console.log(`✅ Task ${taskId} status updated successfully`)
+      return (result.rowCount ?? 0) > 0
     } catch (error) {
-      console.error('Error updating task status:', error)
+      console.error('❌ Error updating task status in PostgreSQL:', error)
       return false
     }
   }
 
   /**
-   * Get task performance analytics
+   * Get task performance analytics from PostgreSQL
    */
   async getTaskPerformance(): Promise<TaskPerformance[]> {
     try {
-      const { data, error } = await this.supabase
-        .from('ai_tasks')
-        .select(`
-          assigned_to_employee_id,
-          status,
-          estimated_value,
-          employees:assigned_to_employee_id (first_name, last_name)
-        `)
+      console.log('📊 Fetching task performance analytics from PostgreSQL...')
 
-      if (error) throw error
+      const result = await query(`
+        SELECT 
+          t.assigned_to_employee_id as employee_id,
+          e.first_name || ' ' || e.last_name as employee_name,
+          COUNT(t.id) as total_tasks,
+          COUNT(CASE WHEN t.status = 'completed' THEN 1 END) as completed_tasks,
+          COUNT(CASE WHEN t.status = 'overdue' THEN 1 END) as overdue_tasks,
+          COALESCE(SUM(t.estimated_value), 0) as revenue_impact
+        FROM ai_tasks t
+        LEFT JOIN employees e ON t.assigned_to_employee_id = e.id
+        WHERE t.assigned_to_employee_id IS NOT NULL
+        GROUP BY t.assigned_to_employee_id, e.first_name, e.last_name
+        ORDER BY total_tasks DESC
+      `)
 
-      // Process and group by employee
-      const performanceMap = new Map<number, any>()
-
-      data?.forEach(task => {
-        const empId = task.assigned_to_employee_id
-        if (!empId) return
-
-        if (!performanceMap.has(empId)) {
-          const employeeData = task.employees as any
-          performanceMap.set(empId, {
-            employee_id: empId,
-            employee_name: employeeData ? `${employeeData.first_name} ${employeeData.last_name}` : 'Unknown',
-            total_tasks: 0,
-            completed_tasks: 0,
-            overdue_tasks: 0,
-            revenue_impact: 0
-          })
-        }
-
-        const perf = performanceMap.get(empId)
-        perf.total_tasks++
-        
-        if (task.status === 'completed') {
-          perf.completed_tasks++
-          perf.revenue_impact += task.estimated_value || 0
-        } else if (task.status === 'overdue') {
-          perf.overdue_tasks++
-        }
-      })
-
-      return Array.from(performanceMap.values()).map(perf => ({
-        ...perf,
-        completion_rate: perf.total_tasks > 0 ? perf.completed_tasks / perf.total_tasks : 0,
+      const performance = result.rows.map(row => ({
+        employee_id: row.employee_id,
+        employee_name: row.employee_name || 'Unknown',
+        total_tasks: parseInt(row.total_tasks || '0'),
+        completed_tasks: parseInt(row.completed_tasks || '0'),
+        completion_rate: row.total_tasks > 0 ? row.completed_tasks / row.total_tasks : 0,
+        overdue_tasks: parseInt(row.overdue_tasks || '0'),
+        revenue_impact: parseFloat(row.revenue_impact || '0'),
         avg_completion_time: 0 // Would need to calculate from actual data
       }))
+
+      console.log(`✅ Generated task performance for ${performance.length} employees`)
+      return performance
     } catch (error) {
-      console.error('Error fetching task performance:', error)
+      console.error('❌ Error fetching task performance from PostgreSQL:', error)
       return []
     }
   }

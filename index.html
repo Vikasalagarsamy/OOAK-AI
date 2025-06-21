@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OOAK Call Manager Pro</title>
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#2196F3">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="OOAK Calls">
+    <link rel="apple-touch-icon" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTkyIiBoZWlnaHQ9IjE5MiIgdmlld0JveD0iMCAwIDE5MiAxOTIiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxOTIiIGhlaWdodD0iMTkyIiByeD0iMjQiIGZpbGw9IiMyMTk2RjMiLz4KPHRleHQgeD0iOTYiIHk9IjEyMCIgZm9udC1mYW1pbHk9IkFwcGxlIENvbG9yIEVtb2ppLCBzZWdvZS11aS1lbW9qaSIgZm9udC1zaXplPSI4MCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+8J+TnjwvdGV4dD4KPC9zdmc+">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            max-width: 400px;
+            width: 90%;
+            text-align: center;
+        }
+        
+        .logo {
+            font-size: 60px;
+            margin-bottom: 20px;
+        }
+        
+        .title {
+            font-size: 28px;
+            font-weight: bold;
+            color: #2196F3;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            font-size: 16px;
+            color: #666;
+            margin-bottom: 40px;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2196F3;
+            margin-bottom: 5px;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        
+        .stat-trend {
+            font-size: 10px;
+            color: #4CAF50;
+            font-weight: 600;
+        }
+        
+        .stat-trend.down {
+            color: #FF4444;
+        }
+        
+        .recent-calls {
+            text-align: left;
+            margin-bottom: 30px;
+        }
+        
+        .section-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        
+        .call-item {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .call-name {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 3px;
+        }
+        
+        .call-company {
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .call-status {
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .call-time {
+            font-size: 10px;
+            color: #666;
+        }
+        
+        .success-message {
+            background: #e8f5e8;
+            border: 2px solid #4CAF50;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .success-text {
+            color: #2e7d32;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        .info-text {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .install-prompt {
+            background: #e3f2fd;
+            border: 2px solid #2196F3;
+            border-radius: 15px;
+            padding: 15px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        
+        .install-text {
+            color: #1976d2;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        .install-button {
+            background: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 10px 20px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        
+        .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            color: #666;
+            font-size: 12px;
+        }
+        
+        @media (max-width: 480px) {
+            .container {
+                padding: 30px 20px;
+            }
+            
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">📞</div>
+        <div class="title">OOAK Call Manager Pro</div>
+        <div class="subtitle">Professional Call Management System</div>
+        
+        <div class="install-prompt" id="installPrompt">
+            <div class="install-text">📱 Install as Mobile App</div>
+            <div class="info-text">Add to your home screen for easy access</div>
+            <button class="install-button" id="installButton">Install App</button>
+        </div>
+        
+        <div class="success-message">
+            <div class="success-text">🎉 App Running Successfully!</div>
+            <div class="info-text">Installable as native mobile app</div>
+        </div>
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-number">12</div>
+                <div class="stat-label">Today's Calls</div>
+                <div class="stat-trend">+12% ↗️</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">8</div>
+                <div class="stat-label">Completed</div>
+                <div class="stat-trend">+8% ↗️</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">3</div>
+                <div class="stat-label">Pending</div>
+                <div class="stat-trend down">-5% ↘️</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">85%</div>
+                <div class="stat-label">Success Rate</div>
+                <div class="stat-trend">+3% ↗️</div>
+            </div>
+        </div>
+        
+        <div class="recent-calls">
+            <div class="section-title">Recent Calls</div>
+            
+            <div class="call-item">
+                <div>
+                    <div class="call-name">Rajesh Kumar</div>
+                    <div class="call-company">Tech Solutions</div>
+                </div>
+                <div style="text-align: right;">
+                    <div class="call-status">✅ Completed</div>
+                    <div class="call-time">5:23 • 10:30 AM</div>
+                </div>
+            </div>
+            
+            <div class="call-item">
+                <div>
+                    <div class="call-name">Priya Sharma</div>
+                    <div class="call-company">Digital Marketing</div>
+                </div>
+                <div style="text-align: right;">
+                    <div class="call-status">✅ Completed</div>
+                    <div class="call-time">3:45 • 11:15 AM</div>
+                </div>
+            </div>
+            
+            <div class="call-item">
+                <div>
+                    <div class="call-name">Amit Patel</div>
+                    <div class="call-company">E-commerce Ltd</div>
+                </div>
+                <div style="text-align: right;">
+                    <div class="call-status">❌ Missed</div>
+                    <div class="call-time">12:00 PM</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <div>📱 PWA Version - Installable</div>
+            <div>© 2024 OOAK Technologies • Version 1.0.0</div>
+        </div>
+    </div>
+
+    <script>
+        // Register service worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then((registration) => {
+                        console.log('SW registered: ', registration);
+                    })
+                    .catch((registrationError) => {
+                        console.log('SW registration failed: ', registrationError);
+                    });
+            });
+        }
+
+        // PWA install prompt
+        let deferredPrompt;
+        const installPrompt = document.getElementById('installPrompt');
+        const installButton = document.getElementById('installButton');
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            installPrompt.style.display = 'block';
+        });
+
+        installButton.addEventListener('click', async () => {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                const { outcome } = await deferredPrompt.userChoice;
+                console.log(`User response to the install prompt: ${outcome}`);
+                deferredPrompt = null;
+                installPrompt.style.display = 'none';
+            }
+        });
+
+        window.addEventListener('appinstalled', () => {
+            installPrompt.style.display = 'none';
+            console.log('PWA was installed');
+        });
+    </script>
+</body>
+</html> 

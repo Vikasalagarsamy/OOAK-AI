@@ -1,0 +1,174 @@
+{
+  "testSuite": "Universal AI System Integration Testing",
+  "startTime": "2025-06-07T02:59:01.357Z",
+  "endTime": "2025-06-07T02:59:17.098Z",
+  "totalDuration": "16s",
+  "summary": {
+    "total": 17,
+    "passed": 16,
+    "failed": 1,
+    "successRate": "94%"
+  },
+  "results": [
+    {
+      "test": "Database Setup",
+      "endpoint": "/api/setup-universal-bi-tables",
+      "method": "GET",
+      "status": "PASS",
+      "statusCode": 200,
+      "duration": "608ms",
+      "timestamp": "2025-06-07T02:59:01.966Z"
+    },
+    {
+      "test": "Universal AI Health",
+      "endpoint": "/api/ai-universal-chat",
+      "method": "POST",
+      "status": "PASS",
+      "statusCode": 200,
+      "duration": "848ms",
+      "timestamp": "2025-06-07T02:59:02.814Z"
+    },
+    {
+      "test": "WhatsApp Verification",
+      "endpoint": "/api/webhooks/whatsapp",
+      "method": "GET",
+      "status": "FAIL",
+      "error": "Request failed with status code 403",
+      "statusCode": 403,
+      "duration": "595ms",
+      "timestamp": "2025-06-07T02:59:03.409Z"
+    },
+    {
+      "test": "WhatsApp Text Message",
+      "endpoint": "/api/webhooks/whatsapp",
+      "method": "POST",
+      "status": "PASS",
+      "statusCode": 200,
+      "duration": "546ms",
+      "timestamp": "2025-06-07T02:59:03.955Z"
+    },
+    {
+      "test": "WhatsApp Media Message",
+      "endpoint": "/api/webhooks/whatsapp",
+      "method": "POST",
+      "status": "PASS",
+      "statusCode": 200,
+      "duration": "493ms",
+      "timestamp": "2025-06-07T02:59:04.448Z"
+    },
+    {
+      "test": "Instagram DM",
+      "endpoint": "/api/webhooks/instagram",
+      "method": "POST",
+      "status": "PASS",
+      "statusCode": 200,
+      "duration": "736ms",
+      "timestamp": "2025-06-07T02:59:05.184Z"
+    },
+    {
+      "test": "Instagram Story Mention",
+      "endpoint": "/api/webhooks/instagram",
+      "method": "POST",
+      "status": "PASS",
+      "statusCode": 200,
+      "duration": "512ms",
+      "timestamp": "2025-06-07T02:59:05.696Z"
+    },
+    {
+      "test": "Gmail Webhook",
+      "endpoint": "/api/webhooks/email",
+      "method": "POST",
+      "status": "PASS",
+      "statusCode": 200,
+      "duration": "723ms",
+      "timestamp": "2025-06-07T02:59:06.419Z"
+    },
+    {
+      "test": "Direct Email Processing",
+      "endpoint": "/api/webhooks/email",
+      "method": "POST",
+      "status": "PASS",
+      "statusCode": 200,
+      "duration": "507ms",
+      "timestamp": "2025-06-07T02:59:06.926Z"
+    },
+    {
+      "test": "Call Recording Webhook",
+      "endpoint": "/api/webhooks/calls",
+      "method": "POST",
+      "status": "PASS",
+      "statusCode": 200,
+      "duration": "379ms",
+      "timestamp": "2025-06-07T02:59:07.305Z"
+    },
+    {
+      "test": "Call with Transcript",
+      "endpoint": "/api/webhooks/calls",
+      "method": "POST",
+      "status": "PASS",
+      "statusCode": 200,
+      "duration": "542ms",
+      "timestamp": "2025-06-07T02:59:07.847Z"
+    },
+    {
+      "test": "Universal AI: \"Show me all recent customer co...\"",
+      "endpoint": "/api/ai-universal-chat",
+      "method": "POST",
+      "status": "PASS",
+      "statusCode": 200,
+      "duration": "583ms",
+      "timestamp": "2025-06-07T02:59:08.430Z"
+    },
+    {
+      "test": "Universal AI: \"What are our top leads this mo...\"",
+      "endpoint": "/api/ai-universal-chat",
+      "method": "POST",
+      "status": "PASS",
+      "statusCode": 200,
+      "duration": "569ms",
+      "timestamp": "2025-06-07T02:59:10.000Z"
+    },
+    {
+      "test": "Universal AI: \"How many WhatsApp messages did...\"",
+      "endpoint": "/api/ai-universal-chat",
+      "method": "POST",
+      "status": "PASS",
+      "statusCode": 200,
+      "duration": "536ms",
+      "timestamp": "2025-06-07T02:59:11.538Z"
+    },
+    {
+      "test": "Universal AI: \"Who are our most active custom...\"",
+      "endpoint": "/api/ai-universal-chat",
+      "method": "POST",
+      "status": "PASS",
+      "statusCode": 200,
+      "duration": "535ms",
+      "timestamp": "2025-06-07T02:59:13.074Z"
+    },
+    {
+      "test": "Universal AI: \"Generate a summary of today's ...\"",
+      "endpoint": "/api/ai-universal-chat",
+      "method": "POST",
+      "status": "PASS",
+      "statusCode": 200,
+      "duration": "535ms",
+      "timestamp": "2025-06-07T02:59:14.611Z"
+    },
+    {
+      "test": "Universal AI: \"What follow-ups are needed for...\"",
+      "endpoint": "/api/ai-universal-chat",
+      "method": "POST",
+      "status": "PASS",
+      "statusCode": 200,
+      "duration": "483ms",
+      "timestamp": "2025-06-07T02:59:16.096Z"
+    }
+  ],
+  "recommendations": [
+    "🔧 Fix 1 failed test(s) before production deployment.",
+    "❌ WhatsApp Verification: Request failed with status code 403",
+    "🔍 Review error logs and fix underlying issues.",
+    "🧪 Re-run tests after fixes are implemented."
+  ]
+}

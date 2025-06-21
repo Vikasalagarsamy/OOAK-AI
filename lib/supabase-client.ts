@@ -1,12 +1,8 @@
-import { createClient as createSupabaseClient } from "@supabase/supabase-js"
-import type { Database } from "@/types/supabase"
-
-// Define types for better type safety
-type SupabaseClient = ReturnType<typeof createSupabaseClient>
+import { createClient as createSupabaseClient } from "@/lib/postgresql-client-unified"
+import type { Database } from "@/types/database"
 
 // Global variables to store client instances
-let browserClient: SupabaseClient | null = null
-const serverClient: SupabaseClient | null = null
+let browserClient: ReturnType<typeof createSupabaseClient<Database>> | null = null
 
 // Function to get and validate Supabase credentials
 function getSupabaseCredentials() {
@@ -21,34 +17,34 @@ function getSupabaseCredentials() {
   return { supabaseUrl, supabaseAnonKey }
 }
 
-// Get server-side credentials
+// Function to get server credentials
 function getServerCredentials() {
-  // For server-side, prefer service role key but fall back to anon key if not available
-  const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseServiceKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
   if (!supabaseUrl || !supabaseServiceKey) {
-    console.error("Missing server Supabase credentials:", { supabaseUrl, hasServiceKey: !!supabaseServiceKey })
-    throw new Error("Supabase URL or key is missing from environment variables")
+    throw new Error("Supabase URL or service role key is missing from environment variables")
   }
 
   return { supabaseUrl, supabaseServiceKey }
 }
 
 // Create browser client (for client-side use)
-export function getSupabaseBrowser(): SupabaseClient {
+export function getSupabaseBrowser(): ReturnType<typeof createSupabaseClient<Database>> {
   if (browserClient) return browserClient
 
   try {
     const { supabaseUrl, supabaseAnonKey } = getSupabaseCredentials()
     console.log("Creating browser Supabase client with URL:", supabaseUrl)
 
-    // Use the imported supabaseCreateClient directly
-    browserClient = createSupabaseClient(supabaseUrl, supabaseAnonKey, {
+    browserClient = createSupabaseClient<Database>(supabaseUrl, supabaseAnonKey, {
       auth: {
         persistSession: true,
+        storageKey: 'app-supabase-auth',
+        storage: typeof window !== "undefined" ? window.localStorage : undefined,
         autoRefreshToken: true,
+        detectSessionInUrl: true,
+        flowType: "pkce",
       },
     })
 
@@ -60,15 +56,14 @@ export function getSupabaseBrowser(): SupabaseClient {
 }
 
 // Create server client (for server-side use with service role)
-export function getSupabaseServer(): SupabaseClient {
+export function getSupabaseServer(): ReturnType<typeof createSupabaseClient<Database>> {
   try {
     // Always create a new instance on the server to avoid sharing state between requests
     if (typeof window === "undefined") {
       const { supabaseUrl, supabaseServiceKey } = getServerCredentials()
       console.log("Creating server Supabase client with URL:", supabaseUrl)
 
-      // Use the imported supabaseCreateClient directly
-      return createSupabaseClient(supabaseUrl, supabaseServiceKey, {
+      return createSupabaseClient<Database>(supabaseUrl, supabaseServiceKey, {
         auth: {
           persistSession: false,
           autoRefreshToken: false,
@@ -85,13 +80,13 @@ export function getSupabaseServer(): SupabaseClient {
 }
 
 // Create a basic client without authentication overrides
-export function createBasicClient(): SupabaseClient {
+export function createBasicClient(): ReturnType<typeof createSupabaseClient<Database>> {
   try {
     const { supabaseUrl, supabaseAnonKey } = getSupabaseCredentials()
     console.log("Creating basic Supabase client with URL:", supabaseUrl)
 
     // Create a simple client without auth overrides
-    return createSupabaseClient(supabaseUrl, supabaseAnonKey, {
+    return createSupabaseClient<Database>(supabaseUrl, supabaseAnonKey, {
       auth: {
         persistSession: false,
         autoRefreshToken: false,
@@ -114,26 +109,15 @@ function createMockClient() {
           }),
         }),
       }),
-      insert: () => Promise.resolve({ data: null, error: new Error("Mock client - no connection") }),
-      update: () => Promise.resolve({ data: null, error: new Error("Mock client - no connection") }),
-      delete: () => Promise.resolve({ data: null, error: new Error("Mock client - no connection") }),
     }),
-    channel: () => ({
-      on: () => ({
-        subscribe: (callback: () => void) => {
-          if (callback) callback()
-          return {
-            unsubscribe: () => {},
-          }
-        },
-      }),
-    }),
-    // Add other methods as needed
-  } as unknown as SupabaseClient
+    insert: () => Promise.resolve({ data: null, error: new Error("Mock client - no connection") }),
+    update: () => Promise.resolve({ data: null, error: new Error("Mock client - no connection") }),
+    delete: () => Promise.resolve({ data: null, error: new Error("Mock client - no connection") }),
+  } as unknown as ReturnType<typeof createSupabaseClient<Database>>
 }
 
-// Export a singleton instance
-export const supabase = typeof window === "undefined" ? getSupabaseServer() : getSupabaseBrowser()
+// Export a default client instance
+export const supabase = getSupabaseBrowser()
 
 // IMPORTANT: Export createClient for backward compatibility
 // This is the function used by dashboard-service.ts and other services
@@ -147,7 +131,7 @@ export function createClient() {
   return getSupabaseBrowser()
 }
 
-// Also export the original createClient from supabase for maximum compatibility
+// Also export the original createClient from database client for maximum compatibility
 export const originalCreateClient = createSupabaseClient
 
 // Create a singleton Supabase client for client-side usage

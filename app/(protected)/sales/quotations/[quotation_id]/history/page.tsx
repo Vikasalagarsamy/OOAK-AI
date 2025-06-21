@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { createClient } from "@/lib/supabase-client"
+import { createClient } from "@/lib/postgresql-client-unified"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -42,7 +42,7 @@ export default function QuotationHistoryPage() {
 
   const fetchQuotationAndHistory = async () => {
     try {
-      const supabase = createClient()
+      const { query, transaction } = createClient()
       
       // Fetch quotation details
       const { data: quotationData, error: quotationError } = await supabase

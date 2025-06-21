@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { RealtimeSyncService } from '@/lib/realtime-sync-service'
 import { ActivityTrackingService } from '@/lib/activity-tracking-service'
 import { BusinessNotificationService } from '@/lib/business-notification-service'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/postgresql-client'
 
 // 🔗 Webhook for Quotation Updates
 // This endpoint gets triggered when quotations are created/updated

@@ -1,3 +1,4 @@
+import { createClient } from '@/lib/postgresql-client'
 import { NextRequest, NextResponse } from 'next/server'
 import { triggerLeadAssignmentTasks } from '@/actions/lead-task-integration-hooks'
 

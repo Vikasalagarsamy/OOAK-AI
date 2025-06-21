@@ -2,10 +2,9 @@ import { DollarSign } from "lucide-react"
 
 interface SalesHeaderProps {
   title: string
-  description?: string
 }
 
-export function SalesHeader({ title, description }: SalesHeaderProps) {
+export function SalesHeader({ title }: SalesHeaderProps) {
   return (
     <div className="flex items-center space-x-4 mb-6">
       <div className="p-2 bg-primary/10 rounded-full">
@@ -13,7 +12,6 @@ export function SalesHeader({ title, description }: SalesHeaderProps) {
       </div>
       <div>
         <h1 className="text-2xl font-bold">{title}</h1>
-        {description && <p className="text-muted-foreground">{description}</p>}
       </div>
     </div>
   )

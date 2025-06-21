@@ -21,7 +21,41 @@ import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useToast } from "@/components/ui/use-toast"
 import { Loader2 } from "lucide-react"
-import { generateBranchCode } from "@/utils/code-generator"
+// Removed direct import - using API endpoint instead
+
+// Helper function to generate branch code via API
+async function generateBranchCodeViaAPI(companyCode: string, branchName: string, currentBranchCode?: string): Promise<string> {
+  try {
+    const response = await fetch("/api/generate-codes/branch", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        companyCode,
+        branchName,
+        currentBranchCode
+      })
+    })
+
+    if (!response.ok) {
+      throw new Error(`API returned ${response.status}`)
+    }
+
+    const data = await response.json()
+    
+    if (!data.success) {
+      throw new Error(data.error || "Failed to generate branch code")
+    }
+
+    return data.branchCode
+  } catch (error) {
+    console.error("Error calling branch code generation API:", error)
+    // Fallback to simple generation
+    const branchPrefix = branchName.replace(/[^a-zA-Z0-9]/g, "").substring(0, 3).toUpperCase()
+    return `${companyCode}${branchPrefix}`
+  }
+}
 
 const formSchema = z.object({
   company_id: z.string({
@@ -104,7 +138,7 @@ export default function EditBranchModal({
       ) {
         setIsGeneratingCode(true)
         try {
-          const code = await generateBranchCode(
+          const code = await generateBranchCodeViaAPI(
             selectedCompany.company_code,
             watchBranchName,
             companyChanged ? undefined : branch.branch_code,

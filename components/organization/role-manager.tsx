@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { createClient } from "@/lib/supabase-browser"
+import { createClient } from "@/lib/postgresql-client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,7 +14,10 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { extractMenuStructure, type PermissionMenuItem } from "@/lib/menu-extractor"
+import { ENTERPRISE_MENU_CONFIG, type MenuItemConfig } from "@/lib/menu-system"
+
+// Legacy type alias for backwards compatibility  
+type PermissionMenuItem = MenuItemConfig
 
 interface Role {
   id: number
@@ -27,8 +30,18 @@ interface Role {
   }>
 }
 
-// Get the comprehensive menu structure from our current navigation
-const comprehensiveMenuStructure = extractMenuStructure()
+// Convert enterprise config sections to flat structure for compatibility
+const comprehensiveMenuStructure: MenuItemConfig[] = ENTERPRISE_MENU_CONFIG.flatMap(section => {
+  const sectionItem: MenuItemConfig = {
+    id: section.id,
+    name: section.name,
+    path: section.items[0]?.path || `/${section.id}`,
+    icon: section.icon,
+    description: section.description,
+    children: section.items
+  }
+  return [sectionItem]
+})
 
 export function RoleManager() {
   const [roles, setRoles] = useState<Role[]>([])
@@ -39,29 +52,35 @@ export function RoleManager() {
   const [isAddingRole, setIsAddingRole] = useState(false)
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['dashboard', 'organization', 'sales']))
 
-  const supabase = createClient()
+  const { query, transaction } = createClient()
 
   // Load roles
   const loadRoles = async () => {
     setLoading(true)
     setError(null)
     try {
-      const { data, error } = await supabase
-        .from("roles")
-        .select("*")
-        .order("name")
+      console.log('🔍 Loading roles...')
+      
+      const result = await query(`
+        SELECT id, name, description, permissions 
+        FROM roles 
+        ORDER BY name
+      `)
 
-      if (error) throw error
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to load roles')
+      }
 
       // Initialize permissions if they don't exist
-      const rolesWithPermissions = (data || []).map((role: any) => ({
+      const rolesWithPermissions = (result.data || []).map((role: any) => ({
         ...role,
         permissions: role.permissions || initializePermissions(),
       }))
 
+      console.log(`✅ Loaded ${rolesWithPermissions.length} roles`)
       setRoles(rolesWithPermissions)
     } catch (error: any) {
-      console.error("Error loading roles:", error)
+      console.error("❌ Error loading roles:", error)
       setError(`Failed to load roles: ${error.message || "Unknown error"}`)
       toast({
         title: "Error",
@@ -77,7 +96,7 @@ export function RoleManager() {
   const initializePermissions = () => {
     const permissions: Record<string, { view: boolean; edit: boolean; delete: boolean }> = {}
     
-    const addPermissions = (items: PermissionMenuItem[]) => {
+    const addPermissions = (items: readonly MenuItemConfig[]) => {
       items.forEach(item => {
         permissions[item.id] = { view: false, edit: false, delete: false }
         if (item.children) {
@@ -116,26 +135,29 @@ export function RoleManager() {
     }
 
     try {
-      const { data, error } = await supabase
-        .from("roles")
-        .insert({
-          name: newRole.name,
-          description: newRole.description,
-          permissions: initializePermissions(),
-        })
-        .select()
+      console.log(`🔄 Creating new role: ${newRole.name}`)
+      
+      const result = await query(`
+        INSERT INTO roles (name, description, permissions) 
+        VALUES ($1, $2, $3) 
+        RETURNING *
+      `, [newRole.name, newRole.description, JSON.stringify(initializePermissions())])
 
-      if (error) throw error
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to create role')
+      }
 
-      setRoles([...roles, ...(data || [])])
+      setRoles([...roles, ...(result.data || [])])
       setNewRole({ name: "", description: "" })
       setIsAddingRole(false)
+      
+      console.log(`✅ Role created: ${newRole.name}`)
       toast({
         title: "Success",
         description: "Role added successfully",
       })
     } catch (error: any) {
-      console.error("Error adding role:", error)
+      console.error("❌ Error adding role:", error)
       toast({
         title: "Error",
         description: `Failed to add role: ${error.message || "Unknown error"}`,
@@ -149,6 +171,8 @@ export function RoleManager() {
     try {
       const section = comprehensiveMenuStructure.find(s => s.id === sectionId)
       if (!section) return
+
+      console.log(`🔄 ${hasAccess ? 'Granting' : 'Revoking'} access to ${section.name} for role ${roleId}`)
 
       const updatedRoles = roles.map(role => {
         if (role.id === roleId) {
@@ -177,20 +201,27 @@ export function RoleManager() {
         return role
       })
 
-      const { error } = await supabase
-        .from("roles")
-        .update({ permissions: updatedRoles.find(r => r.id === roleId)?.permissions })
-        .eq("id", roleId)
+      const roleToUpdate = updatedRoles.find(r => r.id === roleId)
+      if (!roleToUpdate) throw new Error('Role not found')
 
-      if (error) throw error
+      const result = await query(`
+        UPDATE roles 
+        SET permissions = $1 
+        WHERE id = $2
+      `, [JSON.stringify(roleToUpdate.permissions), roleId])
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to update permissions')
+      }
 
       setRoles(updatedRoles)
+      console.log(`✅ ${hasAccess ? 'Granted' : 'Revoked'} access to ${section.name}`)
       toast({
         title: "Success",
         description: `${hasAccess ? 'Granted' : 'Revoked'} access to ${section.name}`,
       })
     } catch (error: any) {
-      console.error("Error updating permissions:", error)
+      console.error("❌ Error updating permissions:", error)
       toast({
         title: "Error",
         description: `Failed to update permissions: ${error.message || "Unknown error"}`,
@@ -217,16 +248,22 @@ export function RoleManager() {
         return role
       })
 
-      const { error } = await supabase
-        .from("roles")
-        .update({ permissions: updatedRoles.find(r => r.id === roleId)?.permissions })
-        .eq("id", roleId)
+      const roleToUpdate = updatedRoles.find(r => r.id === roleId)
+      if (!roleToUpdate) throw new Error('Role not found')
 
-      if (error) throw error
+      const result = await query(`
+        UPDATE roles 
+        SET permissions = $1 
+        WHERE id = $2
+      `, [JSON.stringify(roleToUpdate.permissions), roleId])
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to update permissions')
+      }
 
       setRoles(updatedRoles)
     } catch (error: any) {
-      console.error("Error updating permissions:", error)
+      console.error("❌ Error updating permissions:", error)
       toast({
         title: "Error",
         description: `Failed to update permissions: ${error.message || "Unknown error"}`,
@@ -238,23 +275,30 @@ export function RoleManager() {
   // Handle delete role
   const handleDeleteRole = async (roleId: number) => {
     try {
-      const { error } = await supabase
-        .from("roles")
-        .delete()
-        .eq("id", roleId)
+      const roleToDelete = roles.find(r => r.id === roleId)
+      console.log(`🗑️ Deleting role: ${roleToDelete?.name}`)
+      
+      const result = await query(`
+        DELETE FROM roles 
+        WHERE id = $1
+      `, [roleId])
 
-      if (error) throw error
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to delete role')
+      }
 
       setRoles(roles.filter(role => role.id !== roleId))
       if (selectedRoleId === roleId) {
         setSelectedRoleId(roles.length > 1 ? roles.find(r => r.id !== roleId)?.id || null : null)
       }
+      
+      console.log(`✅ Role deleted: ${roleToDelete?.name}`)
       toast({
         title: "Success",
         description: "Role deleted successfully",
       })
     } catch (error: any) {
-      console.error("Error deleting role:", error)
+      console.error("❌ Error deleting role:", error)
       toast({
         title: "Error",
         description: `Failed to delete role: ${error.message || "Unknown error"}`,
@@ -264,7 +308,7 @@ export function RoleManager() {
   }
 
   // Check if section has any access
-  const sectionHasAccess = (role: Role, section: PermissionMenuItem) => {
+  const sectionHasAccess = (role: Role, section: MenuItemConfig) => {
     const sectionAccess = role.permissions[section.id]
     const childrenAccess = section.children?.some(child => 
       role.permissions[child.id]?.view || role.permissions[child.id]?.edit || role.permissions[child.id]?.delete
@@ -273,7 +317,7 @@ export function RoleManager() {
   }
 
   // Check if section has full access
-  const sectionHasFullAccess = (role: Role, section: PermissionMenuItem) => {
+  const sectionHasFullAccess = (role: Role, section: MenuItemConfig) => {
     const sectionAccess = role.permissions[section.id]
     const allChildrenHaveAccess = section.children?.every(child => 
       role.permissions[child.id]?.view && role.permissions[child.id]?.edit && role.permissions[child.id]?.delete

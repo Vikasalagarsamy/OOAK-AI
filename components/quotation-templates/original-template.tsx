@@ -5,6 +5,14 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Heart, Calendar, MapPin, Clock, Users, Camera, Video, Package, Phone, Mail, Globe } from "lucide-react"
 import { QuotationTemplateProps } from "./index"
+import { 
+  getQuotationServices, 
+  getQuotationDeliverables, 
+  formatCurrency,
+  getPackageDisplayName,
+  calculateServicesTotal,
+  calculateDeliverablesTotal
+} from "@/lib/quotation-utils"
 
 interface ServiceItem {
   id: number
@@ -34,9 +42,9 @@ export default function OriginalTemplate({
 }: QuotationTemplateProps) {
   const quotationData = quotation.quotation_data
 
-  const formatCurrency = (amount: number) => {
-    return `₹${amount.toLocaleString('en-IN')}`
-  }
+  // Get normalized data using utility functions
+  const services = getQuotationServices(quotation)
+  const deliverables = getQuotationDeliverables(quotation)
 
   const companyName = companySettings?.companyName || "Your Photography Studio"
   const brandColor = companySettings?.brandColor || "blue"
@@ -111,7 +119,7 @@ export default function OriginalTemplate({
               <div>
                 <h4 className="font-semibold text-slate-800 mb-3">Package Selection</h4>
                 <Badge variant="secondary" className="text-lg px-4 py-2 bg-blue-100 text-blue-800">
-                  {quotationData.default_package.charAt(0).toUpperCase() + quotationData.default_package.slice(1)} Package
+                  {getPackageDisplayName(quotationData.default_package)}
                 </Badge>
               </div>
             </div>
@@ -187,19 +195,28 @@ export default function OriginalTemplate({
             </div>
 
             <div className="grid gap-4">
-              {quotationData.selected_services.map((serviceItem) => (
-                <div key={serviceItem.id} className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h5 className="font-semibold text-blue-900">Service #{serviceItem.id}</h5>
-                      <p className="text-sm text-blue-700">Quantity: {serviceItem.quantity}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-bold text-blue-900">{formatCurrency(serviceItem.quantity * 5000)}</p>
+              {services.length > 0 ? (
+                services.map((serviceItem) => (
+                  <div key={serviceItem.id} className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h5 className="font-semibold text-blue-900">{serviceItem.servicename}</h5>
+                        <p className="text-sm text-blue-700">Quantity: {serviceItem.quantity}</p>
+                        <p className="text-sm text-blue-600">Package: {serviceItem.package_type}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-blue-900">{formatCurrency(serviceItem.total_price)}</p>
+                        <p className="text-sm text-blue-600">{formatCurrency(serviceItem.unit_price)} × {serviceItem.quantity}</p>
+                      </div>
                     </div>
                   </div>
+                ))
+              ) : (
+                <div className="text-center py-8 text-slate-500">
+                  <Video className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No services selected</p>
                 </div>
-              ))}
+              )}
             </div>
           </CardContent>
         </Card>
@@ -213,28 +230,37 @@ export default function OriginalTemplate({
             </div>
 
             <div className="grid gap-4">
-              {quotationData.selected_deliverables.map((deliverableItem) => (
-                <div key={deliverableItem.id} className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h5 className="font-semibold text-green-900">Deliverable #{deliverableItem.id}</h5>
-                      <p className="text-sm text-green-700">Quantity: {deliverableItem.quantity}</p>
-                      
-                      {/* Deliverable Tracking Status - Future Feature */}
-                      {showDeliverableTracking && (
-                        <div className="mt-2">
-                          <Badge variant="outline" className="bg-gray-50 text-gray-700 text-xs">
-                            Not Started
+              {deliverables.length > 0 ? (
+                deliverables.map((deliverableItem) => (
+                  <div key={deliverableItem.id} className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h5 className="font-semibold text-green-900">{deliverableItem.deliverable_name}</h5>
+                        <p className="text-sm text-green-700">Quantity: {deliverableItem.quantity}</p>
+                        <p className="text-sm text-green-600">Package: {deliverableItem.package_type}</p>
+                        {deliverableItem.service_name && (
+                          <p className="text-sm text-green-600">Service: {deliverableItem.service_name}</p>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-green-900">{formatCurrency(deliverableItem.total_price)}</p>
+                        <p className="text-sm text-green-600">{formatCurrency(deliverableItem.unit_price)} × {deliverableItem.quantity}</p>
+                        {/* Workflow status for future use */}
+                        {showDeliverableTracking && (
+                          <Badge variant="outline" className="mt-2 bg-yellow-50 text-yellow-700">
+                            {deliverableItem.status}
                           </Badge>
-                        </div>
-                      )}
-                    </div>
-                    <div className="text-right">
-                      <p className="font-bold text-green-900">{formatCurrency(deliverableItem.quantity * 8000)}</p>
+                        )}
+                      </div>
                     </div>
                   </div>
+                ))
+              ) : (
+                <div className="text-center py-8 text-slate-500">
+                  <Package className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No deliverables selected</p>
                 </div>
-              ))}
+              )}
             </div>
           </CardContent>
         </Card>

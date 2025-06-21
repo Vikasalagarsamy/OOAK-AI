@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label"
 import { Loader2, AlertCircle, Info, Building, Briefcase, Star } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
-import { getEmployeesForLeadAssignment, assignLeadToEmployee } from "@/actions/employee-selection-actions"
+import { getEmployeesForLeadAssignment, assignLeadToEmployee } from "@/actions/simple-employee-selection"
 import type { Lead } from "@/types/lead"
 import type { Employee } from "@/types/employee"
 
@@ -104,7 +104,9 @@ export function AssignLeadDialog({ lead, open, onOpenChange, onAssignComplete, o
           title: "Success",
           description: result.message,
         })
+        // Close dialog first
         onOpenChange(false)
+        // Then trigger refresh callbacks
         if (onAssignComplete) {
           onAssignComplete()
         }

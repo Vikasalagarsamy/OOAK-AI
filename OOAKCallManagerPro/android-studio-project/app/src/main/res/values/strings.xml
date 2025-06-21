@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">OOAK Call Manager Pro</string>
+    
+    <!-- Main Activity -->
+    <string name="employee_id_hint">Employee ID (e.g., EMP001)</string>
+    <string name="employee_name_hint">Employee Name</string>
+    <string name="authenticate_button">🔑 Authenticate Employee</string>
+    <string name="start_services_button">🚀 Start Background Services</string>
+    <string name="stop_services_button">⏹️ Stop Services</string>
+    <string name="status_text">🔄 Waiting for employee authentication...</string>
+    
+    <!-- Notifications -->
+    <string name="call_monitoring_channel">Call Monitoring</string>
+    <string name="call_monitoring_channel_desc">Monitors phone calls for recording detection</string>
+    <string name="recording_monitor_channel">Recording Monitor</string>
+    <string name="recording_monitor_channel_desc">Monitors file system for new call recordings</string>
+    
+    <string name="call_monitoring_notification_title">📞 Call Monitoring Active</string>
+    <string name="call_monitoring_notification_text">Monitoring calls for automatic recording upload</string>
+    
+    <string name="recording_monitor_notification_title">🎙️ Recording Monitor Active</string>
+    <string name="recording_monitor_notification_text">Scanning for new call recordings</string>
+    
+    <!-- Status Messages -->
+    <string name="status_authenticated">✅ Employee authenticated successfully!</string>
+    <string name="status_services_started">🚀 Background services started successfully!</string>
+    <string name="status_services_stopped">⏹️ Background services stopped</string>
+    <string name="status_call_detected">📞 Call detected: %1$s</string>
+    <string name="status_recording_found">🎙️ Recording found: %1$s</string>
+    <string name="status_uploading">⬆️ Uploading: %1$s</string>
+    <string name="status_upload_success">✅ Upload successful: %1$s</string>
+    <string name="status_upload_failed">❌ Upload failed: %1$s</string>
+    <string name="status_processing">🔄 Processing recording...</string>
+    
+    <!-- Error Messages -->
+    <string name="error_authentication_failed">❌ Authentication failed. Please check credentials.</string>
+    <string name="error_permissions_required">⚠️ Permissions required. Please grant all permissions.</string>
+    <string name="error_services_failed">❌ Failed to start services. Check permissions.</string>
+    <string name="error_network_failed">🌐 Network error. Check internet connection.</string>
+    <string name="error_file_not_found">📁 Recording file not found.</string>
+    
+    <!-- Permissions -->
+    <string name="permission_phone_rationale">Phone permission is required to monitor calls</string>
+    <string name="permission_storage_rationale">Storage permission is required to access call recordings</string>
+    <string name="permission_microphone_rationale">Microphone permission is required for call recording detection</string>
+    
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_server_url">Server URL</string>
+    <string name="settings_upload_wifi_only">Upload on WiFi only</string>
+    <string name="settings_auto_delete">Auto-delete uploaded recordings</string>
+</resources> 

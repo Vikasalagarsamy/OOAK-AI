@@ -1,67 +1,28 @@
 "use server"
 
-import { createClient } from "@/lib/supabase/server"
+import { query, transaction } from "@/lib/postgresql-client"
 import { revalidatePath } from "next/cache"
 
 export async function ensureUserAccountsTable() {
-  const supabase = createClient()
-
   try {
-    console.log("Ensuring user_accounts table exists...")
+    console.log("🔧 [USER ACCOUNTS] Ensuring user_accounts table exists via PostgreSQL...")
 
-    // Check if the table_exists function exists
-    const { data: functionExists, error: functionError } = await supabase
-      .from("pg_proc")
-      .select("proname")
-      .eq("proname", "table_exists")
-      .limit(1)
+    // Check if the user_accounts table exists using PostgreSQL
+    const tableExistsResult = await query(`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_name = 'user_accounts' AND table_schema = 'public'
+    `)
 
-    if (functionError) {
-      console.error("Error checking if table_exists function exists:", functionError)
-
-      // Create the table_exists function
-      const { error: createFunctionError } = await supabase.rpc("execute_sql", {
-        sql_statement: `
-          CREATE OR REPLACE FUNCTION table_exists(table_name TEXT) RETURNS BOOLEAN AS $$
-          BEGIN
-              RETURN EXISTS (
-                  SELECT FROM information_schema.tables 
-                  WHERE table_schema = 'public'
-                  AND table_name = $1
-              );
-          END;
-          $$ LANGUAGE plpgsql;
-        `,
-      })
-
-      if (createFunctionError) {
-        console.error("Error creating table_exists function:", createFunctionError)
-        return {
-          success: false,
-          error: `Failed to create table_exists function: ${createFunctionError.message}`,
-        }
-      }
+    if (tableExistsResult.rows.length > 0) {
+      console.log("✅ [USER ACCOUNTS] user_accounts table already exists")
+      return { success: true, message: "User accounts table already exists" }
     }
 
-    // Check if the user_accounts table exists
-    const { data: tableExists, error: tableError } = await supabase.rpc("table_exists", {
-      table_name: "user_accounts",
-    })
+    console.log("📝 [USER ACCOUNTS] Creating user_accounts table...")
 
-    if (tableError) {
-      console.error("Error checking if user_accounts table exists:", tableError)
-      return {
-        success: false,
-        error: `Failed to check if user_accounts table exists: ${tableError.message}`,
-      }
-    }
-
-    if (!tableExists) {
-      console.log("Creating user_accounts table...")
-
-      // Create the user_accounts table
-      const { error: createTableError } = await supabase.rpc("execute_sql", {
-        sql_statement: `
+    // Create the user_accounts table using PostgreSQL
+    const createTableSQL = `
           CREATE TABLE user_accounts (
             id SERIAL PRIMARY KEY,
             employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
@@ -75,31 +36,20 @@ export async function ensureUserAccountsTable() {
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
           );
           
-          -- Add an index on employee_id for faster lookups
+      -- Add indexes for faster lookups
           CREATE INDEX idx_user_accounts_employee_id ON user_accounts(employee_id);
-          
-          -- Add an index on role_id for faster lookups
           CREATE INDEX idx_user_accounts_role_id ON user_accounts(role_id);
-        `,
-      })
+      CREATE INDEX idx_user_accounts_username ON user_accounts(username);
+      CREATE INDEX idx_user_accounts_email ON user_accounts(email);
+    `
 
-      if (createTableError) {
-        console.error("Error creating user_accounts table:", createTableError)
-        return {
-          success: false,
-          error: `Failed to create user_accounts table: ${createTableError.message}`,
-        }
-      }
+    await query(createTableSQL)
 
-      console.log("user_accounts table created successfully")
-    } else {
-      console.log("user_accounts table already exists")
-    }
-
+    console.log("✅ [USER ACCOUNTS] user_accounts table created successfully")
     revalidatePath("/organization/account-creation")
-    return { success: true, message: "User accounts table checked and created if needed" }
+    return { success: true, message: "User accounts table created successfully" }
   } catch (error: any) {
-    console.error("Error in ensureUserAccountsTable:", error)
+    console.error("❌ [USER ACCOUNTS] Error in ensureUserAccountsTable:", error)
     return {
       success: false,
       error: `An unexpected error occurred: ${error.message}`,

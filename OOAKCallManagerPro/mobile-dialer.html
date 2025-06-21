@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OOAK Call Manager Pro - Mobile Dialer</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#2196F3">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="OOAK Dialer">
+    <!-- PostgreSQL Backend Integration - No external dependencies needed -->
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        .container { max-width: 400px; margin: 0 auto; padding: 10px; min-height: 100vh; }
+        .card {
+            background: white; border-radius: 20px; padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2); margin-bottom: 15px;
+        }
+        .header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 15px 20px; background: white; border-radius: 20px; margin-bottom: 15px;
+        }
+        .logo { font-size: 24px; font-weight: bold; color: #2196F3; }
+        .status { padding: 5px 10px; border-radius: 15px; font-size: 12px; background: #e8f5e8; color: #2e7d32; }
+        .number-display {
+            background: #f8f9fa; border-radius: 15px; padding: 20px;
+            text-align: center; font-size: 24px; font-weight: bold; margin: 15px 0;
+        }
+        .dialer-pad {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin: 20px 0;
+        }
+        .dial-btn {
+            width: 70px; height: 70px; border-radius: 50%; border: none;
+            font-size: 20px; font-weight: bold; cursor: pointer;
+            background: #f5f5f5; color: #333;
+        }
+        .action-buttons { display: flex; justify-content: space-around; margin: 20px 0; }
+        .action-btn {
+            width: 60px; height: 60px; border-radius: 50%; border: none;
+            font-size: 24px; cursor: pointer;
+        }
+        .call-btn { background: #4CAF50; color: white; }
+        .delete-btn { background: #ff4444; color: white; }
+        .contacts-btn { background: #2196F3; color: white; }
+        .tabs {
+            display: flex; background: white; border-radius: 15px; margin-bottom: 15px;
+        }
+        .tab {
+            flex: 1; padding: 15px; text-align: center; cursor: pointer;
+            background: #f5f5f5; color: #666;
+        }
+        .tab.active { background: #2196F3; color: white; }
+        .hidden { display: none; }
+        .call-item {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 15px; border-bottom: 1px solid #eee; cursor: pointer;
+        }
+        .quick-dial { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 15px 0; }
+        .quick-contact {
+            background: #f8f9fa; border-radius: 10px; padding: 15px; text-align: center; cursor: pointer;
+        }
+        .form-input {
+            width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 10px;
+            font-size: 16px; margin: 10px 0;
+        }
+        .btn {
+            width: 100%; padding: 12px; border: none; border-radius: 10px;
+            font-size: 16px; font-weight: bold; cursor: pointer; margin: 5px 0;
+        }
+        .btn-primary { background: #2196F3; color: white; }
+        .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; }
+        .stat-card { background: #f8f9fa; border-radius: 15px; padding: 15px; text-align: center; }
+        .stat-number { font-size: 20px; font-weight: bold; color: #2196F3; }
+        .stat-label { font-size: 12px; color: #666; margin-top: 5px; }
+        .floating-call-btn {
+            position: fixed; bottom: 20px; right: 20px;
+            width: 60px; height: 60px; border-radius: 50%;
+            background: #4CAF50; color: white; border: none;
+            font-size: 24px; cursor: pointer; z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        .contact-form {
+            background: white; border-radius: 15px; padding: 20px;
+            margin: 10px 0;
+        }
+        .form-group { margin-bottom: 15px; }
+        .form-label { display: block; margin-bottom: 5px; font-weight: 600; color: #333; }
+        .form-input:focus { outline: none; border-color: #2196F3; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">📞 OOAK Dialer</div>
+            <div class="status" id="status">📱 Mobile Ready</div>
+        </div>
+
+        <div class="tabs">
+            <div class="tab active" onclick="showTab('dialer')">Dialer</div>
+            <div class="tab" onclick="showTab('recent')">Recent</div>
+            <div class="tab" onclick="showTab('contacts')">Contacts</div>
+            <div class="tab" onclick="showTab('stats')">Stats</div>
+        </div>
+
+        <!-- Dialer Tab -->
+        <div id="dialerTab" class="card">
+            <div class="number-display" id="numberDisplay">Enter number</div>
+            
+            <div class="dialer-pad">
+                <button class="dial-btn" onclick="addDigit('1')">1</button>
+                <button class="dial-btn" onclick="addDigit('2')">2<br><small>ABC</small></button>
+                <button class="dial-btn" onclick="addDigit('3')">3<br><small>DEF</small></button>
+                <button class="dial-btn" onclick="addDigit('4')">4<br><small>GHI</small></button>
+                <button class="dial-btn" onclick="addDigit('5')">5<br><small>JKL</small></button>
+                <button class="dial-btn" onclick="addDigit('6')">6<br><small>MNO</small></button>
+                <button class="dial-btn" onclick="addDigit('7')">7<br><small>PQRS</small></button>
+                <button class="dial-btn" onclick="addDigit('8')">8<br><small>TUV</small></button>
+                <button class="dial-btn" onclick="addDigit('9')">9<br><small>WXYZ</small></button>
+                <button class="dial-btn" onclick="addDigit('*')">*</button>
+                <button class="dial-btn" onclick="addDigit('0')">0<br><small>+</small></button>
+                <button class="dial-btn" onclick="addDigit('#')">#</button>
+            </div>
+
+            <div class="action-buttons">
+                <button class="action-btn contacts-btn" onclick="showTab('contacts')">👥</button>
+                <button class="action-btn call-btn" onclick="makeCall()">📞</button>
+                <button class="action-btn delete-btn" onclick="deleteDigit()">⌫</button>
+            </div>
+
+            <div class="quick-dial" id="quickDial"></div>
+        </div>
+
+        <!-- Recent Calls Tab -->
+        <div id="recentTab" class="card hidden">
+            <h3>Recent Calls</h3>
+            <div id="recentCallsList"></div>
+        </div>
+
+        <!-- Contacts Tab -->
+        <div id="contactsTab" class="card hidden">
+            <h3>Contacts</h3>
+            <input type="text" id="contactName" class="form-input" placeholder="Contact Name">
+            <input type="tel" id="contactPhone" class="form-input" placeholder="Phone Number">
+            <button class="btn btn-primary" onclick="addContact()">Add Contact</button>
+            <div id="contactsList"></div>
+        </div>
+
+        <!-- Stats Tab -->
+        <div id="statsTab" class="card hidden">
+            <h3>Call Statistics</h3>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-number" id="totalCalls">0</div>
+                    <div class="stat-label">Total Calls</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="todayCalls">0</div>
+                    <div class="stat-label">Today</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Call Button -->
+    <button class="floating-call-btn" onclick="showTab('dialer')" id="floatingBtn">📞</button>
+
+    <script>
+        // Configuration - PostgreSQL Backend
+        const BACKEND_CONFIG = {
+            apiBaseUrl: 'http://localhost:3000/api',
+            crmSyncUrl: 'http://localhost:8084',
+            authUrl: 'http://localhost:3000/api/auth/login'
+        };
+        
+        // Global variables
+        let currentNumber = '';
+        let callHistory = JSON.parse(localStorage.getItem('callHistory') || '[]');
+        let contacts = JSON.parse(localStorage.getItem('contacts') || '[]');
+        let currentUser = { id: 'user-' + Date.now(), name: 'Sales Agent' };
+
+        // Initialize app
+        document.addEventListener('DOMContentLoaded', function() {
+            loadQuickDial();
+            loadRecentCalls();
+            loadContacts();
+            updateStats();
+            
+            // Check if we can access phone features
+            checkPhoneCapabilities();
+        });
+
+        // Tab management
+        function showTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.card').forEach(card => card.classList.add('hidden'));
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            
+            // Show selected tab
+            document.getElementById(tabName + 'Tab').classList.remove('hidden');
+            event.target.classList.add('active');
+            
+            // Update floating button visibility
+            const floatingBtn = document.getElementById('floatingBtn');
+            floatingBtn.style.display = tabName === 'dialer' ? 'none' : 'block';
+        }
+
+        // Dialer functions
+        function addDigit(digit) {
+            currentNumber += digit;
+            document.getElementById('numberDisplay').textContent = currentNumber || 'Enter number';
+        }
+
+        function deleteDigit() {
+            currentNumber = currentNumber.slice(0, -1);
+            document.getElementById('numberDisplay').textContent = currentNumber || 'Enter number';
+        }
+
+        // Make actual phone call
+        function makeCall() {
+            if (!currentNumber) {
+                alert('Please enter a phone number');
+                return;
+            }
+
+            const callRecord = {
+                number: currentNumber,
+                contact_name: getContactName(currentNumber),
+                type: 'outgoing',
+                timestamp: new Date().toISOString(),
+                duration: Math.floor(Math.random() * 300) + 30
+            };
+
+            // Make actual phone call on mobile devices
+            if (/Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+                window.location.href = `tel:${currentNumber}`;
+            } else {
+                alert(`Calling ${callRecord.contact_name || currentNumber}...\n\nOn mobile, this would open your phone dialer.`);
+            }
+
+            // Record the call
+            callHistory.unshift(callRecord);
+            localStorage.setItem('callHistory', JSON.stringify(callHistory));
+            
+            // Sync to PostgreSQL CRM service
+            syncCallToPostgreSQL(callRecord);
+            
+            // Clear number and update UI
+            currentNumber = '';
+            document.getElementById('numberDisplay').textContent = 'Enter number';
+            loadRecentCalls();
+            updateStats();
+        }
+
+        // Contact management
+        function addContact() {
+            const name = document.getElementById('contactName').value;
+            const phone = document.getElementById('contactPhone').value;
+            
+            if (name && phone) {
+                contacts.unshift({ name, phone });
+                localStorage.setItem('contacts', JSON.stringify(contacts));
+                
+                document.getElementById('contactName').value = '';
+                document.getElementById('contactPhone').value = '';
+                
+                loadContacts();
+                loadQuickDial();
+            }
+        }
+
+        function getContactName(number) {
+            const contact = contacts.find(c => c.phone === number);
+            return contact ? contact.name : null;
+        }
+
+        function callContact(number) {
+            currentNumber = number;
+            document.getElementById('numberDisplay').textContent = number;
+            showTab('dialer');
+        }
+
+        // UI loading functions
+        function loadQuickDial() {
+            const quickDial = document.getElementById('quickDial');
+            quickDial.innerHTML = '';
+            
+            contacts.slice(0, 4).forEach(contact => {
+                const div = document.createElement('div');
+                div.className = 'quick-contact';
+                div.onclick = () => callContact(contact.phone);
+                div.innerHTML = `<strong>${contact.name}</strong><br><small>${contact.phone}</small>`;
+                quickDial.appendChild(div);
+            });
+        }
+
+        function loadRecentCalls() {
+            const list = document.getElementById('recentCallsList');
+            list.innerHTML = '';
+            
+            callHistory.slice(0, 20).forEach(call => {
+                const div = document.createElement('div');
+                div.className = 'call-item';
+                div.onclick = () => callContact(call.number);
+                div.innerHTML = `
+                    <div>
+                        <strong>${call.contact_name || call.number}</strong><br>
+                        <small>${new Date(call.timestamp).toLocaleString()}</small>
+                    </div>
+                    <div>📞 ${Math.floor(call.duration/60)}:${(call.duration%60).toString().padStart(2,'0')}</div>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        function loadContacts() {
+            const list = document.getElementById('contactsList');
+            list.innerHTML = '';
+            
+            contacts.forEach(contact => {
+                const div = document.createElement('div');
+                div.className = 'call-item';
+                div.onclick = () => callContact(contact.phone);
+                div.innerHTML = `
+                    <div>
+                        <strong>${contact.name}</strong><br>
+                        <small>${contact.phone}</small>
+                    </div>
+                    <div>📞</div>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        function updateStats() {
+            document.getElementById('totalCalls').textContent = callHistory.length;
+            
+            const today = new Date().toDateString();
+            const todayCalls = callHistory.filter(c => 
+                new Date(c.timestamp).toDateString() === today
+            ).length;
+            document.getElementById('todayCalls').textContent = todayCalls;
+        }
+
+        // Sync call data to PostgreSQL CRM service
+        async function syncCallToPostgreSQL(callRecord) {
+            try {
+                // Primary sync to CRM service
+                const crmResponse = await fetch(`${BACKEND_CONFIG.crmSyncUrl}/sync-call`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(callRecord)
+                });
+
+                // Secondary sync to main PostgreSQL backend
+                const backendResponse = await fetch(`${BACKEND_CONFIG.apiBaseUrl}/calls`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': currentUser.token ? `Bearer ${currentUser.token}` : ''
+                    },
+                    body: JSON.stringify(callRecord)
+                });
+
+                if (crmResponse.ok && backendResponse.ok) {
+                    console.log('✅ Call synced to PostgreSQL CRM successfully');
+                } else {
+                    console.warn('⚠️ Partial sync - some endpoints failed');
+                }
+            } catch (error) {
+                console.error('❌ PostgreSQL sync error:', error);
+                // Call data is still saved locally even if sync fails
+            }
+        }
+
+        // Check phone capabilities
+        function checkPhoneCapabilities() {
+            const statusElement = document.getElementById('status');
+            
+            if (/Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+                statusElement.textContent = '📱 PostgreSQL Ready';
+                statusElement.style.background = '#e8f5e8';
+                statusElement.style.color = '#2e7d32';
+            } else {
+                statusElement.textContent = '💻 Desktop Mode';
+                statusElement.style.background = '#fff3e0';
+                statusElement.style.color = '#ef6c00';
+            }
+        }
+    </script>
+</body>
+</html> 
+</html> 

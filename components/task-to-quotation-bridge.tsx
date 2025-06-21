@@ -11,12 +11,12 @@ import { ArrowRight, FileText, DollarSign, Clock, User } from 'lucide-react'
 interface TaskQuotationBridgeProps {
   task: {
     id: string
-    title: string
-    client_name: string
+    title: string | null
+    client_name: string | null
     lead_id?: number
-    completion_notes?: string
-    estimated_value: number
-    business_impact: string
+    completion_notes?: string | null
+    estimated_value?: number | null
+    business_impact?: string | null
   }
   onGenerateQuotation: (taskId: string, quotationData: any) => void
   onSkip: () => void
@@ -34,7 +34,8 @@ export default function TaskQuotationBridge({ task, onGenerateQuotation, onSkip 
     setLoading(true)
     
     // Sanitize input data to prevent encoding issues
-    const sanitizeText = (text: string) => {
+    const sanitizeText = (text: string | undefined | null) => {
+      if (!text) return ''
       return text
         .replace(/[\u0000-\u001F\u007F-\u009F]/g, '') // Remove control characters
         .trim()
@@ -46,13 +47,13 @@ export default function TaskQuotationBridge({ task, onGenerateQuotation, onSkip 
       task_id: task.id,
       context: {
         task_title: sanitizeText(task.title),
-        completion_notes: task.completion_notes ? sanitizeText(task.completion_notes) : '',
+        completion_notes: sanitizeText(task.completion_notes),
         client_requirements: sanitizeText(clientRequirements),
         budget_range: sanitizeText(budgetRange),
         project_scope: sanitizeText(projectScope),
         timeline: sanitizeText(timeline),
         urgency: urgency,
-        estimated_value: task.estimated_value,
+        estimated_value: task.estimated_value || 0,
         business_impact: sanitizeText(task.business_impact),
         source: 'task_completion'
       }
@@ -72,7 +73,7 @@ export default function TaskQuotationBridge({ task, onGenerateQuotation, onSkip 
             </div>
             <div>
               <CardTitle className="text-lg text-green-800">Task Completed Successfully!</CardTitle>
-              <p className="text-sm text-green-600">Ready to generate quotation for {task.client_name}</p>
+              <p className="text-sm text-green-600">Ready to generate quotation for {task.client_name || 'Client'}</p>
             </div>
           </div>
           <Badge className="bg-green-100 text-green-800">
@@ -89,11 +90,11 @@ export default function TaskQuotationBridge({ task, onGenerateQuotation, onSkip 
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <span className="text-gray-600">Task:</span>
-              <p className="font-medium">{task.title}</p>
+              <p className="font-medium">{task.title || 'Untitled Task'}</p>
             </div>
             <div>
               <span className="text-gray-600">Client:</span>
-              <p className="font-medium">{task.client_name}</p>
+              <p className="font-medium">{task.client_name || 'Unknown Client'}</p>
             </div>
             <div>
               <span className="text-gray-600">Completion Notes:</span>
@@ -101,7 +102,7 @@ export default function TaskQuotationBridge({ task, onGenerateQuotation, onSkip 
             </div>
             <div>
               <span className="text-gray-600">Estimated Value:</span>
-              <p className="font-medium text-green-600">₹{task.estimated_value?.toLocaleString()}</p>
+              <p className="font-medium text-green-600">₹{task.estimated_value?.toLocaleString() || '0'}</p>
             </div>
           </div>
         </div>
@@ -213,7 +214,7 @@ export default function TaskQuotationBridge({ task, onGenerateQuotation, onSkip 
             <div>
               <p className="font-medium text-blue-800">Smart Quotation Generation</p>
               <p className="text-blue-600">
-                This information will be used to auto-populate the quotation with relevant details from your conversation with {task.client_name}.
+                This information will be used to auto-populate the quotation with relevant details from your conversation with {task.client_name || 'the client'}.
                 You can always edit the quotation before sending.
               </p>
             </div>

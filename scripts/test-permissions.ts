@@ -16,20 +16,21 @@ async function testPermissions() {
     for (const user of users) {
       console.log(`\nUser: ${user.email}`)
 
-      // Test individual permissions
-      const employeesView = await hasPermission(user.id, "people.employees", "view")
-      const departmentsView = await hasPermission(user.id, "people.departments", "view")
-      const designationsView = await hasPermission(user.id, "people.designations", "view")
+      // Test individual permission checks
+      console.log("Testing individual permissions:")
+      const employeesView = await hasPermission(String(user.id), "/people/employees", "view")
+      const departmentsView = await hasPermission(String(user.id), "/people/departments", "view")
+      const designationsView = await hasPermission(String(user.id), "/people/designations", "view")
 
-      console.log(`- people.employees.view: ${employeesView}`)
-      console.log(`- people.departments.view: ${departmentsView}`)
-      console.log(`- people.designations.view: ${designationsView}`)
+      console.log(`- /people/employees.view: ${employeesView}`)
+      console.log(`- /people/departments.view: ${departmentsView}`)
+      console.log(`- /people/designations.view: ${designationsView}`)
 
-      // Test batch permissions
-      const batchResults = await checkPermissions(user.id, [
-        { path: "people.employees", action: "view" },
-        { path: "people.departments", action: "view" },
-        { path: "people.designations", action: "view" },
+      // Test batch permission checks
+      const batchResults = await checkPermissions(String(user.id), [
+        { path: "/people/employees", action: "view" },
+        { path: "/people/departments", action: "view" },
+        { path: "/people/designations", action: "view" },
       ])
 
       console.log("Batch results:")

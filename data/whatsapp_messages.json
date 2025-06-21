@@ -1,0 +1,124 @@
+[
+  {
+    "id": "fbb1556c-a1e6-4f94-bb44-a693c122e934",
+    "message_id": "fbb1556c-a1e6-4f94-bb44-a693c122e934",
+    "from_phone": "918778320989",
+    "to_phone": "business_phone",
+    "content": "Avm gardens chennai",
+    "message_type": "text",
+    "timestamp": "2025-06-18T12:38:53.000Z",
+    "is_from_client": true,
+    "processed": false,
+    "raw_data": {
+      "id": "fbb1556c-a1e6-4f94-bb44-a693c122e934",
+      "from": "918778320989",
+      "timestamp": 1750250333.125,
+      "type": "text",
+      "text": {
+        "body": "Avm gardens chennai"
+      },
+      "customer_name": "Priyanka",
+      "interakt_data": {
+        "customer": {
+          "id": "0c0f8fa6-7e29-490b-a4ec-e409164fc58d",
+          "channel_phone_number": "918778320989",
+          "phone_number": "8778320989",
+          "country_code": "+91",
+          "traits": {
+            "name": "Priyanka",
+            "whatsapp_opted_in": true,
+            "source_id": "120228144630060316",
+            "source_url": "https://www.instagram.com/p/DIqHPZdA78t/",
+            "_internal_lead_source": "Whatsapp",
+            "ctwa_clid": "AfdiZ4tsbVnDDy4tU3Guaz7iijI-TgbMy49Q-j0MUZ0sAV0jPxe9uUOULlorNfIwDMxnYk8cwmE8rBEyR1hJSv9tWROvn4ccsLTq7sdjtXubLNsT_YsdZ_a9VXZKTEG_95qX213gFmKW"
+          }
+        },
+        "message": {
+          "id": "fbb1556c-a1e6-4f94-bb44-a693c122e934",
+          "chat_message_type": "CustomerMessage",
+          "channel_failure_reason": null,
+          "message_status": "Sent",
+          "received_at_utc": "2025-06-18T18:08:53.125914",
+          "delivered_at_utc": null,
+          "seen_at_utc": null,
+          "campaign_id": null,
+          "is_template_message": false,
+          "raw_template": null,
+          "channel_error_code": null,
+          "message_content_type": "Text",
+          "media_url": null,
+          "message": "Avm gardens chennai",
+          "meta_data": {},
+          "source_message_id": null
+        },
+        "channel_type": "Whatsapp",
+        "is_fallback_message": false,
+        "next_fallback_channel": null
+      }
+    },
+    "storage_methods": [
+      "in_memory_cache"
+    ]
+  },
+  {
+    "id": "c94ac3d5-fe28-4a23-9222-400120e07a17",
+    "message_id": "c94ac3d5-fe28-4a23-9222-400120e07a17",
+    "from_phone": "918778320989",
+    "to_phone": "business_phone",
+    "content": "Muhurtham only",
+    "message_type": "text",
+    "timestamp": "2025-06-18T12:38:59.000Z",
+    "is_from_client": true,
+    "processed": false,
+    "raw_data": {
+      "id": "c94ac3d5-fe28-4a23-9222-400120e07a17",
+      "from": "918778320989",
+      "timestamp": 1750250339.292,
+      "type": "text",
+      "text": {
+        "body": "Muhurtham only"
+      },
+      "customer_name": "Priyanka",
+      "interakt_data": {
+        "customer": {
+          "id": "0c0f8fa6-7e29-490b-a4ec-e409164fc58d",
+          "channel_phone_number": "918778320989",
+          "phone_number": "8778320989",
+          "country_code": "+91",
+          "traits": {
+            "name": "Priyanka",
+            "whatsapp_opted_in": true,
+            "source_id": "120228144630060316",
+            "source_url": "https://www.instagram.com/p/DIqHPZdA78t/",
+            "_internal_lead_source": "Whatsapp",
+            "ctwa_clid": "AfdiZ4tsbVnDDy4tU3Guaz7iijI-TgbMy49Q-j0MUZ0sAV0jPxe9uUOULlorNfIwDMxnYk8cwmE8rBEyR1hJSv9tWROvn4ccsLTq7sdjtXubLNsT_YsdZ_a9VXZKTEG_95qX213gFmKW"
+          }
+        },
+        "message": {
+          "id": "c94ac3d5-fe28-4a23-9222-400120e07a17",
+          "chat_message_type": "CustomerMessage",
+          "channel_failure_reason": null,
+          "message_status": "Sent",
+          "received_at_utc": "2025-06-18T18:08:59.292552",
+          "delivered_at_utc": null,
+          "seen_at_utc": null,
+          "campaign_id": null,
+          "is_template_message": false,
+          "raw_template": null,
+          "channel_error_code": null,
+          "message_content_type": "Text",
+          "media_url": null,
+          "message": "Muhurtham only",
+          "meta_data": {},
+          "source_message_id": null
+        },
+        "channel_type": "Whatsapp",
+        "is_fallback_message": false,
+        "next_fallback_channel": null
+      }
+    },
+    "storage_methods": [
+      "in_memory_cache"
+    ]
+  }
+]

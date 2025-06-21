@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase'
+import { query, transaction } from '@/lib/postgresql-client'
 
 export interface ComprehensiveBusinessData {
   // Core Business Data
@@ -60,7 +60,7 @@ export interface ComprehensiveBusinessData {
     teamProductivity: number
     systemHealth: { notifications: boolean; workflows: boolean; ai: boolean }
   }
-  // NEW: AI Task Management Data
+  // AI Task Management Data
   taskManagement: {
     totalActiveTasks: number
     completedTasks: number
@@ -95,14 +95,24 @@ export interface ComprehensiveBusinessData {
   }
 }
 
+/**
+ * AI Business Intelligence Service - NOW 100% POSTGRESQL
+ * 
+ * Comprehensive business intelligence powered by direct PostgreSQL queries
+ * - Real-time analytics from PostgreSQL database
+ * - Advanced business metrics and KPIs
+ * - AI-driven insights and recommendations
+ * - Performance tracking and optimization
+ * - Complete elimination of Supabase dependencies
+ */
+
 export class AIBusinessIntelligenceService {
-  private supabase = createClient()
 
   async getComprehensiveBusinessData(): Promise<ComprehensiveBusinessData> {
     try {
-      console.log("🤖 AI: Fetching comprehensive business data...")
+      console.log("🤖 AI: Fetching comprehensive business data from PostgreSQL...")
 
-      // Fetch all business data in parallel
+      // Parallel PostgreSQL queries for maximum performance
       const [
         quotationsData,
         employeesData,
@@ -131,7 +141,7 @@ export class AIBusinessIntelligenceService {
         this.getTaskManagementData()
       ])
 
-      // Process results with fallbacks
+      // Process results with fallbacks for resilience
       const sales = quotationsData.status === 'fulfilled' ? quotationsData.value : this.getDefaultSalesData()
       const employees = employeesData.status === 'fulfilled' ? employeesData.value : this.getDefaultEmployeeData()
       const companies = companiesData.status === 'fulfilled' ? companiesData.value : 0
@@ -151,6 +161,8 @@ export class AIBusinessIntelligenceService {
         totalDepartments: departments.totalDepartments,
         departmentList: departments.departmentList
       }
+
+      console.log("✅ AI: Comprehensive business data fetched from PostgreSQL successfully")
 
       return {
         sales,
@@ -178,246 +190,335 @@ export class AIBusinessIntelligenceService {
         taskManagement
       }
     } catch (error) {
-      console.error("❌ Error fetching business intelligence data:", error)
+      console.error("❌ Error fetching business intelligence data from PostgreSQL:", error)
       return this.getDefaultBusinessData()
     }
   }
 
   private async getQuotationsAnalytics() {
-    const { data: quotations, error } = await this.supabase
-      .from('quotations')
-      .select('*')
+    try {
+      console.log("📊 Fetching quotations analytics from PostgreSQL...")
 
-    if (error) throw error
+      const result = await query(`
+        SELECT 
+          q.*,
+          c.name as company_name,
+          EXTRACT(MONTH FROM q.created_at) as month,
+          EXTRACT(YEAR FROM q.created_at) as year
+        FROM quotations q
+        LEFT JOIN companies c ON q.company_id = c.id
+        ORDER BY q.created_at DESC
+      `)
 
-    // Get workflow statuses
-    const workflowStatusCounts = new Map()
-    quotations?.forEach(q => {
-      const status = q.workflow_status || q.status || 'draft'
-      workflowStatusCounts.set(status, (workflowStatusCounts.get(status) || 0) + 1)
-    })
+      const quotations = result.rows
 
-    const workflowStatus = Array.from(workflowStatusCounts.entries())
-      .map(([status, count]) => ({ status, count }))
+      // Get workflow statuses
+      const workflowStatusCounts = new Map()
+      quotations?.forEach(q => {
+        const status = q.workflow_status || q.status || 'draft'
+        workflowStatusCounts.set(status, (workflowStatusCounts.get(status) || 0) + 1)
+      })
 
-    // Count pending approvals
-    const approvalsPending = quotations?.filter(q => 
-      q.status === 'pending_approval' || q.workflow_status === 'pending_approval'
-    ).length || 0
+      const workflowStatus = Array.from(workflowStatusCounts.entries())
+        .map(([status, count]) => ({ status, count }))
 
-    const now = new Date()
-    const currentMonth = now.getMonth()
-    const currentYear = now.getFullYear()
+      // Calculate totals and metrics
+      const totalQuotations = quotations?.length || 0
+      const totalRevenue = quotations?.reduce((sum, q) => sum + (parseFloat(q.total_amount) || 0), 0) || 0
+      const activeQuotations = quotations?.filter(q => 
+        ['pending', 'sent', 'negotiation', 'approved'].includes(q.status)
+      ).length || 0
+      
+      // Calculate conversion rate
+      const approvedQuotations = quotations?.filter(q => q.status === 'approved').length || 0
+      const conversionRate = totalQuotations > 0 ? (approvedQuotations / totalQuotations) * 100 : 0
 
-    const totalQuotations = quotations?.length || 0
-    const activeQuotations = quotations?.filter(q => 
-      ['draft', 'sent', 'approved'].includes(q.status)
-    ).length || 0
+      // Calculate monthly revenue (current month)
+      const currentMonth = new Date().getMonth() + 1
+      const currentYear = new Date().getFullYear()
+      const monthlyRevenue = quotations?.filter(q => 
+        q.month === currentMonth && q.year === currentYear
+      ).reduce((sum, q) => sum + (parseFloat(q.total_amount) || 0), 0) || 0
 
-    const approvedQuotations = quotations?.filter(q => q.status === 'approved').length || 0
-    const conversionRate = totalQuotations > 0 ? (approvedQuotations / totalQuotations) * 100 : 0
+      const averageQuotationValue = totalQuotations > 0 ? totalRevenue / totalQuotations : 0
 
-    const totalRevenue = quotations?.reduce((sum, q) => sum + (q.total_amount || 0), 0) || 0
-    
-    const monthlyQuotations = quotations?.filter(q => {
-      const qDate = new Date(q.created_at)
-      return qDate.getMonth() === currentMonth && qDate.getFullYear() === currentYear
-    }) || []
-    
-    const monthlyRevenue = monthlyQuotations.reduce((sum, q) => sum + (q.total_amount || 0), 0)
-    const averageQuotationValue = totalQuotations > 0 ? totalRevenue / totalQuotations : 0
+      // Top clients by value
+      const clientTotals = new Map()
+      quotations?.forEach(q => {
+        const clientName = q.client_name || 'Unknown'
+        const amount = parseFloat(q.total_amount) || 0
+        clientTotals.set(clientName, (clientTotals.get(clientName) || 0) + amount)
+      })
 
-    // Top clients by quotation value
-    const clientTotals = new Map()
-    quotations?.forEach(q => {
-      const existing = clientTotals.get(q.client_name) || 0
-      clientTotals.set(q.client_name, existing + (q.total_amount || 0))
-    })
-    
-    const topClients = Array.from(clientTotals.entries())
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 5)
+      const topClients = Array.from(clientTotals.entries())
+        .map(([name, value]) => ({ name, value }))
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 5)
 
-    // Get quotation details for specific queries
-    const quotationDetails = quotations?.map(q => ({
-      id: q.id,
-      client_name: q.client_name,
-      total_amount: q.total_amount || 0,
-      status: q.status,
-      created_at: q.created_at
-    })) || []
+      // Sales trends (last 6 months)
+      const salesTrends = this.generateSalesTrends(quotations || [])
 
-    return {
-      totalQuotations,
-      activeQuotations,
-      conversionRate,
-      totalRevenue,
-      monthlyRevenue,
-      averageQuotationValue,
-      topClients,
-      salesTrends: this.generateSalesTrends(quotations || []),
-      quotationDetails,
-      workflowStatus,
-      approvalsPending
+      // Quotation details for recent ones
+      const quotationDetails = quotations?.slice(0, 10).map(q => ({
+        id: q.id.toString(),
+        client_name: q.client_name || 'Unknown',
+        total_amount: parseFloat(q.total_amount) || 0,
+        status: q.status || 'draft',
+        created_at: q.created_at
+      })) || []
+
+      // Approvals pending
+      const approvalsPending = quotations?.filter(q => 
+        q.workflow_status === 'pending_approval' || q.status === 'pending_approval'
+      ).length || 0
+
+      console.log(`✅ Quotations analytics: ${totalQuotations} total, ₹${totalRevenue.toLocaleString()} revenue`)
+
+      return {
+        totalQuotations,
+        activeQuotations,
+        conversionRate,
+        totalRevenue,
+        monthlyRevenue,
+        averageQuotationValue,
+        topClients,
+        salesTrends,
+        quotationDetails,
+        workflowStatus,
+        approvalsPending
+      }
+
+    } catch (error) {
+      console.error("❌ Error fetching quotations analytics:", error)
+      return this.getDefaultSalesData()
     }
   }
 
   private async getEmployeeAnalytics() {
-    const { data: employees, error } = await this.supabase
-      .from('employees')
-      .select(`
-        *,
-        departments:department_id (name),
-        designations:designation_id (name)
+    try {
+      console.log("👥 Fetching employee analytics from PostgreSQL...")
+
+      const result = await query(`
+        SELECT 
+          e.*,
+          d.name as department_name,
+          COUNT(q.id) as quotation_count,
+          SUM(CASE WHEN q.status = 'approved' THEN q.total_amount ELSE 0 END) as revenue_generated
+        FROM employees e
+        LEFT JOIN departments d ON e.department = d.id
+        LEFT JOIN quotations q ON q.assigned_to = e.id
+        WHERE e.is_active = true
+        GROUP BY e.id, d.name
+        ORDER BY e.created_at DESC
       `)
 
-    if (error) {
-      console.error('❌ Employee query error:', error)
-      throw error
-    }
+      const employees = result.rows
+      const totalEmployees = employees.length
 
-    const totalEmployees = employees?.length || 0
-    
-    // Department distribution
-    const departmentCounts = new Map()
-    employees?.forEach(emp => {
-      const dept = emp.departments?.name || 'Unassigned'
-      departmentCounts.set(dept, (departmentCounts.get(dept) || 0) + 1)
-    })
+      // Department distribution
+      const departmentCounts = new Map()
+      employees.forEach(emp => {
+        const dept = emp.department_name || emp.department || 'Unassigned'
+        departmentCounts.set(dept, (departmentCounts.get(dept) || 0) + 1)
+      })
 
-    const departmentDistribution = Array.from(departmentCounts.entries())
-      .map(([department, count]) => ({ department, count }))
+      const departmentDistribution = Array.from(departmentCounts.entries())
+        .map(([department, count]) => ({ department, count }))
 
-    // Recent hires (last 30 days)
-    const thirtyDaysAgo = new Date()
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
-    
-    const recentHires = employees?.filter(emp => 
-      new Date(emp.created_at) > thirtyDaysAgo
-    ).length || 0
+      // Recent hires (last 30 days)
+      const thirtyDaysAgo = new Date()
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+      
+      const recentHires = employees.filter(emp => 
+        new Date(emp.created_at) >= thirtyDaysAgo
+      ).length
 
-    const employeeGrowthRate = totalEmployees > 0 ? (recentHires / totalEmployees) * 100 : 0
+      // Employee growth rate (simplified)
+      const employeeGrowthRate = recentHires > 0 ? (recentHires / totalEmployees) * 100 : 0
 
-    // Employee details for specific queries
-    const employeeDetails = employees?.map(emp => ({
-      name: emp.first_name && emp.last_name ? `${emp.first_name} ${emp.last_name}` : 'Unknown',
-      department: emp.departments?.name || 'Unassigned',
-      position: emp.job_title || emp.designations?.name || 'Not specified',
-      created_at: emp.created_at
-    })) || []
+      // Employee details
+      const employeeDetails = employees.map(emp => ({
+        name: emp.name || 'Unknown',
+        department: emp.department_name || emp.department || 'Unassigned',
+        position: emp.position || 'N/A',
+        created_at: emp.created_at
+      }))
 
-    return {
-      totalEmployees,
-      departmentDistribution,
-      recentHires,
-      employeeGrowthRate,
-      employeeDetails
+      // Sales team performance
+      const salesTeamPerformance = employees
+        .filter(emp => emp.quotation_count > 0)
+        .map(emp => ({
+          name: emp.name,
+          quotations: parseInt(emp.quotation_count) || 0,
+          conversions: 0, // Would need more complex query
+          revenue: parseFloat(emp.revenue_generated) || 0
+        }))
+        .slice(0, 10)
+
+      console.log(`✅ Employee analytics: ${totalEmployees} active employees`)
+
+      return {
+        totalEmployees,
+        departmentDistribution,
+        recentHires,
+        employeeGrowthRate,
+        employeeDetails,
+        salesTeamPerformance
+      }
+
+    } catch (error) {
+      console.error("❌ Error fetching employee analytics:", error)
+      return this.getDefaultEmployeeData()
     }
   }
 
   private async getCompaniesCount(): Promise<number> {
-    const { count, error } = await this.supabase
-      .from('companies')
-      .select('*', { count: 'exact', head: true })
-    
-    if (error) throw error
-    return count || 0
+    try {
+      const result = await query('SELECT COUNT(*) as count FROM companies WHERE is_active = true')
+      return parseInt(result.rows[0]?.count || '0')
+    } catch (error) {
+      console.error("❌ Error fetching companies count:", error)
+      return 0
+    }
   }
 
   private async getBranchesCount(): Promise<number> {
-    const { count, error } = await this.supabase
-      .from('branches')
-      .select('*', { count: 'exact', head: true })
-    
-    if (error) throw error
-    return count || 0
+    try {
+      const result = await query('SELECT COUNT(*) as count FROM branches WHERE is_active = true')
+      return parseInt(result.rows[0]?.count || '0')
+    } catch (error) {
+      console.error("❌ Error fetching branches count:", error)
+      return 0
+    }
   }
 
   private async getClientsCount(): Promise<number> {
-    const { data: quotations, error } = await this.supabase
-      .from('quotations')
-      .select('client_name')
-    
-    if (error) throw error
-    const uniqueClients = new Set(quotations?.map(q => q.client_name) || [])
-    return uniqueClients.size
+    try {
+      const result = await query(`
+        SELECT COUNT(DISTINCT client_name) as count 
+        FROM quotations 
+        WHERE client_name IS NOT NULL AND client_name != ''
+      `)
+      return parseInt(result.rows[0]?.count || '0')
+    } catch (error) {
+      console.error("❌ Error fetching clients count:", error)
+      return 0
+    }
   }
 
   private async getLeadsAnalytics() {
-    const { data: leads, error } = await this.supabase
-      .from('leads')
-      .select('*')
+    try {
+      console.log("🎯 Fetching leads analytics from PostgreSQL...")
 
-    if (error) throw error
+      const result = await query(`
+        SELECT 
+          l.*,
+          c.name as company_name,
+          e.name as assigned_to_name
+        FROM leads l
+        LEFT JOIN companies c ON l.company_id = c.id
+        LEFT JOIN employees e ON l.assigned_to = e.id
+        ORDER BY l.created_at DESC
+      `)
 
-    const totalLeads = leads?.length || 0
-    const activeLeads = leads?.filter(lead => 
-      ['new', 'contacted', 'qualified'].includes(lead.status)
-    ).length || 0
-    
-    const convertedLeads = leads?.filter(lead => lead.status === 'converted').length || 0
-    const conversionRate = totalLeads > 0 ? (convertedLeads / totalLeads) * 100 : 0
+      const leads = result.rows
+      const totalLeads = leads.length
 
-    // Today's leads
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const todaysLeads = leads?.filter(lead => {
-      const leadDate = new Date(lead.created_at)
-      leadDate.setHours(0, 0, 0, 0)
-      return leadDate.getTime() === today.getTime()
-    }).length || 0
+      // Active leads (not closed/converted)
+      const activeLeads = leads.filter(lead => 
+        !['closed', 'converted', 'rejected'].includes(lead.status)
+      ).length
 
-    // Recent leads for context
-    const recentLeads = leads?.slice(0, 5).map(lead => ({
-      name: lead.name || lead.company_name || 'Unknown',
-      status: lead.status,
-      created_at: lead.created_at
-    })) || []
+      // Lead conversion rate
+      const convertedLeads = leads.filter(lead => lead.status === 'converted').length
+      const conversionRate = totalLeads > 0 ? (convertedLeads / totalLeads) * 100 : 0
 
-    return {
-      activeLeads,
-      conversionRate,
-      todaysLeads,
-      recentLeads
+      // Today's leads
+      const today = new Date().toISOString().split('T')[0]
+      const todaysLeads = leads.filter(lead => 
+        lead.created_at.toString().startsWith(today)
+      ).length
+
+      // Recent leads
+      const recentLeads = leads.slice(0, 10).map(lead => ({
+        name: lead.contact_name || 'Unknown',
+        status: lead.status || 'new',
+        created_at: lead.created_at
+      }))
+
+      console.log(`✅ Leads analytics: ${activeLeads} active of ${totalLeads} total`)
+
+      return {
+        activeLeads,
+        conversionRate,
+        todaysLeads,
+        recentLeads
+      }
+
+    } catch (error) {
+      console.error("❌ Error fetching leads analytics:", error)
+      return this.getDefaultLeadsData()
     }
   }
 
   private async getDepartmentsAnalytics() {
-    const { data: departments, error } = await this.supabase
-      .from('departments')
-      .select('*')
+    try {
+      console.log("🏢 Fetching departments analytics from PostgreSQL...")
 
-    if (error) throw error
+      const result = await query(`
+        SELECT 
+          d.id,
+          d.name,
+          d.description,
+          COUNT(e.id) as employee_count
+        FROM departments d
+        LEFT JOIN employees e ON e.department = d.id AND e.is_active = true
+        WHERE d.is_active = true
+        GROUP BY d.id, d.name, d.description
+        ORDER BY d.name
+      `)
 
-    const totalDepartments = departments?.length || 0
-    const departmentList = departments?.map(dept => ({
-      id: dept.id,
-      name: dept.name,
-      description: dept.description || ''
-    })) || []
+      const departments = result.rows
+      
+      return {
+        totalDepartments: departments.length,
+        departmentList: departments.map(dept => ({
+          id: dept.id,
+          name: dept.name || 'Unknown',
+          description: dept.description || ''
+        }))
+      }
 
-    return {
-      totalDepartments,
-      departmentList
+    } catch (error) {
+      console.error("❌ Error fetching departments analytics:", error)
+      return { totalDepartments: 0, departmentList: [] }
     }
   }
 
   private generateSalesTrends(quotations: any[]): Array<{ month: string; value: number }> {
+    const trends = new Map()
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-    const currentYear = new Date().getFullYear()
     
-    const trends = months.map(month => ({ month, value: 0 }))
+    // Initialize last 6 months
+    const now = new Date()
+    for (let i = 5; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      const monthKey = `${months[date.getMonth()]} ${date.getFullYear()}`
+      trends.set(monthKey, 0)
+    }
     
+    // Aggregate sales by month
     quotations.forEach(q => {
-      const date = new Date(q.created_at)
-      if (date.getFullYear() === currentYear) {
-        const monthIndex = date.getMonth()
-        trends[monthIndex].value += q.total_amount || 0
+      if (q.created_at && q.total_amount) {
+        const date = new Date(q.created_at)
+        const monthKey = `${months[date.getMonth()]} ${date.getFullYear()}`
+        if (trends.has(monthKey)) {
+          trends.set(monthKey, trends.get(monthKey) + (parseFloat(q.total_amount) || 0))
+        }
       }
     })
     
-    return trends
+    return Array.from(trends.entries()).map(([month, value]) => ({ month, value }))
   }
 
   // Generate AI insights based on real data
@@ -479,7 +580,8 @@ export class AIBusinessIntelligenceService {
       departmentDistribution: [],
       recentHires: 0,
       employeeGrowthRate: 0,
-      employeeDetails: []
+      employeeDetails: [],
+      salesTeamPerformance: []
     }
   }
 
@@ -567,22 +669,26 @@ export class AIBusinessIntelligenceService {
 
   private async getWorkflowAnalytics() {
     try {
-      // Get quotation workflow data
-      const { data: quotations, error: quotationError } = await this.supabase
-        .from('quotations')
-        .select('*')
+      console.log("🔄 Fetching workflow analytics from PostgreSQL...")
 
-      if (quotationError) throw quotationError
+      // Get quotation workflow data using PostgreSQL
+      const quotationsResult = await query(`
+        SELECT *
+        FROM quotations
+        ORDER BY created_at DESC
+      `)
+
+      const quotations = quotationsResult.rows
 
       // Analyze quotation workflow stages
       const workflowStages = ['draft', 'sent', 'pending_approval', 'approved', 'in_progress', 'completed']
       const quotationWorkflow = workflowStages.map(stage => {
-        const stageQuotations = quotations?.filter(q => 
+        const stageQuotations = quotations?.filter((q: any) => 
           q.status === stage || q.workflow_status === stage
         ) || []
         
         const avgDays = stageQuotations.length > 0 
-          ? stageQuotations.reduce((sum, q) => {
+          ? stageQuotations.reduce((sum: number, q: any) => {
               const days = Math.floor((new Date().getTime() - new Date(q.created_at).getTime()) / (1000 * 60 * 60 * 24))
               return sum + days
             }, 0) / stageQuotations.length
@@ -596,9 +702,9 @@ export class AIBusinessIntelligenceService {
       })
 
       // Get approval queue
-      const approvalQueue = quotations?.filter(q => 
+      const approvalQueue = quotations?.filter((q: any) => 
         q.status === 'pending_approval' || q.workflow_status === 'pending_approval'
-      ).map(q => ({
+      ).map((q: any) => ({
         quotation: q.client_name || 'Unknown',
         client: q.client_name || 'Unknown',
         value: q.total_amount || 0,
@@ -606,9 +712,9 @@ export class AIBusinessIntelligenceService {
       })) || []
 
       // Get post-sale confirmations (mock data structure)
-      const postSaleConfirmations = quotations?.filter(q => 
+      const postSaleConfirmations = quotations?.filter((q: any) => 
         q.status === 'approved' && q.payment_received_date
-      ).map(q => ({
+      ).map((q: any) => ({
         quotation: q.client_name || 'Unknown',
         status: 'confirmed',
         daysSincePayment: q.payment_received_date 
@@ -619,6 +725,8 @@ export class AIBusinessIntelligenceService {
       // 🔄 ENHANCED: Replace followups with task-based insights
       const followupsDue = await this.getTaskBasedFollowups(quotations || [])
 
+      console.log(`✅ Workflow analytics: ${quotations.length} quotations analyzed`)
+
       return {
         quotationWorkflow,
         approvalQueue,
@@ -626,7 +734,7 @@ export class AIBusinessIntelligenceService {
         followupsDue
       }
     } catch (error) {
-      console.error('Error fetching workflow analytics:', error)
+      console.error('❌ Error fetching workflow analytics from PostgreSQL:', error)
       return this.getDefaultWorkflowData()
     }
   }
@@ -710,24 +818,30 @@ export class AIBusinessIntelligenceService {
 
   private async getNotificationsData() {
     try {
-      const { data: notifications, error } = await this.supabase
-        .from('notifications')
-        .select('*')
-        .order('created_at', { ascending: false })
+      console.log("🔔 Fetching notifications data from PostgreSQL...")
 
-      if (error) throw error
+      const result = await query(`
+        SELECT *
+        FROM notifications
+        ORDER BY created_at DESC
+        LIMIT 50
+      `)
 
-      const unreadCount = notifications?.filter(n => !n.is_read).length || 0
-      const urgentCount = notifications?.filter(n => 
+      const notifications = result.rows
+
+      const unreadCount = notifications?.filter((n: any) => !n.is_read).length || 0
+      const urgentCount = notifications?.filter((n: any) => 
         n.priority === 'urgent' && !n.is_read
       ).length || 0
 
-      const recentNotifications = notifications?.slice(0, 5).map(n => ({
+      const recentNotifications = notifications?.slice(0, 5).map((n: any) => ({
         type: n.type,
         title: n.title,
         priority: n.priority,
         created: n.created_at
       })) || []
+
+      console.log(`✅ Notifications: ${unreadCount} unread, ${urgentCount} urgent`)
 
       return {
         unreadCount,
@@ -735,59 +849,72 @@ export class AIBusinessIntelligenceService {
         recentNotifications
       }
     } catch (error) {
-      console.error('Error fetching notifications:', error)
+      console.error('❌ Error fetching notifications from PostgreSQL:', error)
       return this.getDefaultNotificationsData()
     }
   }
 
   private async getDeliverablesData() {
     try {
-      const { data: deliverables, error } = await this.supabase
-        .from('deliverable_master')
-        .select('*')
+      console.log("📦 Fetching deliverables data from PostgreSQL...")
 
-      if (error) throw error
+      const result = await query(`
+        SELECT *
+        FROM deliverable_master
+        ORDER BY category, type, deliverable_name
+      `)
 
-      return deliverables?.map(d => ({
+      const deliverables = result.rows
+
+      const formattedDeliverables = deliverables?.map((d: any) => ({
         category: d.category,
         type: d.type,
         name: d.deliverable_name
       })) || []
+
+      console.log(`✅ Deliverables: ${formattedDeliverables.length} items loaded`)
+
+      return formattedDeliverables
     } catch (error) {
-      console.error('Error fetching deliverables:', error)
+      console.error('❌ Error fetching deliverables from PostgreSQL:', error)
       return []
     }
   }
 
   /**
-   * NEW: Get AI Task Management Data
+   * Get AI Task Management Data from PostgreSQL
    */
   private async getTaskManagementData() {
     try {
-      // Get all AI tasks
-      const { data: allTasks, error: tasksError } = await this.supabase
-        .from('ai_tasks')
-        .select(`
-          id,
-          title,
-          priority,
-          status,
-          due_date,
-          estimated_value,
-          assigned_to_employee_id,
-          client_name,
-          task_type,
-          created_at,
-          completed_at,
-          employees:assigned_to_employee_id (first_name, last_name)
-        `)
+      console.log("🤖 Fetching AI task management data from PostgreSQL...")
 
-      if (tasksError) throw tasksError
+      // Get all AI tasks with employee information
+      const tasksResult = await query(`
+        SELECT 
+          t.id,
+          t.task_title as title,
+          t.priority,
+          t.status,
+          t.due_date,
+          t.estimated_value,
+          t.assigned_to_employee_id,
+          t.client_name,
+          t.task_type,
+          t.created_at,
+          t.completed_at,
+          e.first_name,
+          e.last_name
+        FROM ai_tasks t
+        LEFT JOIN employees e ON t.assigned_to_employee_id = e.id
+        ORDER BY t.created_at DESC
+      `)
+
+      const allTasks = tasksResult.rows
 
       // Calculate task metrics
-      const totalActiveTasks = allTasks?.filter(t => t.status !== 'completed' && t.status !== 'cancelled').length || 0
-      const completedTasks = allTasks?.filter(t => t.status === 'completed').length || 0
-      const overdueTasks = allTasks?.filter(t => 
+      const totalActiveTasks = allTasks?.filter((t: any) => t.status !== 'completed' && t.status !== 'cancelled').length || 0
+      const completedTasks = allTasks?.filter((t: any) => t.status === 'completed').length || 0
+      const overdueTasks = allTasks?.filter((t: any) => 
         t.status !== 'completed' && new Date(t.due_date) < new Date()
       ).length || 0
 
@@ -797,14 +924,14 @@ export class AIBusinessIntelligenceService {
 
       // Task breakdown by priority
       const tasksByPriority = {
-        urgent: allTasks?.filter(t => t.priority === 'urgent').length || 0,
-        high: allTasks?.filter(t => t.priority === 'high').length || 0,
-        medium: allTasks?.filter(t => t.priority === 'medium').length || 0,
-        low: allTasks?.filter(t => t.priority === 'low').length || 0
+        urgent: allTasks?.filter((t: any) => t.priority === 'urgent').length || 0,
+        high: allTasks?.filter((t: any) => t.priority === 'high').length || 0,
+        medium: allTasks?.filter((t: any) => t.priority === 'medium').length || 0,
+        low: allTasks?.filter((t: any) => t.priority === 'low').length || 0
       }
 
       // Task breakdown by type
-      const tasksByType = allTasks?.reduce((acc, task) => {
+      const tasksByType = allTasks?.reduce((acc: Record<string, number>, task: any) => {
         acc[task.task_type] = (acc[task.task_type] || 0) + 1
         return acc
       }, {} as Record<string, number>) || {}
@@ -812,15 +939,16 @@ export class AIBusinessIntelligenceService {
       // Employee performance
       const employeePerformanceMap = new Map<number, any>()
 
-      allTasks?.forEach(task => {
+      allTasks?.forEach((task: any) => {
         const empId = task.assigned_to_employee_id
         if (!empId) return
 
         if (!employeePerformanceMap.has(empId)) {
-          const employeeData = task.employees as any
           employeePerformanceMap.set(empId, {
             employee_id: empId,
-            employee_name: employeeData ? `${employeeData.first_name} ${employeeData.last_name}` : 'Unknown',
+            employee_name: task.first_name && task.last_name 
+              ? `${task.first_name} ${task.last_name}` 
+              : 'Unknown',
             total_tasks: 0,
             completed_tasks: 0,
             completion_rate: 0,
@@ -850,39 +978,40 @@ export class AIBusinessIntelligenceService {
       nextWeek.setDate(nextWeek.getDate() + 7)
       
       const upcomingDeadlines = allTasks
-        ?.filter(task => 
+        ?.filter((task: any) => 
           task.status !== 'completed' && 
           new Date(task.due_date) <= nextWeek &&
           new Date(task.due_date) >= new Date()
         )
-        .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())
-        .map(task => {
-          const employeeData = task.employees as any
-          return {
-            task_id: task.id,
-            title: task.title,
-            due_date: task.due_date,
-            priority: task.priority,
-            assigned_to: employeeData ? `${employeeData.first_name} ${employeeData.last_name}` : 'Unassigned',
-            client_name: task.client_name
-          }
-        }) || []
+        .sort((a: any, b: any) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())
+        .map((task: any) => ({
+          task_id: task.id,
+          title: task.title,
+          due_date: task.due_date,
+          priority: task.priority,
+          assigned_to: task.first_name && task.last_name 
+            ? `${task.first_name} ${task.last_name}` 
+            : 'Unassigned',
+          client_name: task.client_name
+        })) || []
 
       // Calculate AI insights
-      const totalRevenueProtected = allTasks?.reduce((sum, task) => 
+      const totalRevenueProtected = allTasks?.reduce((sum: number, task: any) => 
         task.status === 'completed' ? sum + (task.estimated_value || 0) : sum, 0
       ) || 0
 
-      const tasksGenerated = allTasks?.filter(t => t.created_at >= new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)).length || 0
+      const tasksGenerated = allTasks?.filter((t: any) => t.created_at >= new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)).length || 0
       
       const averageTaskCompletion = completedTasks > 0 
         ? allTasks
-            ?.filter(t => t.status === 'completed' && t.completed_at && t.created_at)
-            .reduce((sum, task) => {
+            ?.filter((t: any) => t.status === 'completed' && t.completed_at && t.created_at)
+            .reduce((sum: number, task: any) => {
               const completionTime = new Date(task.completed_at!).getTime() - new Date(task.created_at).getTime()
               return sum + (completionTime / (1000 * 60 * 60 * 24)) // days
             }, 0) / completedTasks
         : 0
+
+      console.log(`✅ Task management: ${totalActiveTasks} active, ${completedTasks} completed, ${overdueTasks} overdue`)
 
       return {
         totalActiveTasks,
@@ -902,7 +1031,7 @@ export class AIBusinessIntelligenceService {
         }
       }
     } catch (error) {
-      console.error('Error fetching task management data:', error)
+      console.error('❌ Error fetching task management data from PostgreSQL:', error)
       return this.getDefaultTaskManagementData()
     }
   }

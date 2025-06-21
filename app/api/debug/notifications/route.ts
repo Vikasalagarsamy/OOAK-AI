@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/postgresql-client'
 
 // 🔍 Debug endpoint to check notification data
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient()
+    const { query, transaction } = createClient()
     
     // Get all notifications for user 1 (matching main API limit of 100)
     const { data: notifications, error } = await supabase

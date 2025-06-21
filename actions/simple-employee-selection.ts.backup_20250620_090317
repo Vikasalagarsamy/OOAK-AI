@@ -1,0 +1,258 @@
+"use server"
+
+import { createClient } from "@/lib/supabase/server"
+import type { Employee } from "@/types/employee"
+
+// ULTRA SIMPLE VERSION - Just get all active employees
+export async function getEmployeesForLeadAssignment(
+  companyId?: number | undefined,
+  branchId?: number | undefined,
+  roleFilter = "Sales",
+): Promise<Employee[]> {
+  console.log('🔍 [ULTRA-SIMPLE] Getting employees for lead assignment...')
+  console.log(`📋 [ULTRA-SIMPLE] Company ID: ${companyId}, Branch ID: ${branchId}`)
+
+  try {
+    const supabase = createClient()
+
+    // Get all active employees with their department and company allocation info
+    console.log('📋 [ULTRA-SIMPLE] Fetching sales employees with company allocations...')
+    
+    // First get the sales department ID
+    const { data: salesDept, error: deptError } = await supabase
+      .from('departments')
+      .select('id')
+      .eq('name', 'SALES')
+      .single()
+
+    if (deptError) {
+      console.error('❌ [ULTRA-SIMPLE] Error fetching sales department:', deptError)
+      return []
+    }
+
+    if (!salesDept) {
+      console.error('❌ [ULTRA-SIMPLE] Sales department not found')
+      return []
+    }
+
+    console.log(`📋 [ULTRA-SIMPLE] Found sales department ID: ${salesDept.id}`)
+
+    const { data: employees, error } = await supabase
+      .from('employees')
+      .select(`
+        id,
+        employee_id,
+        first_name,
+        last_name,
+        job_title,
+        status,
+        department_id,
+        departments!left (
+          id,
+          name
+        ),
+        employee_companies!left (
+          company_id,
+          branch_id,
+          allocation_percentage,
+          is_primary,
+          status
+        )
+      `)
+      .eq('status', 'active')
+      .eq('department_id', salesDept.id)
+      .order('first_name', { ascending: true })
+
+    if (error) {
+      console.error('❌ [ULTRA-SIMPLE] Error fetching employees:', error)
+      console.log('🔄 [ULTRA-SIMPLE] Returning empty array due to error')
+      return []
+    }
+
+    console.log(`✅ [ULTRA-SIMPLE] Found ${employees?.length || 0} active sales employees`)
+    
+    if (!employees || employees.length === 0) {
+      console.warn('⚠️ [ULTRA-SIMPLE] No active sales employees found in the database')
+      return []
+    }
+
+    // Filter employees based on company allocation if companyId is provided
+    let filteredEmployees = employees
+    if (companyId) {
+      filteredEmployees = employees.filter(emp => {
+        // Check if employee has allocation to this company
+        const hasAllocation = emp.employee_companies?.some(allocation => 
+          allocation.company_id === companyId && 
+          allocation.status === 'active' &&
+          (!branchId || allocation.branch_id === branchId)
+        )
+        console.log(`👤 Employee ${emp.first_name} ${emp.last_name} - Has allocation: ${hasAllocation}`)
+        return hasAllocation
+      })
+      console.log(`✅ [ULTRA-SIMPLE] Found ${filteredEmployees.length} employees allocated to company ${companyId}`)
+    }
+
+    // Format for the dropdown
+    const formattedEmployees = filteredEmployees.map(emp => {
+      // Find the relevant company allocation
+      const companyAllocation = companyId 
+        ? emp.employee_companies?.find(a => a.company_id === companyId)
+        : emp.employee_companies?.find(a => a.is_primary) || emp.employee_companies?.[0]
+
+      return {
+        id: emp.id,
+        employee_id: emp.employee_id,
+        name: `${emp.first_name || ''} ${emp.last_name || ''}`.trim(),
+        first_name: emp.first_name,
+        last_name: emp.last_name,
+        full_name: `${emp.first_name || ''} ${emp.last_name || ''}`.trim(),
+        job_title: emp.job_title || 'Sales Representative',
+        role: emp.job_title || 'Sales Representative',
+        department: 'Sales',
+        designation: emp.job_title || 'Sales Representative',
+        status: emp.status,
+        is_sales: true,
+        is_primary: companyAllocation?.is_primary || false,
+        allocation_percentage: companyAllocation?.allocation_percentage || 0,
+        company_id: companyAllocation?.company_id,
+        branch_id: companyAllocation?.branch_id
+      }
+    })
+
+    console.log(`🎯 [ULTRA-SIMPLE] Returning ${formattedEmployees.length} formatted employees`)
+    formattedEmployees.forEach((emp, index) => {
+      console.log(`  👤 [${index + 1}] ${emp.name} (ID: ${emp.id}) - ${emp.job_title}`)
+    })
+
+    return formattedEmployees
+
+  } catch (error) {
+    console.error('💥 [ULTRA-SIMPLE] Exception in getEmployeesForLeadAssignment:', error)
+    console.log('🔄 [ULTRA-SIMPLE] Returning empty array due to exception')
+    return []
+  }
+}
+
+export async function assignLeadToEmployee(
+  leadId: number,
+  employeeId: number,
+): Promise<{ success: boolean; message: string }> {
+  console.log(`📋 [SIMPLE] Assigning lead ${leadId} to employee ${employeeId}`)
+  
+  try {
+    const supabase = createClient()
+
+    // First get the lead data for task creation
+    console.log(`🔍 [SIMPLE] Fetching lead data for task creation...`)
+    const { data: lead, error: fetchError } = await supabase
+      .from('leads')
+      .select('*, companies(*), branches(*)')
+      .eq('id', leadId)
+      .single()
+
+    if (fetchError) {
+      console.error('❌ [SIMPLE] Error fetching lead:', fetchError)
+      return {
+        success: false,
+        message: `Failed to fetch lead: ${fetchError.message}`
+      }
+    }
+
+    console.log(`✅ [SIMPLE] Found lead:`, {
+      id: lead.id,
+      lead_number: lead.lead_number,
+      client_name: lead.client_name,
+      company_id: lead.company_id,
+      branch_id: lead.branch_id
+    })
+
+    // Get employee data for task assignment
+    console.log(`🔍 [SIMPLE] Fetching employee data...`)
+    const { data: employee, error: empError } = await supabase
+      .from('employees')
+      .select('*')
+      .eq('id', employeeId)
+      .single()
+
+    if (empError) {
+      console.error('❌ [SIMPLE] Error fetching employee:', empError)
+      return {
+        success: false,
+        message: `Failed to fetch employee: ${empError.message}`
+      }
+    }
+
+    console.log(`✅ [SIMPLE] Found employee:`, {
+      id: employee.id,
+      name: `${employee.first_name} ${employee.last_name}`,
+      department_id: employee.department_id,
+      job_title: employee.job_title
+    })
+
+    // Update the lead
+    console.log(`📝 [SIMPLE] Updating lead assignment...`)
+    const { error } = await supabase
+      .from('leads')
+      .update({ 
+        assigned_to: employeeId,
+        status: 'ASSIGNED',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', leadId)
+
+    if (error) {
+      console.error('❌ [SIMPLE] Error assigning lead:', error)
+      return {
+        success: false,
+        message: `Failed to assign lead: ${error.message}`
+      }
+    }
+
+    console.log(`✅ [SIMPLE] Lead assignment updated successfully`)
+
+    // 🤖 TRIGGER AI TASK GENERATION
+    try {
+      const { triggerLeadAssignmentTasks } = await import('@/actions/lead-task-integration-hooks')
+      
+      console.log('🚀 [SIMPLE] Triggering AI task generation for lead assignment...')
+      const aiResult = await triggerLeadAssignmentTasks(
+        leadId,
+        {
+          id: lead.id,
+          lead_number: lead.lead_number,
+          client_name: lead.client_name,
+          status: 'ASSIGNED',
+          estimated_value: lead.estimated_value,
+          assigned_to: employeeId,
+          company_id: lead.company_id,
+          branch_id: lead.branch_id,
+          created_at: lead.created_at,
+          updated_at: new Date().toISOString()
+        },
+        `${employee.first_name} ${employee.last_name}`
+      )
+      
+      if (aiResult.success && aiResult.tasksGenerated > 0) {
+        console.log(`✅ [SIMPLE] AI generated ${aiResult.tasksGenerated} task(s) for lead ${lead.lead_number}`)
+      } else {
+        console.log(`ℹ️ [SIMPLE] No AI tasks generated for lead ${lead.lead_number}: ${aiResult.message}`)
+      }
+    } catch (aiError) {
+      console.error('⚠️ [SIMPLE] AI task generation failed:', aiError)
+      // Don't fail the entire assignment if AI task generation fails
+    }
+
+    console.log(`✅ [SIMPLE] Successfully assigned lead ${leadId} to employee ${employeeId}`)
+    return {
+      success: true,
+      message: 'Lead assigned successfully'
+    }
+
+  } catch (error) {
+    console.error('💥 [SIMPLE] Exception in assignLeadToEmployee:', error)
+    return {
+      success: false,
+      message: `Failed to assign lead: ${error}`
+    }
+  }
+} 

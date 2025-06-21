@@ -1,0 +1,58 @@
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
+async function checkRecentCalls() {
+  try {
+    console.log('📋 Checking recent call records...');
+    
+    const { data, error } = await supabase
+      .from('call_transcriptions')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(5);
+    
+    if (error) {
+      console.error('❌ Database error:', error);
+      return;
+    }
+    
+    console.log(`📊 Found ${data.length} recent records:`);
+    console.log('='.repeat(80));
+    
+    data.forEach((record, i) => {
+      console.log(`${i+1}. Client: ${record.client_name}`);
+      console.log(`   Call ID: ${record.call_id}`);
+      console.log(`   Created: ${record.created_at}`);
+      console.log(`   Transcript: ${record.transcript.substring(0, 150)}...`);
+      console.log(`   Confidence: ${record.confidence_score}`);
+      console.log(`   Duration: ${record.duration} seconds`);
+      console.log(`   Language: ${record.detected_language || 'N/A'}`);
+      console.log(`   Recording: ${record.recording_url ? 'Yes' : 'No'}`);
+      console.log('   ' + '-'.repeat(50));
+    });
+    
+    // Also check for any processing logs
+    console.log('\n🔍 Checking for any calls still processing...');
+    const processingCalls = data.filter(call => 
+      call.transcript && call.transcript.includes('Processing')
+    );
+    
+    if (processingCalls.length > 0) {
+      console.log(`⚠️  Found ${processingCalls.length} calls still processing:`);
+      processingCalls.forEach(call => {
+        console.log(`   - ${call.client_name} (${call.call_id})`);
+      });
+    } else {
+      console.log('✅ No calls currently processing');
+    }
+    
+  } catch (error) {
+    console.error('❌ Error checking calls:', error);
+  }
+}
+
+checkRecentCalls(); 

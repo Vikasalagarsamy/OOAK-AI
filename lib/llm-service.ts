@@ -32,8 +32,8 @@ class LLMService {
     // Primary configuration (local Ollama)
     this.config = {
       provider: 'ollama',
-      endpoint: process.env.LLM_ENDPOINT || 'http://localhost:11434',
-      model: process.env.LLM_MODEL || 'llama3.1:8b',
+      endpoint: process.env.LLM_ENDPOINT || 'http://127.0.0.1:11434',
+      model: process.env.LLM_MODEL || 'qwen2.5:7b',
       timeout: parseInt(process.env.LLM_TIMEOUT || '60000'),
       maxRetries: parseInt(process.env.LLM_MAX_RETRIES || '3')
     }

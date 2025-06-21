@@ -1,0 +1,21 @@
+const { createClient } = require('@supabase/supabase-js')
+require('dotenv').config({ path: '.env.local' })
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+console.log('Testing Supabase connection...')
+console.log('URL:', supabaseUrl)
+console.log('Key preview:', supabaseServiceKey ? supabaseServiceKey.substring(0, 20) + '...' : 'MISSING')
+
+const supabase = createClient(supabaseUrl, supabaseServiceKey)
+
+// Test the connection
+supabase.from('roles').select('*').limit(1)
+  .then(res => {
+    console.log('✅ Connection successful!')
+    console.log('Response:', res)
+  })
+  .catch(err => {
+    console.log('❌ Connection failed:', err.message)
+  }) 

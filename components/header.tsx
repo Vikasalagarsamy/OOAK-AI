@@ -15,6 +15,7 @@ import { useTheme } from "next-themes"
 import { useCurrentUser } from "@/hooks/use-current-user"
 import { Skeleton } from "./ui/skeleton"
 import { RealtimeNotifications } from "./realtime-notifications"
+import { AdminMenu } from "./admin-menu"
 
 export function Header() {
   const { theme, setTheme } = useTheme()
@@ -39,7 +40,7 @@ export function Header() {
     if (user?.username) {
       return user.username
     }
-    return "Administrator" // Default fallback
+    return "User" // Default fallback
   }
 
   // Toggle theme function
@@ -52,14 +53,12 @@ export function Header() {
       <div className="flex h-16 items-center justify-between px-4 md:px-6">
         <div className="flex items-center gap-2 md:gap-4">
           <MobileNavigation />
-          <Link href="/" className="flex items-center gap-2">
-            <span className="font-bold text-xl">
-              {user?.username ? `${user.username.toUpperCase()}'S WORKSPACE` : 'WORKSPACE'}
-            </span>
-          </Link>
         </div>
 
         <div className="flex items-center space-x-1">
+          {/* Show Admin Menu only for admin users */}
+          {user?.isAdmin && <AdminMenu />}
+          
           <Button
             variant="ghost"
             size="icon"
@@ -71,7 +70,7 @@ export function Header() {
             {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
           </Button>
 
-          <RealtimeNotifications />
+          {/* <RealtimeNotifications /> - Temporarily disabled */}
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

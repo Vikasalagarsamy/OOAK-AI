@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
@@ -10,9 +10,36 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/components/ui/use-toast"
 import { Loader2 } from "lucide-react"
-import { generateCompanyCode } from "@/utils/code-generator"
-import { supabase } from "@/lib/supabase"
 import { logActivity } from "@/services/activity-service"
+
+// Helper function to generate company code via API
+async function generateCompanyCodeViaAPI(): Promise<string> {
+  try {
+    const response = await fetch('/api/generate-codes/company', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    })
+
+    if (!response.ok) {
+      throw new Error(`API returned ${response.status}`)
+    }
+
+    const data = await response.json()
+    
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to generate company code')
+    }
+
+    return data.companyCode
+  } catch (error) {
+    console.error('Error calling company code generation API:', error)
+    // Fallback to simple generation
+    const randomString = Math.random().toString(36).substring(2, 5).toUpperCase()
+    return `CC${randomString}`
+  }
+}
 
 // Define the form schema with Zod
 const formSchema = z.object({
@@ -56,30 +83,53 @@ export default function AddCompanyForm({ onAddCompany }: AddCompanyFormProps) {
       tax_id: "",
       registration_number: "",
       founded_date: "",
-      company_code: generateCompanyCode(),
+      company_code: "",
     },
   })
+
+  // Generate initial company code on component mount
+  useEffect(() => {
+    const initializeCompanyCode = async () => {
+      try {
+        const newCode = await generateCompanyCodeViaAPI()
+        setValue("company_code", newCode)
+        checkCompanyCode(newCode)
+      } catch (error) {
+        console.error("Error generating initial company code:", error)
+      }
+    }
+    initializeCompanyCode()
+  }, [setValue])
 
   // Check if company code is unique
   const checkCompanyCode = async (code: string) => {
     if (!code) return
 
     try {
-      const { data, error } = await supabase.from("companies").select("id").eq("company_code", code).maybeSingle()
+      console.log('🔍 Checking company code uniqueness:', code)
+      
+      const response = await fetch(`/api/companies/check-code?code=${encodeURIComponent(code)}`)
+      const result = await response.json()
 
-      if (error) throw error
-
-      setIsCodeUnique(!data)
+      const isUnique = result.success && !result.exists
+      setIsCodeUnique(isUnique)
+      
+      console.log(`${isUnique ? '✅' : '❌'} Company code ${code} is ${isUnique ? 'unique' : 'already in use'}`)
     } catch (error) {
-      console.error("Error checking company code:", error)
+      console.error("❌ Error checking company code:", error)
+      setIsCodeUnique(false)
     }
   }
 
   // Generate a new company code
-  const generateNewCode = () => {
-    const newCode = generateCompanyCode()
-    setValue("company_code", newCode)
-    checkCompanyCode(newCode)
+  const generateNewCode = async () => {
+    try {
+      const newCode = await generateCompanyCodeViaAPI()
+      setValue("company_code", newCode)
+      checkCompanyCode(newCode)
+    } catch (error) {
+      console.error("Error generating new company code:", error)
+    }
   }
 
   // Handle form submission
@@ -124,7 +174,8 @@ export default function AddCompanyForm({ onAddCompany }: AddCompanyFormProps) {
           })
         }
 
-        // Reset the form
+        // Reset the form and generate a new code
+        const newCode = await generateCompanyCodeViaAPI()
         reset({
           name: "",
           address: "",
@@ -134,8 +185,9 @@ export default function AddCompanyForm({ onAddCompany }: AddCompanyFormProps) {
           tax_id: "",
           registration_number: "",
           founded_date: "",
-          company_code: generateCompanyCode(),
+          company_code: newCode,
         })
+        checkCompanyCode(newCode)
       } else {
         toast({
           title: "Error",
@@ -173,7 +225,34 @@ export default function AddCompanyForm({ onAddCompany }: AddCompanyFormProps) {
               {...register("name")}
               className={errors.name ? "border-red-500" : ""}
             />
-            {errors.name && <p className="text-red-500 text-xs">{errors.name.message}</p>}
+            {errors.name && (
+              <p className="text-sm text-red-500">{errors.name.message}</p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="company_code" className="text-sm font-medium">
+              Company Code *
+            </label>
+            <div className="flex space-x-2">
+              <Input
+                id="company_code"
+                placeholder="Company code"
+                {...register("company_code")}
+                className={`flex-1 ${errors.company_code ? "border-red-500" : ""} ${
+                  !isCodeUnique ? "border-red-500" : ""
+                }`}
+              />
+              <Button type="button" variant="outline" onClick={generateNewCode}>
+                Generate
+              </Button>
+            </div>
+            {errors.company_code && (
+              <p className="text-sm text-red-500">{errors.company_code.message}</p>
+            )}
+            {!isCodeUnique && (
+              <p className="text-sm text-red-500">Company code already exists. Please use a different one.</p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -186,7 +265,9 @@ export default function AddCompanyForm({ onAddCompany }: AddCompanyFormProps) {
               {...register("address")}
               className={errors.address ? "border-red-500" : ""}
             />
-            {errors.address && <p className="text-red-500 text-xs">{errors.address.message}</p>}
+            {errors.address && (
+              <p className="text-sm text-red-500">{errors.address.message}</p>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -197,18 +278,24 @@ export default function AddCompanyForm({ onAddCompany }: AddCompanyFormProps) {
               <Input
                 id="email"
                 type="email"
-                placeholder="Enter company email"
+                placeholder="company@example.com"
                 {...register("email")}
                 className={errors.email ? "border-red-500" : ""}
               />
-              {errors.email && <p className="text-red-500 text-xs">{errors.email.message}</p>}
+              {errors.email && (
+                <p className="text-sm text-red-500">{errors.email.message}</p>
+              )}
             </div>
 
             <div className="space-y-2">
               <label htmlFor="phone" className="text-sm font-medium">
                 Phone
               </label>
-              <Input id="phone" placeholder="Enter company phone" {...register("phone")} />
+              <Input
+                id="phone"
+                placeholder="+1 (555) 123-4567"
+                {...register("phone")}
+              />
             </div>
           </div>
 
@@ -218,11 +305,13 @@ export default function AddCompanyForm({ onAddCompany }: AddCompanyFormProps) {
             </label>
             <Input
               id="website"
-              placeholder="https://example.com"
+              placeholder="https://company.com"
               {...register("website")}
               className={errors.website ? "border-red-500" : ""}
             />
-            {errors.website && <p className="text-red-500 text-xs">{errors.website.message}</p>}
+            {errors.website && (
+              <p className="text-sm text-red-500">{errors.website.message}</p>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -230,7 +319,11 @@ export default function AddCompanyForm({ onAddCompany }: AddCompanyFormProps) {
               <label htmlFor="tax_id" className="text-sm font-medium">
                 Tax ID
               </label>
-              <Input id="tax_id" placeholder="Enter tax ID" {...register("tax_id")} />
+              <Input
+                id="tax_id"
+                placeholder="Tax identification number"
+                {...register("tax_id")}
+              />
             </div>
 
             <div className="space-y-2">
@@ -239,7 +332,7 @@ export default function AddCompanyForm({ onAddCompany }: AddCompanyFormProps) {
               </label>
               <Input
                 id="registration_number"
-                placeholder="Enter registration number"
+                placeholder="Business registration number"
                 {...register("registration_number")}
               />
             </div>
@@ -249,39 +342,25 @@ export default function AddCompanyForm({ onAddCompany }: AddCompanyFormProps) {
             <label htmlFor="founded_date" className="text-sm font-medium">
               Founded Date
             </label>
-            <Input id="founded_date" type="date" {...register("founded_date")} />
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex justify-between items-center">
-              <label htmlFor="company_code" className="text-sm font-medium">
-                Company Code *
-              </label>
-              <Button type="button" variant="outline" size="sm" onClick={generateNewCode} disabled={isSubmitting}>
-                Generate New
-              </Button>
-            </div>
             <Input
-              id="company_code"
-              placeholder="Company code"
-              {...register("company_code")}
-              className={!isCodeUnique || errors.company_code ? "border-red-500" : ""}
-              onBlur={(e) => checkCompanyCode(e.target.value)}
+              id="founded_date"
+              type="date"
+              {...register("founded_date")}
             />
-            {errors.company_code && <p className="text-red-500 text-xs">{errors.company_code.message}</p>}
-            {!isCodeUnique && <p className="text-red-500 text-xs">This company code is already in use</p>}
           </div>
         </CardContent>
-        <CardFooter className="flex justify-between">
-          <Button type="button" variant="outline" onClick={() => reset()} disabled={isSubmitting}>
-            Reset
-          </Button>
-          <Button type="submit" disabled={isSubmitting || !isCodeUnique}>
+
+        <CardFooter>
+          <Button 
+            type="submit" 
+            disabled={isSubmitting || !isCodeUnique}
+            className="w-full"
+          >
             {isSubmitting ? (
-              <span className="flex items-center">
+              <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Adding...
-              </span>
+                Adding Company...
+              </>
             ) : (
               "Add Company"
             )}

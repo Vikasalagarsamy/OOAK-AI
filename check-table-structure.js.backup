@@ -1,0 +1,83 @@
+#!/usr/bin/env node
+
+import { createClient } from '@supabase/supabase-js'
+
+const supabase = createClient(
+  'http://127.0.0.1:54321', 
+  'yJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhdm9mcWR6amh5Zmp5Z2t4eW5xIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NTA5ODkxNCwiZXhwIjoyMDYwNjc0OTE0fQ.EDdXANDTnC8zjWciG_p6JORec0KyMVZQe2c0Ca6HfLY'
+)
+
+async function checkTables() {
+  console.log('🔍 CHECKING TABLE STRUCTURES AND DATA:')
+  console.log('=' * 50)
+  
+  // Check services table
+  console.log('\n🛠️  SERVICES TABLE:')
+  const { data: services, error: sError } = await supabase
+    .from('services')
+    .select('*')
+    .limit(3)
+  
+  if (sError) {
+    console.log('   Error:', sError.message)
+  } else {
+    console.log(`   Records found: ${services?.length || 0}`)
+    if (services && services.length > 0) {
+      console.log('   Columns:', Object.keys(services[0]).join(', '))
+      console.log('   Sample data:')
+      services.forEach((service, index) => {
+        console.log(`   ${index + 1}. ID: ${service.id}, Name: ${service.servicename || service.name || 'Unknown'}`)
+      })
+    }
+  }
+  
+  // Check deliverables table
+  console.log('\n📦 DELIVERABLES TABLE:')
+  const { data: deliverables, error: dError } = await supabase
+    .from('deliverables')
+    .select('*')
+    .limit(3)
+  
+  if (dError) {
+    console.log('   Error:', dError.message)
+  } else {
+    console.log(`   Records found: ${deliverables?.length || 0}`)
+    if (deliverables && deliverables.length > 0) {
+      console.log('   Columns:', Object.keys(deliverables[0]).join(', '))
+      console.log('   Sample data:')
+      deliverables.forEach((deliverable, index) => {
+        console.log(`   ${index + 1}. ID: ${deliverable.id}, Name: ${deliverable.deliverable_name || deliverable.name || 'Unknown'}`)
+      })
+    }
+  }
+  
+  // Check quotation_events table
+  console.log('\n🎉 QUOTATION_EVENTS TABLE:')
+  const { data: events, error: eError } = await supabase
+    .from('quotation_events')
+    .select('*')
+    .eq('quotation_id', 19)
+  
+  if (eError) {
+    console.log('   Error:', eError.message)
+  } else {
+    console.log(`   Events for quotation 19: ${events?.length || 0}`)
+    if (events && events.length > 0) {
+      events.forEach((event, index) => {
+        console.log(`   ${index + 1}. ${event.event_name}: ${event.selected_services?.length || 0} services, ${event.selected_deliverables?.length || 0} deliverables`)
+      })
+    }
+  }
+  
+  // Get total counts
+  console.log('\n📊 TABLE COUNTS:')
+  const { count: sCount } = await supabase.from('services').select('*', { count: 'exact', head: true })
+  const { count: dCount } = await supabase.from('deliverables').select('*', { count: 'exact', head: true })
+  const { count: eCount } = await supabase.from('quotation_events').select('*', { count: 'exact', head: true })
+  
+  console.log(`   Services: ${sCount} records`)
+  console.log(`   Deliverables: ${dCount} records`)
+  console.log(`   Quotation Events: ${eCount} records`)
+}
+
+checkTables().catch(console.error) 

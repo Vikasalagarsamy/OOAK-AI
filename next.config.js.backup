@@ -1,0 +1,38 @@
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  // Force port 3000 always
+  env: {
+    PORT: '3000',
+    NEXT_PUBLIC_BASE_URL: 'http://localhost:3000'
+  },
+  
+  // Development server configuration
+  async rewrites() {
+    return []
+  },
+  
+  // External packages for PostgreSQL client
+  serverExternalPackages: ['pg', 'pg-pool'],
+  
+  // Webpack configuration to handle PostgreSQL and Node.js modules
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      // Don't bundle PostgreSQL and Node.js specific modules on the client side
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        net: false,
+        tls: false,
+        crypto: false,
+        stream: false,
+        buffer: require.resolve('buffer'),
+        pg: false,
+        'pg-pool': false,
+        'pg-connection-string': false,
+      }
+    }
+    return config
+  }
+}
+
+export default nextConfig 

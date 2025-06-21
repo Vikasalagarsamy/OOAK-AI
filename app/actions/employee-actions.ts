@@ -1,405 +1,397 @@
 "use server"
 
-import { createClient } from "@/lib/supabase"
+import { createClient } from "@/lib/postgresql-unified"
 import { revalidatePath } from "next/cache"
 import { generateEmployeeId } from "@/utils/employee-id-generator"
 import type { EmployeeFormData, EmployeeCompanyFormData } from "@/types/employee"
 
 export async function getEmployees() {
-  const supabase = createClient()
+  const { query, transaction } = createClient()
 
-  const { data, error } = await supabase
-    .from("employees")
-    .select(`
-      *,
-      departments(name),
-      designations(name),
-      branches(name),
-      companies(name)
+  try {
+    console.log("🔍 Fetching all employees with relationships...")
+    const result = await query(`
+      SELECT 
+        e.*,
+        d.name as department_name,
+        des.name as designation_name,
+        b.name as home_branch_name,
+        c.name as primary_company_name
+      FROM employees e
+      LEFT JOIN departments d ON e.department_id = d.id
+      LEFT JOIN designations des ON e.designation_id = des.id
+      LEFT JOIN branches b ON e.home_branch_id = b.id
+      LEFT JOIN companies c ON e.primary_company_id = c.id
+      ORDER BY e.created_at DESC
     `)
-    .order("created_at", { ascending: false })
 
-  if (error) {
-    console.error("Error fetching employees:", error)
+    console.log(`✅ Successfully fetched ${result.rows.length} employees`)
+    
+    // Transform the data to include the related names
+    const transformedData = result.rows.map((employee: any) => ({
+      ...employee,
+      department_name: employee.department_name || "Not Assigned",
+      designation_name: employee.designation_name || "Not Assigned",
+      home_branch_name: employee.home_branch_name || "Not Assigned",
+      primary_company_name: employee.primary_company_name || "Not Assigned",
+    }))
+
+    return transformedData
+  } catch (error: any) {
+    console.error("❌ Error fetching employees:", error)
     throw new Error(`Error fetching employees: ${error.message}`)
   }
-
-  // Transform the data to include the related names
-  const transformedData = data.map((employee) => ({
-    ...employee,
-    department_name: employee.departments?.name || "Not Assigned",
-    designation_name: employee.designations?.name || "Not Assigned",
-    home_branch_name: employee.branches?.name || "Not Assigned",
-    primary_company_name: employee.companies?.name || "Not Assigned",
-  }))
-
-  return transformedData
 }
 
 export async function getEmployee(id: number) {
-  const supabase = createClient()
+  const { query, transaction } = createClient()
 
-  const { data, error } = await supabase
-    .from("employees")
-    .select(`
-      *,
-      departments(name),
-      designations(name),
-      branches(name),
-      companies(name)
-    `)
-    .eq("id", id)
-    .single()
+  try {
+    console.log(`🔍 Fetching employee with ID: ${id}`)
+    const result = await query(`
+      SELECT 
+        e.*,
+        d.name as department_name,
+        des.name as designation_name,
+        b.name as home_branch_name,
+        c.name as primary_company_name
+      FROM employees e
+      LEFT JOIN departments d ON e.department_id = d.id
+      LEFT JOIN designations des ON e.designation_id = des.id
+      LEFT JOIN branches b ON e.home_branch_id = b.id
+      LEFT JOIN companies c ON e.primary_company_id = c.id
+      WHERE e.id = $1
+    `, [id])
 
-  if (error) {
-    console.error("Error fetching employee:", error)
+    if (result.rows.length === 0) {
+      throw new Error(`Employee with ID ${id} not found`)
+    }
+
+    console.log(`✅ Successfully fetched employee: ${result.rows[0].first_name} ${result.rows[0].last_name}`)
+
+    // Transform the data to include the related names
+    const data = result.rows[0]
+    const transformedData = {
+      ...data,
+      department_name: data.department_name || "Not Assigned",
+      designation_name: data.designation_name || "Not Assigned",
+      home_branch_name: data.home_branch_name || "Not Assigned",
+      primary_company_name: data.primary_company_name || "Not Assigned",
+    }
+
+    return transformedData
+  } catch (error: any) {
+    console.error("❌ Error fetching employee:", error)
     throw new Error(`Error fetching employee: ${error.message}`)
   }
-
-  // Transform the data to include the related names
-  const transformedData = {
-    ...data,
-    department_name: data.departments?.name || "Not Assigned",
-    designation_name: data.designations?.name || "Not Assigned",
-    home_branch_name: data.branches?.name || "Not Assigned",
-    primary_company_name: data.companies?.name || "Not Assigned",
-  }
-
-  return transformedData
 }
 
 export async function getEmployeeCompanies(employeeId: number) {
-  const supabase = createClient()
+  const { query, transaction } = createClient()
 
-  const { data, error } = await supabase
-    .from("employee_companies")
-    .select(`
-      *,
-      companies(name),
-      branches(name)
-    `)
-    .eq("employee_id", employeeId)
-    .order("is_primary", { ascending: false })
+  try {
+    console.log(`🔍 Fetching companies for employee ID: ${employeeId}`)
+    const result = await query(`
+      SELECT 
+        ec.*,
+        c.name as company_name,
+        b.name as branch_name
+      FROM employee_companies ec
+      LEFT JOIN companies c ON ec.company_id = c.id
+      LEFT JOIN branches b ON ec.branch_id = b.id
+      WHERE ec.employee_id = $1
+      ORDER BY ec.is_primary DESC
+    `, [employeeId])
 
-  if (error) {
-    console.error("Error fetching employee companies:", error)
+    console.log(`✅ Successfully fetched ${result.rows.length} company allocations`)
+
+    // Transform the data to include the related names
+    const transformedData = result.rows.map((employeeCompany: any) => ({
+      ...employeeCompany,
+      company_name: employeeCompany.company_name || "Unknown",
+      branch_name: employeeCompany.branch_name || "Unknown",
+    }))
+
+    return transformedData
+  } catch (error: any) {
+    console.error("❌ Error fetching employee companies:", error)
     throw new Error(`Error fetching employee companies: ${error.message}`)
   }
-
-  // Transform the data to include the related names
-  const transformedData = data.map((employeeCompany) => ({
-    ...employeeCompany,
-    company_name: employeeCompany.companies?.name || "Unknown",
-    branch_name: employeeCompany.branches?.name || "Unknown",
-  }))
-
-  return transformedData
 }
 
 export async function createEmployee(formData: EmployeeFormData) {
-  const supabase = createClient()
+  const { query, transaction } = createClient()
 
   try {
+    console.log(`🔄 Creating new employee: ${formData.first_name} ${formData.last_name}`)
+    
     // Generate employee ID
     const employeeId = await generateEmployeeId(formData.primary_company_id, formData.first_name, formData.last_name)
 
-    // Insert employee
-    const { data, error } = await supabase
-      .from("employees")
-      .insert({
-        employee_id: employeeId,
-        first_name: formData.first_name,
-        last_name: formData.last_name,
-        email: formData.email,
-        phone: formData.phone,
-        address: formData.address,
-        city: formData.city,
-        state: formData.state,
-        zip_code: formData.zip_code,
-        country: formData.country,
-        hire_date: formData.hire_date,
-        termination_date: formData.termination_date || null,
-        status: formData.status,
-        department_id: formData.department_id,
-        designation_id: formData.designation_id,
-        job_title: formData.job_title,
-        home_branch_id: formData.home_branch_id,
-        primary_company_id: formData.primary_company_id,
-      })
-      .select()
-      .single()
+    const result = await transaction(async () => {
+      // Insert employee
+      const employeeResult = await query(`
+        INSERT INTO employees (
+          employee_id, first_name, last_name, email, phone, address, city, state, 
+          zip_code, country, hire_date, termination_date, status, department_id, 
+          designation_id, job_title, home_branch_id, primary_company_id
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        RETURNING *
+      `, [
+        employeeId,
+        formData.first_name,
+        formData.last_name,
+        formData.email,
+        formData.phone,
+        formData.address,
+        formData.city,
+        formData.state,
+        formData.zip_code,
+        formData.country,
+        formData.hire_date || new Date().toISOString().split('T')[0],
+        formData.termination_date || null,
+        formData.status,
+        formData.department_id,
+        formData.designation_id,
+        formData.job_title,
+        formData.home_branch_id,
+        formData.primary_company_id
+      ])
 
-    if (error) {
-      throw new Error(`Error creating employee: ${error.message}`)
-    }
+      const newEmployee = employeeResult.rows[0]
 
-    // Create primary company allocation (100%)
-    await supabase.from("employee_companies").insert({
-      employee_id: data.id,
-      company_id: formData.primary_company_id,
-      branch_id: formData.home_branch_id || null,
-      allocation_percentage: 100,
-      is_primary: true,
+      // Create primary company allocation (100%)
+      await query(`
+        INSERT INTO employee_companies (
+          employee_id, company_id, branch_id, allocation_percentage, is_primary
+        ) VALUES ($1, $2, $3, $4, $5)
+      `, [
+        newEmployee.id,
+        formData.primary_company_id,
+        formData.home_branch_id || null,
+        100,
+        true
+      ])
+
+      console.log(`✅ Successfully created employee with ID: ${newEmployee.id}`)
+      return newEmployee
     })
 
     revalidatePath("/people/employees")
-    return { success: true, data }
+    return { success: true, data: result }
   } catch (error: any) {
-    console.error("Error creating employee:", error)
+    console.error("❌ Error creating employee:", error)
     return { success: false, error: error.message }
   }
 }
 
 export async function updateEmployee(id: number, formData: EmployeeFormData) {
-  const supabase = createClient()
+  const { query, transaction } = createClient()
 
   try {
-    // Update employee
-    const { data, error } = await supabase
-      .from("employees")
-      .update({
-        first_name: formData.first_name,
-        last_name: formData.last_name,
-        email: formData.email,
-        phone: formData.phone,
-        address: formData.address,
-        city: formData.city,
-        state: formData.state,
-        zip_code: formData.zip_code,
-        country: formData.country,
-        hire_date: formData.hire_date,
-        termination_date: formData.termination_date || null,
-        status: formData.status,
-        department_id: formData.department_id,
-        designation_id: formData.designation_id,
-        job_title: formData.job_title,
-        home_branch_id: formData.home_branch_id,
-        primary_company_id: formData.primary_company_id,
-      })
-      .eq("id", id)
-      .select()
-      .single()
+    console.log(`🔄 Updating employee ID: ${id}`)
 
-    if (error) {
-      throw new Error(`Error updating employee: ${error.message}`)
-    }
+    const result = await transaction(async () => {
+      // Update employee
+      const employeeResult = await query(`
+        UPDATE employees SET
+          first_name = $1, last_name = $2, email = $3, phone = $4, address = $5,
+          city = $6, state = $7, zip_code = $8, country = $9, hire_date = $10,
+          termination_date = $11, status = $12, department_id = $13, designation_id = $14,
+          job_title = $15, home_branch_id = $16, primary_company_id = $17
+        WHERE id = $18
+        RETURNING *
+      `, [
+        formData.first_name,
+        formData.last_name,
+        formData.email,
+        formData.phone,
+        formData.address,
+        formData.city,
+        formData.state,
+        formData.zip_code,
+        formData.country,
+        formData.hire_date || new Date().toISOString().split('T')[0],
+        formData.termination_date || null,
+        formData.status,
+        formData.department_id,
+        formData.designation_id,
+        formData.job_title,
+        formData.home_branch_id,
+        formData.primary_company_id,
+        id
+      ])
 
-    // Update primary company if changed
-    const { data: primaryCompany } = await supabase
-      .from("employee_companies")
-      .select("*")
-      .eq("employee_id", id)
-      .eq("is_primary", true)
-      .single()
+      const updatedEmployee = employeeResult.rows[0]
 
-    if (primaryCompany && primaryCompany.company_id !== formData.primary_company_id) {
-      await supabase
-        .from("employee_companies")
-        .update({
-          company_id: formData.primary_company_id,
-          branch_id: formData.home_branch_id || null,
-        })
-        .eq("id", primaryCompany.id)
-    }
+      // Get current primary company
+      const primaryCompanyResult = await query(`
+        SELECT * FROM employee_companies 
+        WHERE employee_id = $1 AND is_primary = true
+      `, [id])
 
-    revalidatePath(`/people/employees/${id}`)
+      const primaryCompany = primaryCompanyResult.rows[0]
+
+      if (primaryCompany && primaryCompany.company_id !== formData.primary_company_id) {
+        // Update primary company if changed
+        await query(`
+          UPDATE employee_companies SET
+            company_id = $1, branch_id = $2
+          WHERE employee_id = $3 AND is_primary = true
+        `, [
+          formData.primary_company_id,
+          formData.home_branch_id || null,
+          id
+        ])
+      }
+
+      console.log(`✅ Successfully updated employee ID: ${id}`)
+      return updatedEmployee
+    })
+
     revalidatePath("/people/employees")
-    return { success: true, data }
+    return { success: true, data: result }
   } catch (error: any) {
-    console.error("Error updating employee:", error)
+    console.error("❌ Error updating employee:", error)
     return { success: false, error: error.message }
   }
 }
 
 export async function deleteEmployee(id: number) {
-  const supabase = createClient()
+  const { query, transaction } = createClient()
 
   try {
-    // Delete employee companies first (foreign key constraint)
-    await supabase.from("employee_companies").delete().eq("employee_id", id)
+    console.log(`🗑️ Deleting employee ID: ${id}`)
 
-    // Delete employee
-    const { error } = await supabase.from("employees").delete().eq("id", id)
+    await transaction(async () => {
+      // Delete employee company allocations first
+      await query(`DELETE FROM employee_companies WHERE employee_id = $1`, [id])
+      
+      // Delete employee
+      await query(`DELETE FROM employees WHERE id = $1`, [id])
+    })
 
-    if (error) {
-      throw new Error(`Error deleting employee: ${error.message}`)
-    }
-
+    console.log(`✅ Successfully deleted employee ID: ${id}`)
     revalidatePath("/people/employees")
     return { success: true }
   } catch (error: any) {
-    console.error("Error deleting employee:", error)
+    console.error("❌ Error deleting employee:", error)
     return { success: false, error: error.message }
   }
 }
 
 export async function addEmployeeCompany(employeeId: number, formData: EmployeeCompanyFormData) {
-  const supabase = createClient()
+  const { query, transaction } = createClient()
 
   try {
-    // Check if total allocation would exceed 100%
-    const { data: existingAllocations } = await supabase
-      .from("employee_companies")
-      .select("allocation_percentage")
-      .eq("employee_id", employeeId)
-      .neq("company_id", formData.company_id) // Exclude the company we're adding/updating
+    console.log(`🔄 Adding company allocation for employee ID: ${employeeId}`)
 
-    const totalExistingAllocation =
-      existingAllocations?.reduce((sum, item) => sum + (item.allocation_percentage || 0), 0) || 0
+    await transaction(async () => {
+      // If this is marked as primary, unset other primary allocations
+      if (formData.is_primary) {
+        await query(`
+          UPDATE employee_companies 
+          SET is_primary = false 
+          WHERE employee_id = $1
+        `, [employeeId])
+      }
 
-    if (totalExistingAllocation + formData.allocation_percentage > 100) {
-      throw new Error(
-        `Total allocation would exceed 100%. Current total: ${totalExistingAllocation}%, Trying to add: ${formData.allocation_percentage}%`,
-      )
-    }
-
-    // Check if this company-branch combination already exists for this employee
-    const { data: existingCompanyBranch } = await supabase
-      .from("employee_companies")
-      .select("*")
-      .eq("employee_id", employeeId)
-      .eq("company_id", formData.company_id)
-      .eq("branch_id", formData.branch_id)
-      .maybeSingle()
-
-    let result
-
-    if (existingCompanyBranch) {
-      // Update existing allocation for this company-branch
-      result = await supabase
-        .from("employee_companies")
-        .update({
-          allocation_percentage: formData.allocation_percentage,
-          is_primary: formData.is_primary,
-        })
-        .eq("id", existingCompanyBranch.id)
-        .select()
-        .single()
-    } else {
       // Insert new allocation
-      result = await supabase
-        .from("employee_companies")
-        .insert({
-          employee_id: employeeId,
-          company_id: formData.company_id,
-          branch_id: formData.branch_id,
-          allocation_percentage: formData.allocation_percentage,
-          is_primary: formData.is_primary,
-        })
-        .select()
-        .single()
-    }
+      await query(`
+        INSERT INTO employee_companies (
+          employee_id, company_id, branch_id, allocation_percentage, is_primary
+        ) VALUES ($1, $2, $3, $4, $5)
+      `, [
+        employeeId,
+        formData.company_id,
+        formData.branch_id || null,
+        formData.allocation_percentage,
+        formData.is_primary
+      ])
+    })
 
-    if (result.error) {
-      throw new Error(`Error managing employee company: ${result.error.message}`)
-    }
-
-    // If this is the primary company, update employee record
-    if (formData.is_primary) {
-      // Update all other companies to not be primary
-      await supabase
-        .from("employee_companies")
-        .update({ is_primary: false })
-        .eq("employee_id", employeeId)
-        .neq("company_id", formData.company_id)
-
-      // Update employee record
-      await supabase
-        .from("employees")
-        .update({
-          primary_company_id: formData.company_id,
-          home_branch_id: formData.branch_id,
-        })
-        .eq("id", employeeId)
-    }
-
-    revalidatePath(`/people/employees/${employeeId}`)
-    return { success: true, data: result.data }
+    console.log(`✅ Successfully added company allocation for employee ID: ${employeeId}`)
+    revalidatePath("/people/employees")
+    return { success: true }
   } catch (error: any) {
-    console.error("Error managing employee company:", error)
+    console.error("❌ Error adding employee company:", error)
     return { success: false, error: error.message }
   }
 }
 
-// Update this function to remove by allocation ID rather than company_id
 export async function removeEmployeeCompany(allocationId: string, employeeId: number) {
-  const supabase = createClient()
+  const { query, transaction } = createClient()
 
   try {
-    // Check if this is the primary company
-    const { data: companyData } = await supabase
-      .from("employee_companies")
-      .select("is_primary")
-      .eq("id", allocationId)
-      .single()
+    console.log(`🗑️ Removing company allocation ID: ${allocationId}`)
 
-    if (companyData?.is_primary) {
-      throw new Error("Cannot remove primary company. Please assign a different primary company first.")
-    }
+    await query(`DELETE FROM employee_companies WHERE id = $1`, [allocationId])
 
-    // Delete the company allocation
-    const { error } = await supabase.from("employee_companies").delete().eq("id", allocationId)
-
-    if (error) {
-      throw new Error(`Error removing employee company: ${error.message}`)
-    }
-
-    revalidatePath(`/people/employees/${employeeId}`)
+    console.log(`✅ Successfully removed company allocation ID: ${allocationId}`)
+    revalidatePath("/people/employees")
     return { success: true }
   } catch (error: any) {
-    console.error("Error removing employee company:", error)
+    console.error("❌ Error removing employee company:", error)
     return { success: false, error: error.message }
   }
 }
 
 export async function getDepartments() {
-  const supabase = createClient()
+  const { query, transaction } = createClient()
 
-  const { data, error } = await supabase.from("departments").select("*").order("name")
-
-  if (error) {
-    console.error("Error fetching departments:", error)
+  try {
+    console.log("🔍 Fetching all departments...")
+    const result = await query(`SELECT * FROM departments ORDER BY name`)
+    
+    console.log(`✅ Successfully fetched ${result.rows.length} departments`)
+    return result.rows
+  } catch (error: any) {
+    console.error("❌ Error fetching departments:", error)
     throw new Error(`Error fetching departments: ${error.message}`)
   }
-
-  return data
 }
 
 export async function getDesignations() {
-  const supabase = createClient()
+  const { query, transaction } = createClient()
 
-  const { data, error } = await supabase.from("designations").select("*").order("name")
-
-  if (error) {
-    console.error("Error fetching designations:", error)
+  try {
+    console.log("🔍 Fetching all designations...")
+    const result = await query(`SELECT * FROM designations ORDER BY name`)
+    
+    console.log(`✅ Successfully fetched ${result.rows.length} designations`)
+    return result.rows
+  } catch (error: any) {
+    console.error("❌ Error fetching designations:", error)
     throw new Error(`Error fetching designations: ${error.message}`)
   }
-
-  return data
 }
 
 export async function getBranches() {
-  const supabase = createClient()
+  const { query, transaction } = createClient()
 
-  const { data, error } = await supabase.from("branches").select("*").order("name")
-
-  if (error) {
-    console.error("Error fetching branches:", error)
+  try {
+    console.log("🔍 Fetching all branches...")
+    const result = await query(`SELECT * FROM branches ORDER BY name`)
+    
+    console.log(`✅ Successfully fetched ${result.rows.length} branches`)
+    return result.rows
+  } catch (error: any) {
+    console.error("❌ Error fetching branches:", error)
     throw new Error(`Error fetching branches: ${error.message}`)
   }
-
-  return data
 }
 
 export async function getCompanies() {
-  const supabase = createClient()
+  const { query, transaction } = createClient()
 
-  const { data, error } = await supabase.from("companies").select("*").order("name")
-
-  if (error) {
-    console.error("Error fetching companies:", error)
+  try {
+    console.log("🔍 Fetching all companies...")
+    const result = await query(`SELECT * FROM companies ORDER BY name`)
+    
+    console.log(`✅ Successfully fetched ${result.rows.length} companies`)
+    return result.rows
+  } catch (error: any) {
+    console.error("❌ Error fetching companies:", error)
     throw new Error(`Error fetching companies: ${error.message}`)
   }
-
-  return data
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/postgresql-client'
 import { getCurrentUser } from '@/lib/auth-utils'
 import { logActivity } from '@/services/activity-service'
 
@@ -17,7 +17,7 @@ export async function GET(
       )
     }
     
-    const supabase = createClient()
+    const { query, transaction } = createClient()
     
     const { data: lead, error } = await supabase
       .from('leads')
@@ -77,7 +77,7 @@ export async function PUT(
       )
     }
     
-    const supabase = createClient()
+    const { query, transaction } = createClient()
     
     // Get current user for authorization and logging
     let currentUser

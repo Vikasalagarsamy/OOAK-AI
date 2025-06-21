@@ -1,0 +1,111 @@
+version: '3.8'
+
+services:
+  # Production Next.js Application
+  ooak-production-app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.production
+    container_name: ooak-production-app
+    ports:
+      - "4000:3000"  # Production runs on port 4000
+    environment:
+      - NODE_ENV=production
+      - POSTGRES_HOST=host.docker.internal
+      - POSTGRES_PORT=5432
+      - POSTGRES_DATABASE=ooak_future_production
+      - POSTGRES_USER=vikasalagarsamy
+      - POSTGRES_PASSWORD=
+      - NEXTAUTH_URL=http://localhost:4000
+      - NEXTAUTH_SECRET=production-secret-key-change-this
+    volumes:
+      - ../uploads:/app/uploads
+      - production-logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - ooak-production
+    depends_on:
+      - ooak-production-db
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Production Database (if you want separate DB server)
+  ooak-production-db:
+    image: postgres:15
+    container_name: ooak-production-db
+    ports:
+      - "5433:5432"  # Different port to avoid conflicts
+    environment:
+      - POSTGRES_DB=ooak_future_production
+      - POSTGRES_USER=vikasalagarsamy
+      - POSTGRES_PASSWORD=production-db-password
+    volumes:
+      - production-db-data:/var/lib/postgresql/data
+      - ../sql:/docker-entrypoint-initdb.d
+    restart: unless-stopped
+    networks:
+      - ooak-production
+
+  # Sync Service (runs the sync script)
+  ooak-sync-service:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.sync
+    container_name: ooak-sync-service
+    environment:
+      - LOCAL_DB_HOST=host.docker.internal
+      - LOCAL_DB_PORT=5432
+      - LOCAL_DB_NAME=ooak_future
+      - PROD_DB_HOST=ooak-production-db
+      - PROD_DB_PORT=5432
+      - PROD_DB_NAME=ooak_future_production
+      - POSTGRES_USER=vikasalagarsamy
+      - POSTGRES_PASSWORD=production-db-password
+    volumes:
+      - sync-logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - ooak-production
+    depends_on:
+      - ooak-production-db
+
+  # Redis for session management (optional)
+  ooak-redis:
+    image: redis:7-alpine
+    container_name: ooak-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    networks:
+      - ooak-production
+
+  # Nginx reverse proxy (optional)
+  ooak-nginx:
+    image: nginx:alpine
+    container_name: ooak-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ../uploads:/var/www/uploads
+    restart: unless-stopped
+    networks:
+      - ooak-production
+    depends_on:
+      - ooak-production-app
+
+volumes:
+  production-db-data:
+  production-logs:
+  sync-logs:
+  redis-data:
+
+networks:
+  ooak-production:
+    driver: bridge 

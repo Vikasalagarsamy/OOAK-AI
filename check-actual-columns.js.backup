@@ -1,0 +1,75 @@
+#!/usr/bin/env node
+
+import { createClient } from '@supabase/supabase-js'
+
+const supabase = createClient(
+  'http://127.0.0.1:54321', 
+  'yJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhdm9mcWR6amh5Zmp5Z2t4eW5xIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NTA5ODkxNCwiZXhwIjoyMDYwNjc0OTE0fQ.EDdXANDTnC8zjWciG_p6JORec0KyMVZQe2c0Ca6HfLY'
+)
+
+async function checkActualColumns() {
+  console.log('🔍 CHECKING ACTUAL TABLE COLUMNS')
+  console.log('=' * 50)
+  
+  // Try to insert a minimal record to see what columns are required/available
+  console.log('\n🛠️  SERVICES TABLE STRUCTURE:')
+  try {
+    const { data, error } = await supabase
+      .from('services')
+      .insert({ servicename: 'Test Service' })
+      .select()
+    
+    if (data && data.length > 0) {
+      console.log('   Available columns:', Object.keys(data[0]).join(', '))
+      // Delete the test record
+      await supabase.from('services').delete().eq('id', data[0].id)
+    } else if (error) {
+      console.log('   Error (shows required columns):', error.message)
+    }
+  } catch (err) {
+    console.log('   Error:', err.message)
+  }
+  
+  console.log('\n📦 DELIVERABLES TABLE STRUCTURE:')
+  try {
+    const { data, error } = await supabase
+      .from('deliverables')
+      .insert({ deliverable_name: 'Test Deliverable' })
+      .select()
+    
+    if (data && data.length > 0) {
+      console.log('   Available columns:', Object.keys(data[0]).join(', '))
+      // Delete the test record
+      await supabase.from('deliverables').delete().eq('id', data[0].id)
+    } else if (error) {
+      console.log('   Error (shows required columns):', error.message)
+    }
+  } catch (err) {
+    console.log('   Error:', err.message)
+  }
+  
+  console.log('\n🎉 QUOTATION_EVENTS TABLE STRUCTURE:')
+  try {
+    const { data, error } = await supabase
+      .from('quotation_events')
+      .insert({ 
+        quotation_id: 999, 
+        event_name: 'Test Event',
+        event_date: '2025-01-01',
+        event_location: 'Test Location'
+      })
+      .select()
+    
+    if (data && data.length > 0) {
+      console.log('   Available columns:', Object.keys(data[0]).join(', '))
+      // Delete the test record
+      await supabase.from('quotation_events').delete().eq('id', data[0].id)
+    } else if (error) {
+      console.log('   Error (shows required columns):', error.message)
+    }
+  } catch (err) {
+    console.log('   Error:', err.message)
+  }
+}
+
+checkActualColumns().catch(console.error) 

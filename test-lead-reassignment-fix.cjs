@@ -1,0 +1,214 @@
+// 🚨 MIGRATED FROM SUPABASE TO POSTGRESQL
+// Migration Date: 2025-06-20T09:50:05.792Z
+// Original file backed up as: test-lead-reassignment-fix.cjs.backup
+
+
+// PostgreSQL connection pool
+const pool = new Pool({
+  host: process.env.POSTGRES_HOST || 'localhost',
+  port: process.env.POSTGRES_PORT || 5432,
+  database: process.env.POSTGRES_DATABASE || 'ooak_future',
+  user: process.env.POSTGRES_USER || 'postgres',
+  password: process.env.POSTGRES_PASSWORD || 'password',
+  ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false,
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+});
+
+
+// Query helper function
+async function query(text, params = []) {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(text, params);
+    return { data: result.rows, error: null };
+  } catch (error) {
+    console.error('❌ PostgreSQL Query Error:', error.message);
+    return { data: null, error: error.message };
+  } finally {
+    client.release();
+  }
+}
+
+// Transaction helper function  
+async function transaction(callback) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await callback(client);
+    await client.query('COMMIT');
+    return { data: result, error: null };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ PostgreSQL Transaction Error:', error.message);
+    return { data: null, error: error.message };
+  } finally {
+    client.release();
+  }
+}
+
+// Original content starts here:
+// Test script to verify lead reassignment fix works correctly
+const { Pool } = require('pg');)
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+if (!supabaseUrl || !supabaseKey) {
+  console.error('Missing Supabase credentials')
+  process.exit(1)
+}
+
+// PostgreSQL connection - see pool configuration below
+
+async function testLeadReassignmentFix() {
+  console.log('🧪 TESTING LEAD REASSIGNMENT FIX')
+  console.log('=================================')
+
+  try {
+    // 1. Get the current active Ramya task assigned to Sridhar K
+    console.log('\n1. 🎯 Finding current Ramya task assigned to Sridhar K...')
+    const { data: currentTask, error: taskError } = await supabase
+      .from('ai_tasks')
+      .select(`
+        id, task_title, assigned_to_employee_id, quotation_id, lead_id, status,
+        quotations(id, quotation_number, client_name, lead_id)
+      `)
+      .ilike('task_title', '%ramya%')
+      .eq('status', 'pending')
+      .eq('assigned_to_employee_id', 6) // Sridhar K
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+
+    if (taskError || !currentTask) {
+      console.log('❌ No active Ramya task found for Sridhar K')
+      return
+    }
+
+    console.log('✅ Found active task:')
+    console.log(`  - Task ID: ${currentTask.id}`)
+    console.log(`  - Title: ${currentTask.task_title}`)
+    console.log(`  - Current lead_id: ${currentTask.lead_id}`)
+    console.log(`  - Quotation lead_id: ${currentTask.quotations?.lead_id}`)
+    console.log(`  - Status: ${currentTask.status}`)
+
+    // 2. Check if the lead_id is properly set
+    if (!currentTask.lead_id && currentTask.quotations?.lead_id) {
+      console.log('\n⚠️ Task is missing lead_id! This is the bug we need to fix.')
+      console.log('Running backfill update...')
+      
+      const { error: updateError } = await supabase
+        .from('ai_tasks')
+        .update({ lead_id: currentTask.quotations.lead_id })
+        .eq('id', currentTask.id)
+
+      if (updateError) {
+        console.error('❌ Failed to update task:', updateError)
+        return
+      }
+      
+      console.log('✅ Task updated with correct lead_id!')
+      currentTask.lead_id = currentTask.quotations.lead_id // Update local copy
+    }
+
+    if (!currentTask.lead_id) {
+      console.log('❌ No lead_id available - cannot test reassignment')
+      return
+    }
+
+    // 3. Test the reassignment API
+    console.log('\n2. 🔄 Testing task reassignment API...')
+    console.log(`   Reassigning task ${currentTask.id} to Deepika (employee_id: 22)`)
+    
+    const reassignResponse = await fetch('http://127.0.0.1:3000/api/tasks/reassign', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        taskId: currentTask.id,
+        newEmployeeId: 22 // Deepika Devi
+      })
+    })
+
+    if (!reassignResponse.ok) {
+      const errorText = await reassignResponse.text()
+      console.error('❌ Reassignment API failed:', errorText)
+      return
+    }
+
+    const reassignResult = await reassignResponse.json()
+    console.log('✅ Reassignment API response:', reassignResult)
+
+    // 4. Verify the task was reassigned
+    console.log('\n3. 🔍 Verifying task reassignment...')
+    const { data: updatedTask, error: verifyTaskError } = await supabase
+      .from('ai_tasks')
+      .select('id, assigned_to_employee_id, assigned_to, lead_id')
+      .eq('id', currentTask.id)
+      .single()
+
+    if (verifyTaskError) {
+      console.error('❌ Failed to verify task:', verifyTaskError)
+      return
+    }
+
+    console.log('✅ Task after reassignment:')
+    console.log(`  - Assigned to employee_id: ${updatedTask.assigned_to_employee_id}`)
+    console.log(`  - Assigned to name: ${updatedTask.assigned_to}`)
+    console.log(`  - Lead ID: ${updatedTask.lead_id}`)
+
+    // 5. Verify the lead was reassigned
+    console.log('\n4. 🎯 Verifying lead reassignment...')
+    const { data: updatedLead, error: verifyLeadError } = await supabase
+      .from('leads')
+      .select('id, assigned_to, client_name, employees(first_name, last_name)')
+      .eq('id', currentTask.lead_id)
+      .single()
+
+    if (verifyLeadError) {
+      console.error('❌ Failed to verify lead:', verifyLeadError)
+      return
+    }
+
+    console.log('✅ Lead after reassignment:')
+    console.log(`  - Lead ID: ${updatedLead.id}`)
+    console.log(`  - Client: ${updatedLead.client_name}`)
+    console.log(`  - Assigned to employee_id: ${updatedLead.assigned_to}`)
+    console.log(`  - Assigned to name: ${updatedLead.employees?.first_name} ${updatedLead.employees?.last_name}`)
+
+    // 6. Final verification
+    console.log('\n5. ✅ FINAL VERIFICATION')
+    const success = (
+      updatedTask.assigned_to_employee_id === 22 && 
+      updatedLead.assigned_to === 22 &&
+      reassignResult.leadReassigned === true
+    )
+
+    if (success) {
+      console.log('🎉 SUCCESS! Both task and lead were reassigned correctly!')
+      console.log('✅ Task reassignment works properly now!')
+    } else {
+      console.log('❌ FAILURE! Reassignment did not work correctly.')
+      console.log('Task reassigned:', updatedTask.assigned_to_employee_id === 22)
+      console.log('Lead reassigned:', updatedLead.assigned_to === 22)
+      console.log('API confirmed lead reassignment:', reassignResult.leadReassigned)
+    }
+
+    // 7. Show who should now see the task and lead
+    console.log('\n6. 👥 WHO CAN NOW SEE WHAT:')
+    console.log('✅ Deepika Devi (Employee ID: 22) should now see:')
+    console.log('   - The task in her Employee Dashboard')
+    console.log('   - The Ramya lead in her My Leads page')
+    console.log('✅ Sridhar K (Employee ID: 6) should no longer see:')
+    console.log('   - The task (it has been reassigned)')
+    console.log('   - The lead (it has been reassigned)')
+
+  } catch (error) {
+    console.error('❌ Test failed:', error)
+  }
+}
+
+testLeadReassignmentFix() 

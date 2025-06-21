@@ -22,6 +22,7 @@ import { toast } from "@/components/ui/use-toast"
 import { cn } from "@/lib/utils"
 import { createQuotation, updateQuotation, type QuotationData, type SavedQuotation } from "@/actions/quotations-actions"
 import { getQuotationData, type QuotationServiceItem, type QuotationDeliverableItem, type QuotationEventType } from "@/actions/quotation-data-actions"
+import { getQuotationServices, getQuotationDeliverables } from "@/lib/quotation-utils"
 
 // Types
 interface ServiceItem {
@@ -141,6 +142,66 @@ interface QuotationGeneratorStepsProps {
   taskId?: string | null
 }
 
+// Helper function to convert normalized data back to form format
+function convertNormalizedToFormData(existingQuotation: SavedQuotation): QuotationData {
+  const existingData = existingQuotation.quotation_data
+  
+  // CRITICAL FIX: For rejected quotations, always use the original quotation_data
+  // to ensure consistency between what was submitted and what's shown for editing
+  if (existingQuotation.status === 'rejected' || existingQuotation.workflow_status === 'rejected') {
+    console.log('🔄 Loading rejected quotation - using original quotation_data for consistency')
+    
+    return {
+      ...existingData,
+      events: existingData.events.map(event => ({
+        ...event,
+        // Convert string date back to Date object for editing
+        event_date: typeof event.event_date === 'string' ? new Date(event.event_date) : event.event_date,
+        // Ensure arrays exist
+        selected_services: event.selected_services || [],
+        selected_deliverables: event.selected_deliverables || []
+      })),
+      // Ensure global arrays exist
+      selected_services: existingData.selected_services || [],
+      selected_deliverables: existingData.selected_deliverables || []
+    }
+  }
+  
+  // For non-rejected quotations, try to use normalized data if available
+  const normalizedServices = getQuotationServices(existingQuotation)
+  const normalizedDeliverables = getQuotationDeliverables(existingQuotation)
+  
+  // Convert normalized services to form format (only if we have normalized data)
+  const formServices = normalizedServices.length > 0 ? normalizedServices.map(service => ({
+    id: service.service_id,
+    quantity: service.quantity
+  })) : existingData.selected_services || []
+  
+  // Convert normalized deliverables to form format (only if we have normalized data)
+  const formDeliverables = normalizedDeliverables.length > 0 ? normalizedDeliverables.map(deliverable => ({
+    id: deliverable.deliverable_id,
+    quantity: deliverable.quantity
+  })) : existingData.selected_deliverables || []
+  
+  // Update events with proper data priority
+  const updatedEvents = existingData.events.map(event => ({
+    ...event,
+    // Convert string date back to Date object for editing
+    event_date: typeof event.event_date === 'string' ? new Date(event.event_date) : event.event_date,
+    // For events, prefer the original event data over normalized data to maintain consistency
+    selected_services: event.selected_services || formServices,
+    selected_deliverables: event.selected_deliverables || formDeliverables
+  }))
+  
+  return {
+    ...existingData,
+    events: updatedEvents,
+    // Use original data first, then fall back to normalized data
+    selected_services: existingData.selected_services || formServices,
+    selected_deliverables: existingData.selected_deliverables || formDeliverables
+  }
+}
+
 export function QuotationGeneratorSteps({ lead, followUpId, editMode, existingQuotation, aiContext, taskId }: QuotationGeneratorStepsProps) {
   const [currentStep, setCurrentStep] = useState(1)
   const [sameAsmobile, setSameAsmobile] = useState(true) // WhatsApp same as mobile
@@ -148,16 +209,7 @@ export function QuotationGeneratorSteps({ lead, followUpId, editMode, existingQu
   const router = useRouter()
   const [quotationData, setQuotationData] = useState<QuotationData>(() => {
     if (editMode && existingQuotation) {
-      // Convert the existing quotation data and ensure dates are Date objects
-      const existingData = existingQuotation.quotation_data
-      return {
-        ...existingData,
-        events: existingData.events.map(event => ({
-          ...event,
-          // Convert string date back to Date object for editing
-          event_date: typeof event.event_date === 'string' ? new Date(event.event_date) : event.event_date
-        }))
-      }
+      return convertNormalizedToFormData(existingQuotation)
     }
     
     // Pre-fill with AI context if available
@@ -512,22 +564,35 @@ export function QuotationGeneratorSteps({ lead, followUpId, editMode, existingQu
       
       if (editMode && existingQuotation) {
         // Update existing quotation
-        result = await updateQuotation(existingQuotation.id.toString(), quotationData)
+        result = await updateQuotation(existingQuotation.id.toString(), quotationData, taskId || undefined)
       } else {
         // Create new quotation
-        result = await createQuotation(quotationData, lead?.id?.toString(), followUpId || undefined)
+        result = await createQuotation(quotationData, lead?.id?.toString(), followUpId || undefined, taskId || undefined)
       }
       
       if (result.success) {
-        toast({
-          title: editMode ? "Quotation Updated" : "Quotation Created",
-          description: editMode 
-            ? "Your quotation has been successfully updated." 
-            : "Your quotation has been successfully created.",
-        })
-        
-        // Navigate to quotations list
-        router.push("/sales/quotations")
+        if ((result as any).requiresApproval) {
+          // Quotation edit requires approval
+          toast({
+            title: "Approval Required",
+            description: result.error || "Your quotation changes have been submitted for approval. You will be notified once approved.",
+            variant: "default",
+          })
+          
+          // Navigate to quotations list
+          router.push("/sales/quotations")
+        } else {
+          // Normal success flow
+          toast({
+            title: editMode ? "Quotation Updated" : "Quotation Created",
+            description: editMode 
+              ? "Your quotation has been successfully updated." 
+              : "Your quotation has been successfully created.",
+          })
+          
+          // Navigate to quotations list
+          router.push("/sales/quotations")
+        }
       } else {
         console.error("Error with quotation:", result.error)
         toast({
@@ -991,8 +1056,8 @@ export function QuotationGeneratorSteps({ lead, followUpId, editMode, existingQu
                             <SelectValue placeholder="Select event type" />
                           </SelectTrigger>
                           <SelectContent>
-                            {events.map((eventType) => (
-                              <SelectItem key={eventType.id} value={eventType.name}>
+                            {events.map((eventType, typeIndex) => (
+                              <SelectItem key={`${event.id}-type-${eventType.id}-${typeIndex}`} value={eventType.name}>
                                 {eventType.name}
                               </SelectItem>
                             ))}
@@ -1361,8 +1426,8 @@ export function QuotationGeneratorSteps({ lead, followUpId, editMode, existingQu
                           )}
 
                           {/* Services by Category */}
-                          {["Photography", "Videography", "Technology"].map((category) => (
-                            <div key={category} className="mb-8">
+                          {["Photography", "Videography", "Technology"].map((category, categoryIndex) => (
+                            <div key={`${event.id}-category-${category}-${categoryIndex}`} className="mb-8">
                               <h4 className="text-base font-semibold text-gray-800 mb-4 flex items-center gap-2">
                                 <div className={`w-3 h-3 rounded-full ${
                                   category === "Photography" ? "bg-green-500" :
@@ -1371,7 +1436,7 @@ export function QuotationGeneratorSteps({ lead, followUpId, editMode, existingQu
                                 {category} Services
                               </h4>
                               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                                {services.filter(s => s.category === category).map((service) => {
+                                {services.filter(s => s.category === category).map((service, serviceIndex) => {
                                   const selectedService = event.selected_services.find(s => s.id === service.id)
                                   const isSelected = !!selectedService
                                   const quantity = selectedService?.quantity || 1
@@ -1409,7 +1474,7 @@ export function QuotationGeneratorSteps({ lead, followUpId, editMode, existingQu
                                   }
 
                                   return (
-                                    <Card key={service.id} className={`p-5 cursor-pointer transition-all ${
+                                    <Card key={`${event.id}-${category.toLowerCase()}-service-${service.id}-${serviceIndex}`} className={`p-5 cursor-pointer transition-all ${
                                       isSelected ? `border-${category === "Photography" ? "green" : category === "Videography" ? "blue" : "purple"}-500 bg-${category === "Photography" ? "green" : category === "Videography" ? "blue" : "purple"}-50` : 
                                       isSuggested ? "border-blue-300 bg-blue-50" : "hover:bg-gray-50"
                                     }`}>
@@ -1585,7 +1650,7 @@ export function QuotationGeneratorSteps({ lead, followUpId, editMode, existingQu
                               Main Deliverables
                             </h4>
                             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                              {deliverables.filter(d => d.is_main_deliverable).map((deliverable) => {
+                              {deliverables.filter(d => d.is_main_deliverable).map((deliverable, deliverableIndex) => {
                                 const selectedDeliverable = event.selected_deliverables.find(d => d.id === deliverable.id)
                                 const isSelected = !!selectedDeliverable
                                 const quantity = selectedDeliverable?.quantity || 1
@@ -1620,7 +1685,7 @@ export function QuotationGeneratorSteps({ lead, followUpId, editMode, existingQu
                                 }
 
                                 return (
-                                  <Card key={deliverable.id} className={`p-5 cursor-pointer transition-all ${
+                                                                      <Card key={`${event.id}-main-deliverable-${deliverable.id}-${deliverableIndex}`} className={`p-5 cursor-pointer transition-all ${
                                     isSelected ? "border-green-500 bg-green-50" : 
                                     isSuggested ? "border-blue-300 bg-blue-50" : "hover:bg-gray-50"
                                   }`}>
@@ -1745,42 +1810,38 @@ export function QuotationGeneratorSteps({ lead, followUpId, editMode, existingQu
                               Optional Deliverables
                             </h4>
                             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                              {deliverables.filter(d => !d.is_main_deliverable).map((deliverable) => {
+                              {deliverables.filter(d => !d.is_main_deliverable).map((deliverable, deliverableIndex) => {
                                 const selectedDeliverable = event.selected_deliverables.find(d => d.id === deliverable.id)
                                 const isSelected = !!selectedDeliverable
                                 const quantity = selectedDeliverable?.quantity || 1
                                 const packageType = getEventPackage(event)
-                                const deliverablePrice = deliverable[`${packageType}_total_price` as keyof typeof deliverable] as number || 0
                                 const override = event.package_overrides[deliverable.id]
-                                const finalPrice = override?.[`${packageType}_total_price` as keyof typeof override] || deliverablePrice
-                                const isSuggested = event.event_name && getEventSuggestedDeliverables(event.event_name).optional.includes(deliverable.id)
+                                const finalPrice = override?.[`${packageType}_total_price` as keyof typeof override] || deliverable[`${packageType}_total_price` as keyof DeliverableItem] as number
+                                const isSuggested = getEventSuggestedDeliverables(event.event_name).optional.includes(deliverable.id)
 
                                 const updateDeliverableSelection = (checked: boolean) => {
-                                  const currentDeliverables = event.selected_deliverables
                                   if (checked) {
                                     updateEventData(event.id, "selected_deliverables", [
-                                      ...currentDeliverables.filter(d => d.id !== deliverable.id),
+                                      ...event.selected_deliverables,
                                       { id: deliverable.id, quantity: 1 }
                                     ])
                                   } else {
                                     updateEventData(event.id, "selected_deliverables", 
-                                      currentDeliverables.filter(d => d.id !== deliverable.id)
+                                      event.selected_deliverables.filter(d => d.id !== deliverable.id)
                                     )
                                   }
                                 }
 
                                 const updateDeliverableQuantity = (newQuantity: number) => {
-                                  if (newQuantity < 1) return
-                                  const currentDeliverables = event.selected_deliverables
                                   updateEventData(event.id, "selected_deliverables", 
-                                    currentDeliverables.map(d => 
-                                      d.id === deliverable.id ? { ...d, quantity: newQuantity } : d
+                                    event.selected_deliverables.map(d => 
+                                      d.id === deliverable.id ? { ...d, quantity: Math.max(1, newQuantity) } : d
                                     )
                                   )
                                 }
 
                                 return (
-                                  <Card key={deliverable.id} className={`p-5 cursor-pointer transition-all ${
+                                  <Card key={`${event.id}-optional-deliverable-${deliverable.id}-${deliverableIndex}`} className={`p-5 cursor-pointer transition-all ${
                                     isSelected ? "border-orange-500 bg-orange-50" : 
                                     isSuggested ? "border-blue-300 bg-blue-50" : "hover:bg-gray-50"
                                   }`}>
@@ -1995,17 +2056,17 @@ export function QuotationGeneratorSteps({ lead, followUpId, editMode, existingQu
                           <div className="mb-3">
                             <h5 className="text-sm font-medium text-gray-700 mb-1">Services:</h5>
                             <div className="space-y-1">
-                              {getEventServices(event).map(serviceItem => {
+                              {getEventServices(event).map((serviceItem, serviceIndex) => {
                                 const service = services.find(s => s.id === serviceItem.id)
                                 if (!service) return null
                                 
                                 const packageType = getEventPackage(event)
-                                const override = event.service_overrides[serviceItem.id]
-                                const price = override?.[`${packageType}_price` as keyof typeof override] || 
-                                             service[`${packageType}_price` as keyof typeof service] || 0
+                                const override = event.service_overrides[serviceItem.id] || quotationData.service_overrides[serviceItem.id]
+                                const price = override?.[`${packageType}_price` as keyof typeof override] || service[`${packageType}_price` as keyof ServiceItem] as number
+                                const total = price * serviceItem.quantity
                                 
                                 return (
-                                  <div key={serviceItem.id} className="flex justify-between text-sm">
+                                  <div key={`summary-${event.id}-service-${serviceItem.id}-${serviceIndex}`} className="flex justify-between text-sm">
                                     <span className="text-gray-600 flex items-center gap-2">
                                       <span className={`w-2 h-2 rounded-full ${
                                         service.category === "Photography" ? "bg-green-500" :
@@ -2016,7 +2077,7 @@ export function QuotationGeneratorSteps({ lead, followUpId, editMode, existingQu
                                         <span className="text-xs text-gray-500">× {serviceItem.quantity}</span>
                                       )}
                                     </span>
-                                    <span className="font-medium">₹{((price as number) * serviceItem.quantity).toLocaleString()}</span>
+                                    <span className="font-medium">₹{total.toLocaleString()}</span>
                                   </div>
                                 )
                               })}
@@ -2029,7 +2090,7 @@ export function QuotationGeneratorSteps({ lead, followUpId, editMode, existingQu
                           <div className="mb-2">
                             <h5 className="text-sm font-medium text-gray-700 mb-1">Deliverables:</h5>
                             <div className="space-y-1">
-                              {getEventDeliverableItems(event).map(deliverableItem => {
+                              {getEventDeliverableItems(event).map((deliverableItem, deliverableIndex) => {
                                 const deliverable = deliverables.find(d => d.id === deliverableItem.id)
                                 if (!deliverable) return null
                                 
@@ -2039,7 +2100,7 @@ export function QuotationGeneratorSteps({ lead, followUpId, editMode, existingQu
                                              deliverable[`${packageType}_total_price` as keyof typeof deliverable] || 0
                                 
                                 return (
-                                  <div key={deliverableItem.id} className="flex justify-between text-sm">
+                                  <div key={`summary-${event.id}-deliverable-${deliverableItem.id}-${deliverableIndex}`} className="flex justify-between text-sm">
                                     <span className="text-gray-600 flex items-center gap-2">
                                       <span className={`w-2 h-2 rounded-full ${
                                         deliverable.is_main_deliverable ? "bg-green-500" : "bg-orange-500"

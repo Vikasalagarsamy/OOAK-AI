@@ -1,0 +1,54 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+export async function GET(request: NextRequest) {
+  try {
+    // Fetch recent call uploads
+    const { data: uploads, error } = await supabase
+      .from('call_transcriptions')
+      .select('id, client_name, created_at, status, task_id, notes')
+      .order('created_at', { ascending: false })
+      .limit(20);
+
+    if (error) {
+      console.error('Error fetching uploads:', error);
+      return NextResponse.json({ error: 'Failed to fetch uploads' }, { status: 500 });
+    }
+
+    // Transform data for the frontend
+    const transformedUploads = uploads.map(upload => ({
+      id: upload.id,
+      client: upload.client_name,
+      date: upload.created_at,
+      status: getStatusDisplay(upload.status),
+      taskId: upload.task_id,
+      notes: upload.notes
+    }));
+
+    return NextResponse.json(transformedUploads);
+
+  } catch (error) {
+    console.error('API error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
+function getStatusDisplay(status: string | null): string {
+  switch (status) {
+    case 'processing':
+      return 'Uploaded';
+    case 'transcribing':
+      return 'Processing';
+    case 'completed':
+      return 'Completed';
+    case 'error':
+      return 'Error';
+    default:
+      return 'Uploaded';
+  }
+} 

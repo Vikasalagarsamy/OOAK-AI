@@ -1,0 +1,391 @@
+// 🚨 MIGRATED FROM SUPABASE TO POSTGRESQL
+// Migration Date: 2025-06-20T09:51:57.554Z
+// Original file backed up as: OOAKCallManagerPro/OOAK-CRM-Integration-API.js.backup
+
+
+// PostgreSQL connection pool
+const pool = new Pool({
+  host: process.env.POSTGRES_HOST || 'localhost',
+  port: process.env.POSTGRES_PORT || 5432,
+  database: process.env.POSTGRES_DATABASE || 'ooak_future',
+  user: process.env.POSTGRES_USER || 'postgres',
+  password: process.env.POSTGRES_PASSWORD || 'password',
+  ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false,
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+});
+
+
+// Query helper function
+async function query(text, params = []) {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(text, params);
+    return { data: result.rows, error: null };
+  } catch (error) {
+    console.error('❌ PostgreSQL Query Error:', error.message);
+    return { data: null, error: error.message };
+  } finally {
+    client.release();
+  }
+}
+
+// Transaction helper function  
+async function transaction(callback) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await callback(client);
+    await client.query('COMMIT');
+    return { data: result, error: null };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ PostgreSQL Transaction Error:', error.message);
+    return { data: null, error: error.message };
+  } finally {
+    client.release();
+  }
+}
+
+// Original content starts here:
+// OOAK-FUTURE CRM Integration API Endpoints
+// Add these to your existing OOAK-FUTURE project
+
+// File: app/api/calls/update-status/route.js
+import { NextRequest, NextResponse } from 'next/server';
+const { Pool } = require('pg');
+
+// PostgreSQL connection - see pool configuration below
+
+export async function POST(request) {
+  try {
+    const body = await request.json();
+    const employeeId = request.headers.get('X-Employee-ID');
+    
+    console.log('Call status update:', body);
+    
+    // Insert or update call record
+    const { data, error } = await supabase
+      .from('call_records')
+      .upsert({
+        call_id: body.call_id,
+        phone_number: body.phone_number,
+        employee_id: employeeId,
+        task_id: body.task_id,
+        lead_id: body.lead_id,
+        direction: body.direction,
+        status: body.status,
+        start_time: body.start_time ? new Date(body.start_time) : null,
+        connected_time: body.connected_time ? new Date(body.connected_time) : null,
+        end_time: body.end_time ? new Date(body.end_time) : null,
+        duration_seconds: body.duration_seconds,
+        contact_name: body.contact_name,
+        error_message: body.error_message,
+        updated_at: new Date()
+      }, {
+        onConflict: 'call_id'
+      });
+    
+    if (error) {
+      console.error('Database error:', error);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    }
+    
+    // Update task status if task_id is provided
+    if (body.task_id && body.status === 'completed') {
+      await updateTaskCallStatus(body.task_id, body.status, body.duration_seconds);
+    }
+    
+    return NextResponse.json({ success: true, data });
+    
+  } catch (error) {
+    console.error('Call status update error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
+async function updateTaskCallStatus(taskId, callStatus, duration) {
+  try {
+    const { error } = await supabase
+      .from('tasks')
+      .update({
+        call_status: callStatus,
+        call_duration: duration,
+        last_call_time: new Date(),
+        updated_at: new Date()
+      })
+      .eq('id', taskId);
+    
+    if (error) {
+      console.error('Task update error:', error);
+    }
+  } catch (error) {
+    console.error('Task update error:', error);
+  }
+}
+
+// File: app/api/recordings/update-status/route.js
+export async function POST(request) {
+  try {
+    const body = await request.json();
+    const employeeId = request.headers.get('X-Employee-ID');
+    
+    console.log('Recording status update:', body);
+    
+    // Insert or update recording record
+    const { data, error } = await supabase
+      .from('call_recordings')
+      .upsert({
+        recording_id: body.recording_id,
+        file_name: body.file_name,
+        file_path: body.file_path,
+        file_size: body.file_size,
+        phone_number: body.phone_number,
+        employee_id: employeeId,
+        transcription_id: body.transcription_id,
+        status: body.status,
+        created_time: body.created_time ? new Date(body.created_time) : new Date(),
+        error_message: body.error_message,
+        updated_at: new Date()
+      }, {
+        onConflict: 'recording_id'
+      });
+    
+    if (error) {
+      console.error('Database error:', error);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    }
+    
+    return NextResponse.json({ success: true, data });
+    
+  } catch (error) {
+    console.error('Recording status update error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
+// File: app/api/contacts/lookup/route.js
+export async function GET(request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const phoneNumber = searchParams.get('phone');
+    const employeeId = request.headers.get('X-Employee-ID');
+    
+    if (!phoneNumber) {
+      return NextResponse.json({ error: 'Phone number required' }, { status: 400 });
+    }
+    
+    console.log('Contact lookup for:', phoneNumber);
+    
+    // Clean phone number for search
+    const cleanPhone = phoneNumber.replace(/[^\d+]/g, '');
+    
+    // Search in leads table
+    const { data: leads, error: leadsError } = await supabase
+      .from('leads')
+      .select('id, name, phone, email')
+      .or(`phone.eq.${cleanPhone},phone.eq.${phoneNumber}`)
+      .limit(1);
+    
+    if (leadsError) {
+      console.error('Leads search error:', leadsError);
+    }
+    
+    if (leads && leads.length > 0) {
+      const lead = leads[0];
+      
+      // Look for active task for this lead
+      const { data: tasks } = await supabase
+        .from('tasks')
+        .select('id, title, status')
+        .eq('lead_id', lead.id)
+        .eq('assigned_to_employee_id', employeeId)
+        .in('status', ['pending', 'in_progress'])
+        .order('created_at', { ascending: false })
+        .limit(1);
+      
+      return NextResponse.json({
+        found: true,
+        lead_id: lead.id,
+        task_id: tasks && tasks.length > 0 ? tasks[0].id : null,
+        contact_name: lead.name,
+        phone: lead.phone,
+        email: lead.email
+      });
+    }
+    
+    // If not found in leads, search in contacts or other tables
+    // Add additional search logic here if needed
+    
+    return NextResponse.json({ found: false });
+    
+  } catch (error) {
+    console.error('Contact lookup error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
+// File: app/api/calls/pending-commands/route.js
+export async function GET(request) {
+  try {
+    const employeeId = request.headers.get('X-Employee-ID');
+    
+    if (!employeeId) {
+      return NextResponse.json({ error: 'Employee ID required' }, { status: 400 });
+    }
+    
+    // Get pending call commands for this employee
+    const { data: commands, error } = await supabase
+      .from('call_commands')
+      .select('*')
+      .eq('employee_id', employeeId)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: true });
+    
+    if (error) {
+      console.error('Commands fetch error:', error);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    }
+    
+    // Mark commands as processing
+    if (commands && commands.length > 0) {
+      const commandIds = commands.map(cmd => cmd.id);
+      await supabase
+        .from('call_commands')
+        .update({ status: 'processing', updated_at: new Date() })
+        .in('id', commandIds);
+    }
+    
+    return NextResponse.json({ commands: commands || [] });
+    
+  } catch (error) {
+    console.error('Pending commands error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
+// File: app/api/calls/trigger/route.js
+// This endpoint is called when "Call" button is clicked in CRM dashboard
+export async function POST(request) {
+  try {
+    const body = await request.json();
+    const { phone_number, task_id, lead_id, employee_id } = body;
+    
+    if (!phone_number || !employee_id) {
+      return NextResponse.json({ 
+        error: 'Phone number and employee ID required' 
+      }, { status: 400 });
+    }
+    
+    console.log('Triggering call:', body);
+    
+    // Insert call command for mobile app to pick up
+    const { data, error } = await supabase
+      .from('call_commands')
+      .insert({
+        action: 'make_call',
+        phone_number,
+        task_id,
+        lead_id,
+        employee_id,
+        status: 'pending',
+        created_at: new Date()
+      });
+    
+    if (error) {
+      console.error('Call command insert error:', error);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    }
+    
+    // Update task status to indicate call is being initiated
+    if (task_id) {
+      await supabase
+        .from('tasks')
+        .update({
+          status: 'calling',
+          updated_at: new Date()
+        })
+        .eq('id', task_id);
+    }
+    
+    return NextResponse.json({ 
+      success: true, 
+      message: 'Call command sent to mobile device',
+      command_id: data?.[0]?.id
+    });
+    
+  } catch (error) {
+    console.error('Call trigger error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
+// Database Schema Updates (SQL)
+// Add these tables to your Supabase database:
+
+/*
+-- Call Records Table
+CREATE TABLE call_records (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  call_id VARCHAR UNIQUE NOT NULL,
+  phone_number VARCHAR NOT NULL,
+  employee_id VARCHAR NOT NULL,
+  task_id UUID REFERENCES tasks(id),
+  lead_id UUID REFERENCES leads(id),
+  direction VARCHAR CHECK (direction IN ('incoming', 'outgoing')),
+  status VARCHAR NOT NULL,
+  start_time TIMESTAMPTZ,
+  connected_time TIMESTAMPTZ,
+  end_time TIMESTAMPTZ,
+  duration_seconds INTEGER,
+  contact_name VARCHAR,
+  error_message TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Call Recordings Table
+CREATE TABLE call_recordings (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  recording_id VARCHAR UNIQUE NOT NULL,
+  file_name VARCHAR NOT NULL,
+  file_path VARCHAR NOT NULL,
+  file_size BIGINT,
+  phone_number VARCHAR,
+  employee_id VARCHAR NOT NULL,
+  transcription_id VARCHAR,
+  transcription_text TEXT,
+  status VARCHAR NOT NULL,
+  created_time TIMESTAMPTZ,
+  error_message TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Call Commands Table
+CREATE TABLE call_commands (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  action VARCHAR NOT NULL,
+  phone_number VARCHAR NOT NULL,
+  task_id UUID REFERENCES tasks(id),
+  lead_id UUID REFERENCES leads(id),
+  employee_id VARCHAR NOT NULL,
+  status VARCHAR DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Add indexes for performance
+CREATE INDEX idx_call_records_employee_id ON call_records(employee_id);
+CREATE INDEX idx_call_records_phone_number ON call_records(phone_number);
+CREATE INDEX idx_call_records_task_id ON call_records(task_id);
+CREATE INDEX idx_call_recordings_employee_id ON call_recordings(employee_id);
+CREATE INDEX idx_call_commands_employee_id ON call_commands(employee_id);
+CREATE INDEX idx_call_commands_status ON call_commands(status);
+
+-- Add call-related columns to tasks table
+ALTER TABLE tasks ADD COLUMN call_status VARCHAR;
+ALTER TABLE tasks ADD COLUMN call_duration INTEGER;
+ALTER TABLE tasks ADD COLUMN last_call_time TIMESTAMPTZ;
+*/ 

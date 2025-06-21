@@ -1,8 +1,7 @@
 "use server"
 
-import { createClient } from "@/lib/supabase/server"
+import { query, transaction } from "@/lib/postgresql-client"
 import { revalidatePath } from "next/cache"
-import { cookies } from "next/headers"
 import type { Event } from "@/types/event"
 
 // Function to generate a very short unique ID (definitely under 20 chars)
@@ -18,151 +17,147 @@ function generateShortId(): string {
 
 // Get all events
 export async function getEvents(): Promise<Event[]> {
-  const supabase = createClient(cookies())
+  try {
+    console.log('🎯 [EVENTS] Fetching events via PostgreSQL...')
 
-  const { data, error } = await supabase.from("events").select("*").order("created_at", { ascending: false })
+    const result = await query(`
+      SELECT * FROM events 
+      ORDER BY created_at DESC
+    `)
 
-  if (error) {
-    console.error("Error fetching events:", error)
+    console.log(`✅ [EVENTS] Fetched ${result.rows.length} events via PostgreSQL`)
+    return result.rows || []
+  } catch (error: any) {
+    console.error("❌ [EVENTS] Error fetching events:", error)
     throw new Error("Failed to fetch events")
   }
-
-  return data || []
 }
 
 // Create a new event
 export async function createEvent(name: string, isActive: boolean): Promise<Event> {
-  const supabase = createClient(cookies())
-
-  // Generate a very short ID that definitely fits within varchar(20)
-  const event_id = generateShortId()
-
-  console.log("Generated event_id:", event_id, "Length:", event_id.length)
-
   try {
-    const { data, error } = await supabase
-      .from("events")
-      .insert([
-        {
-          event_id,
-          name,
-          is_active: isActive,
-        },
-      ])
-      .select()
-      .single()
+    console.log('➕ [EVENTS] Creating new event via PostgreSQL...')
 
-    if (error) {
-      console.error("Error creating event:", error)
-      throw new Error(`Failed to create event: ${error.message}`)
+    // Generate a very short ID that definitely fits within varchar(20)
+    const event_id = generateShortId()
+    console.log("Generated event_id:", event_id, "Length:", event_id.length)
+
+    const result = await query(`
+      INSERT INTO events (event_id, name, is_active, created_at)
+      VALUES ($1, $2, $3, NOW())
+      RETURNING *
+    `, [event_id, name, isActive])
+
+    if (result.rows.length === 0) {
+      throw new Error("Failed to create event - no data returned")
     }
 
+    const event = result.rows[0]
     revalidatePath("/events")
-    return data
+    console.log(`✅ [EVENTS] Event created successfully: ${event.event_id}`)
+    return event
   } catch (error: any) {
-    console.error("Exception in createEvent:", error)
+    console.error("❌ [EVENTS] Error creating event:", error)
     throw new Error(`Error creating event: ${error.message}`)
   }
 }
 
 // Edit an existing event
 export async function updateEvent(eventId: string, name: string, isActive: boolean): Promise<Event> {
-  const supabase = createClient(cookies())
-
   try {
-    const { data, error } = await supabase
-      .from("events")
-      .update({
-        name,
-        is_active: isActive,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("event_id", eventId)
-      .select()
-      .single()
+    console.log(`📝 [EVENTS] Updating event ${eventId} via PostgreSQL...`)
 
-    if (error) {
-      console.error("Error updating event:", error)
-      throw new Error(`Failed to update event: ${error.message}`)
+    const result = await query(`
+      UPDATE events
+      SET 
+        name = $1,
+        is_active = $2,
+        updated_at = NOW()
+      WHERE event_id = $3
+      RETURNING *
+    `, [name, isActive, eventId])
+
+    if (result.rows.length === 0) {
+      throw new Error("Event not found or failed to update")
     }
 
+    const event = result.rows[0]
     revalidatePath("/events")
-    return data
+    console.log(`✅ [EVENTS] Event ${eventId} updated successfully`)
+    return event
   } catch (error: any) {
-    console.error("Exception in updateEvent:", error)
+    console.error("❌ [EVENTS] Error updating event:", error)
     throw new Error(`Error updating event: ${error.message}`)
   }
 }
 
 // Delete an event
 export async function deleteEvent(eventId: string): Promise<void> {
-  const supabase = createClient(cookies())
-
   try {
-    const { error } = await supabase.from("events").delete().eq("event_id", eventId)
+    console.log(`🗑️ [EVENTS] Deleting event ${eventId} via PostgreSQL...`)
 
-    if (error) {
-      console.error("Error deleting event:", error)
-      throw new Error(`Failed to delete event: ${error.message}`)
+    const result = await query(`
+      DELETE FROM events 
+      WHERE event_id = $1
+      RETURNING event_id
+    `, [eventId])
+
+    if (result.rows.length === 0) {
+      throw new Error("Event not found or failed to delete")
     }
 
     revalidatePath("/events")
+    console.log(`✅ [EVENTS] Event ${eventId} deleted successfully`)
   } catch (error: any) {
-    console.error("Exception in deleteEvent:", error)
+    console.error("❌ [EVENTS] Error deleting event:", error)
     throw new Error(`Error deleting event: ${error.message}`)
   }
 }
 
 // Toggle event status
 export async function toggleEventStatus(eventId: string): Promise<Event> {
-  const supabase = createClient(cookies())
+  try {
+    console.log(`🔄 [EVENTS] Toggling status for event ${eventId} via PostgreSQL...`)
 
-  // First, get the current status
-  const { data: event, error: fetchError } = await supabase
-    .from("events")
-    .select("is_active")
-    .eq("event_id", eventId)
-    .single()
+    // Use PostgreSQL to toggle status in a single query
+    const result = await query(`
+      UPDATE events
+      SET 
+        is_active = NOT is_active,
+        updated_at = NOW()
+      WHERE event_id = $1
+      RETURNING *
+    `, [eventId])
 
-  if (fetchError) {
-    console.error("Error fetching event status:", fetchError)
-    throw new Error("Failed to fetch event status")
-  }
+    if (result.rows.length === 0) {
+      throw new Error("Event not found or failed to toggle status")
+    }
 
-  // Toggle the status
-  const { data, error } = await supabase
-    .from("events")
-    .update({
-      is_active: !event.is_active,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("event_id", eventId)
-    .select()
-    .single()
-
-  if (error) {
-    console.error("Error updating event status:", error)
+    const event = result.rows[0]
+    revalidatePath("/events")
+    console.log(`✅ [EVENTS] Event ${eventId} status toggled to ${event.is_active}`)
+    return event
+  } catch (error: any) {
+    console.error("❌ [EVENTS] Error toggling event status:", error)
     throw new Error("Failed to update event status")
   }
-
-  revalidatePath("/events")
-  return data
 }
 
 // Search events
-export async function searchEvents(query: string): Promise<Event[]> {
-  const supabase = createClient(cookies())
+export async function searchEvents(query_string: string): Promise<Event[]> {
+  try {
+    console.log(`🔍 [EVENTS] Searching events for "${query_string}" via PostgreSQL...`)
 
-  const { data, error } = await supabase
-    .from("events")
-    .select("*")
-    .or(`name.ilike.%${query}%,event_id.ilike.%${query}%`)
-    .order("created_at", { ascending: false })
+    const result = await query(`
+      SELECT * FROM events
+      WHERE name ILIKE $1 OR event_id ILIKE $1
+      ORDER BY created_at DESC
+    `, [`%${query_string}%`])
 
-  if (error) {
-    console.error("Error searching events:", error)
+    console.log(`✅ [EVENTS] Found ${result.rows.length} events matching "${query_string}"`)
+    return result.rows || []
+  } catch (error: any) {
+    console.error("❌ [EVENTS] Error searching events:", error)
     throw new Error("Failed to search events")
   }
-
-  return data || []
 }

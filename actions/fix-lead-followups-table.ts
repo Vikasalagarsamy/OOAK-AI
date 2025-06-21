@@ -1,222 +1,201 @@
 "use server"
 
-import { createClient } from "@/lib/supabase/server"
+import { query, transaction } from "@/lib/postgresql-client"
 
 export async function fixLeadFollowupsTable(): Promise<{ success: boolean; message: string }> {
-  const supabase = createClient()
-
   try {
-    // First, let's check if the lead_followups table exists
-    const { data: tableExists, error: tableCheckError } = await supabase
-      .from("lead_followups")
-      .select("id")
-      .limit(1)
-      .catch(() => ({ data: null, error: { message: "Table does not exist" } }))
+    console.log("🔧 [LEAD_FOLLOWUPS] Starting lead_followups table fix via PostgreSQL...")
 
-    if (tableCheckError) {
-      console.log("Table might not exist, attempting to create it")
+    const result = await transaction(async (client) => {
+      // First, let's check if the lead_followups table exists
+      console.log("🔍 [LEAD_FOLLOWUPS] Checking if lead_followups table exists...")
+      
+      try {
+        const tableCheckResult = await client.query(`
+          SELECT EXISTS (
+            SELECT FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            AND table_name = 'lead_followups'
+          )
+        `)
+        
+        const tableExists = tableCheckResult.rows[0]?.exists
 
-      // Try to create the table using a stored procedure if available
-      const createTableSQL = `
-        CREATE TABLE IF NOT EXISTS lead_followups (
-          id SERIAL PRIMARY KEY,
-          lead_id INTEGER NOT NULL,
-          scheduled_at TIMESTAMP WITH TIME ZONE NOT NULL,
-          completed_at TIMESTAMP WITH TIME ZONE,
-          contact_method TEXT NOT NULL DEFAULT 'phone',
-          interaction_summary TEXT,
-          status TEXT NOT NULL DEFAULT 'scheduled',
-          outcome TEXT,
-          notes TEXT,
-          priority TEXT NOT NULL DEFAULT 'medium',
-          created_by TEXT NOT NULL,
-          created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-          updated_by TEXT,
-          updated_at TIMESTAMP WITH TIME ZONE,
-          completed_by TEXT,
-          duration_minutes INTEGER,
-          follow_up_required BOOLEAN DEFAULT FALSE,
-          next_follow_up_date TIMESTAMP WITH TIME ZONE
-        );
-      `
+        if (!tableExists) {
+          console.log("➕ [LEAD_FOLLOWUPS] Table does not exist, creating it...")
 
-      // Try to use exec_sql function if it exists
-      const { error: execError } = await supabase
-        .rpc("exec_sql", { sql: createTableSQL })
-        .catch(() => ({ error: { message: "Function does not exist" } }))
+          // Create the table with all necessary columns
+          const createTableSQL = `
+            CREATE TABLE lead_followups (
+              id SERIAL PRIMARY KEY,
+              lead_id INTEGER NOT NULL,
+              scheduled_at TIMESTAMP WITH TIME ZONE NOT NULL,
+              completed_at TIMESTAMP WITH TIME ZONE,
+              contact_method TEXT NOT NULL DEFAULT 'phone',
+              interaction_summary TEXT,
+              status TEXT NOT NULL DEFAULT 'scheduled',
+              outcome TEXT,
+              notes TEXT,
+              priority TEXT NOT NULL DEFAULT 'medium',
+              created_by TEXT NOT NULL,
+              created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+              updated_by TEXT,
+              updated_at TIMESTAMP WITH TIME ZONE,
+              completed_by TEXT,
+              duration_minutes INTEGER,
+              follow_up_required BOOLEAN DEFAULT FALSE,
+              next_follow_up_date TIMESTAMP WITH TIME ZONE,
+              
+              -- Add constraints and indexes for better performance
+              CONSTRAINT lead_followups_status_check CHECK (status IN ('scheduled', 'completed', 'cancelled', 'pending')),
+              CONSTRAINT lead_followups_priority_check CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
+              CONSTRAINT lead_followups_contact_method_check CHECK (contact_method IN ('phone', 'email', 'whatsapp', 'in_person', 'video_call'))
+            )
+          `
 
-      if (execError) {
-        console.log("exec_sql function might not exist, trying alternative approaches")
+          await client.query(createTableSQL)
+          console.log("✅ [LEAD_FOLLOWUPS] Successfully created lead_followups table")
 
-        // Try to create the function first
-        try {
-          // Use a direct SQL query through a custom endpoint
-          const response = await fetch("/api/admin/execute-sql", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              sql: createTableSQL,
-            }),
-          })
+          // Create indexes for better performance
+          await client.query(`
+            CREATE INDEX IF NOT EXISTS idx_lead_followups_lead_id ON lead_followups(lead_id);
+            CREATE INDEX IF NOT EXISTS idx_lead_followups_scheduled_at ON lead_followups(scheduled_at);
+            CREATE INDEX IF NOT EXISTS idx_lead_followups_status ON lead_followups(status);
+            CREATE INDEX IF NOT EXISTS idx_lead_followups_created_at ON lead_followups(created_at);
+          `)
+          console.log("✅ [LEAD_FOLLOWUPS] Created performance indexes")
 
-          if (!response.ok) {
-            const errorData = await response.json()
-            return {
-              success: false,
-              message: `Failed to create lead_followups table: ${errorData.error}`,
-            }
+          return {
+            success: true,
+            message: "Successfully created lead_followups table with all columns and indexes"
           }
+        }
 
-          console.log("Successfully created lead_followups table")
-        } catch (apiError) {
-          console.error("Error using API endpoint:", apiError)
+        console.log("✅ [LEAD_FOLLOWUPS] Table exists, checking column structure...")
 
-          // As a last resort, try to use any available database utility
-          try {
-            // Try to use any available database utility function
-            const { error: utilError } = await supabase
-              .rpc("create_table_if_not_exists", {
-                table_name: "lead_followups",
-                table_definition: createTableSQL,
-              })
-              .catch(() => ({ error: { message: "Function does not exist" } }))
+        // Check current columns in the table
+        const columnsResult = await client.query(`
+          SELECT column_name, data_type, is_nullable, column_default
+          FROM information_schema.columns 
+          WHERE table_schema = 'public' 
+          AND table_name = 'lead_followups'
+          ORDER BY ordinal_position
+        `)
 
-            if (utilError) {
-              return {
-                success: false,
-                message:
-                  "Could not create lead_followups table. Please check database permissions or create it manually.",
+        const existingColumns = columnsResult.rows.map(row => row.column_name)
+        console.log(`🔍 [LEAD_FOLLOWUPS] Found existing columns: ${existingColumns.join(', ')}`)
+
+        // Check if followup_type exists but contact_method doesn't
+        if (existingColumns.includes("followup_type") && !existingColumns.includes("contact_method")) {
+          console.log("🔄 [LEAD_FOLLOWUPS] Migrating followup_type to contact_method...")
+          
+          // Add contact_method column and copy data from followup_type
+          await client.query(`
+            ALTER TABLE lead_followups ADD COLUMN contact_method TEXT
+          `)
+          
+          await client.query(`
+            UPDATE lead_followups SET contact_method = followup_type WHERE followup_type IS NOT NULL
+          `)
+          
+          await client.query(`
+            UPDATE lead_followups SET contact_method = 'phone' WHERE contact_method IS NULL
+          `)
+          
+          await client.query(`
+            ALTER TABLE lead_followups ALTER COLUMN contact_method SET NOT NULL
+          `)
+
+          console.log("✅ [LEAD_FOLLOWUPS] Successfully migrated followup_type to contact_method")
+          
+          return {
+            success: true,
+            message: "Successfully added contact_method column and migrated data from followup_type"
+          }
+        }
+
+        // Check if neither column exists
+        if (!existingColumns.includes("followup_type") && !existingColumns.includes("contact_method")) {
+          console.log("➕ [LEAD_FOLLOWUPS] Adding missing contact_method column...")
+          
+          await client.query(`
+            ALTER TABLE lead_followups ADD COLUMN contact_method TEXT NOT NULL DEFAULT 'phone'
+          `)
+
+          console.log("✅ [LEAD_FOLLOWUPS] Successfully added contact_method column")
+          
+          return {
+            success: true,
+            message: "Successfully added contact_method column with default value"
+          }
+        }
+
+        // Check for other missing essential columns and add them
+        const requiredColumns = [
+          { name: 'scheduled_at', type: 'TIMESTAMP WITH TIME ZONE', nullable: false },
+          { name: 'status', type: 'TEXT', nullable: false, default: "'scheduled'" },
+          { name: 'priority', type: 'TEXT', nullable: false, default: "'medium'" },
+          { name: 'created_by', type: 'TEXT', nullable: false },
+          { name: 'created_at', type: 'TIMESTAMP WITH TIME ZONE', nullable: false, default: 'NOW()' }
+        ]
+
+        let columnsAdded = 0
+        for (const col of requiredColumns) {
+          if (!existingColumns.includes(col.name)) {
+            console.log(`➕ [LEAD_FOLLOWUPS] Adding missing column: ${col.name}`)
+            
+            let alterSQL = `ALTER TABLE lead_followups ADD COLUMN ${col.name} ${col.type}`
+            
+            if (col.default) {
+              alterSQL += ` DEFAULT ${col.default}`
+            }
+            
+            if (!col.nullable) {
+              if (col.default) {
+                alterSQL += ` NOT NULL`
+              } else {
+                // For non-nullable columns without default, add with nullable first, update, then set not null
+                await client.query(alterSQL)
+                await client.query(`UPDATE lead_followups SET ${col.name} = 'unknown' WHERE ${col.name} IS NULL`)
+                await client.query(`ALTER TABLE lead_followups ALTER COLUMN ${col.name} SET NOT NULL`)
+                columnsAdded++
+                continue
               }
             }
-          } catch (utilsError) {
-            console.error("Error using database utils:", utilsError)
-            return {
-              success: false,
-              message: "Failed to create lead_followups table using all available methods. Please create it manually.",
-            }
+            
+            await client.query(alterSQL)
+            columnsAdded++
           }
         }
-      }
 
-      // Check if the table was created successfully
-      const { error: recheckError } = await supabase.from("lead_followups").select("id").limit(1)
-
-      if (recheckError) {
-        return {
-          success: false,
-          message: "Failed to create or access lead_followups table. Please check database permissions.",
-        }
-      }
-    }
-
-    // Now let's check for the columns
-    // We'll use a custom API endpoint for this since we need to execute raw SQL
-    try {
-      const response = await fetch("/api/admin/check-table-columns", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          table: "lead_followups",
-        }),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        return {
-          success: false,
-          message: `Failed to check lead_followups columns: ${errorData.error}`,
-        }
-      }
-
-      const { columns } = await response.json()
-
-      // Check if followup_type exists but contact_method doesn't
-      if (columns.includes("followup_type") && !columns.includes("contact_method")) {
-        // We need to add contact_method and copy data from followup_type
-        const alterSQL = `
-          ALTER TABLE lead_followups ADD COLUMN contact_method TEXT;
-          UPDATE lead_followups SET contact_method = followup_type;
-          ALTER TABLE lead_followups ALTER COLUMN contact_method SET NOT NULL;
-        `
-
-        const alterResponse = await fetch("/api/admin/execute-sql", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            sql: alterSQL,
-          }),
-        })
-
-        if (!alterResponse.ok) {
-          const errorData = await alterResponse.json()
+        if (columnsAdded > 0) {
+          console.log(`✅ [LEAD_FOLLOWUPS] Added ${columnsAdded} missing columns`)
           return {
-            success: false,
-            message: `Failed to add contact_method column: ${errorData.error}`,
+            success: true,
+            message: `Successfully added ${columnsAdded} missing columns to lead_followups table`
           }
         }
 
+        console.log("✅ [LEAD_FOLLOWUPS] Table structure is already correct")
         return {
           success: true,
-          message: "Successfully added contact_method column and copied data from followup_type",
-        }
-      }
-
-      // Check if neither column exists
-      if (!columns.includes("followup_type") && !columns.includes("contact_method")) {
-        // We need to add contact_method
-        const addColumnSQL = `
-          ALTER TABLE lead_followups ADD COLUMN contact_method TEXT NOT NULL DEFAULT 'phone';
-        `
-
-        const addColumnResponse = await fetch("/api/admin/execute-sql", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            sql: addColumnSQL,
-          }),
-        })
-
-        if (!addColumnResponse.ok) {
-          const errorData = await addColumnResponse.json()
-          return {
-            success: false,
-            message: `Failed to add contact_method column: ${errorData.error}`,
-          }
+          message: "Lead followups table structure is already correct"
         }
 
-        return {
-          success: true,
-          message: "Successfully added contact_method column with default value",
-        }
+      } catch (tableError) {
+        console.error("❌ [LEAD_FOLLOWUPS] Error checking/creating table:", tableError)
+        throw tableError
       }
+    })
 
-      return {
-        success: true,
-        message: "Lead followups table structure is already correct",
-      }
-    } catch (apiError) {
-      console.error("Error using API endpoints:", apiError)
-      return {
-        success: false,
-        message: "Failed to check or modify lead_followups table structure. Please check API endpoints.",
-      }
-    }
-  } catch (error) {
-    console.error("Error fixing lead_followups table:", error)
+    console.log("🎉 [LEAD_FOLLOWUPS] Lead followups table fix completed successfully!")
+    return result
+
+  } catch (error: any) {
+    console.error("❌ [LEAD_FOLLOWUPS] Error fixing lead_followups table:", error)
     return {
       success: false,
-      message:
-        typeof error === "object" && error !== null && "message" in error
-          ? (error as Error).message
-          : "An unexpected error occurred",
+      message: `Failed to fix lead_followups table: ${error.message || "Unknown error"}`
     }
   }
 }

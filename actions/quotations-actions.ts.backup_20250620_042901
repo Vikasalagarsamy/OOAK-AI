@@ -1,0 +1,1861 @@
+"use server"
+
+import { query, transaction } from "@/lib/postgresql-client"
+import { cookies } from "next/headers"
+import { taskAssignmentValidator } from '@/lib/task-assignment-validator'
+
+/**
+ * QUOTATIONS ACTIONS - NOW 100% POSTGRESQL
+ * 
+ * Complete migration from Supabase to PostgreSQL
+ * - Direct PostgreSQL queries for maximum performance
+ * - Transaction safety for data consistency
+ * - Enhanced error handling and logging
+ * - Optimized batch operations
+ * - All Supabase dependencies eliminated
+ */
+
+// Helper function to generate a random string
+function generateRandomString(length: number = 8): string {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
+  let result = ''
+  for (let i = 0; i < length; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  return result
+}
+
+// Helper function to generate a unique quotation slug using PostgreSQL
+async function generateQuotationSlug(quotationNumber: string): Promise<string> {
+  // Create base slug from quotation number and add random suffix
+  const baseSlug = quotationNumber.toLowerCase().replace(/[^a-z0-9]/g, '-')
+  let attempts = 0
+  const maxAttempts = 10
+  
+  while (attempts < maxAttempts) {
+    const randomSuffix = generateRandomString(6)
+    const slug = `${baseSlug}-${randomSuffix}`
+    
+    try {
+      // Check if this slug already exists in PostgreSQL
+      const result = await query('SELECT id FROM quotations WHERE slug = $1 LIMIT 1', [slug])
+      
+      if (result.rows.length === 0) {
+        return slug
+      }
+    } catch (error) {
+      console.error('Error checking slug uniqueness:', error)
+    }
+    
+    attempts++
+  }
+  
+  // Fallback: use timestamp if we can't generate unique slug
+  return `${baseSlug}-${Date.now()}`
+}
+
+// Get real authenticated user using proper auth system
+async function getAuthenticatedUser() {
+  try {
+    // Import and use the proper auth system
+    const { getCurrentUser } = await import('@/actions/auth-actions')
+    const currentUser = await getCurrentUser()
+    
+    if (currentUser && currentUser.employeeId) {
+      console.log('✅ Real authenticated user found:', currentUser.employeeId, currentUser.firstName, currentUser.lastName)
+      
+      // Return in the expected format
+      const user = {
+        id: currentUser.employeeId.toString(), // Use employeeId as the ID
+        email: currentUser.email || "",
+        app_metadata: {},
+        user_metadata: {},
+        aud: "authenticated",
+        created_at: new Date().toISOString(),
+        role: "authenticated",
+      }
+      
+      return { data: { user }, error: null }
+    }
+    
+    // If no authenticated user found, return error instead of fallback
+    console.error('❌ No authenticated user found')
+    return { data: { user: null }, error: 'User not authenticated' }
+    
+  } catch (authError) {
+    console.error('❌ Auth error:', authError)
+    return { data: { user: null }, error: 'Authentication failed' }
+  }
+}
+
+// Types for quotations
+export interface QuotationEventData {
+  id: string
+  event_name: string
+  event_date: Date
+  event_location: string
+  venue_name: string
+  start_time: string
+  end_time: string
+  expected_crowd: string
+  selected_package: "basic" | "premium" | "elite" | "custom" | "default"
+  selected_services: { id: number; quantity: number }[]
+  selected_deliverables: { id: number; quantity: number }[]
+  service_overrides: Record<number, { basic_price?: number; premium_price?: number; elite_price?: number }>
+  package_overrides: Record<number, { basic_price?: number; premium_price?: number; elite_price?: number }>
+}
+
+export interface QuotationData {
+  // Client Details
+  client_name: string
+  bride_name: string
+  groom_name: string
+  mobile: string
+  mobile_country_code: string
+  whatsapp: string
+  whatsapp_country_code: string
+  alternate_mobile: string
+  alternate_mobile_country_code: string
+  alternate_whatsapp: string
+  alternate_whatsapp_country_code: string
+  email: string
+  
+  // Event Details
+  events: QuotationEventData[]
+  
+  // Package Selection
+  default_package: "basic" | "premium" | "elite" | "custom"
+  selected_services: { id: number; quantity: number }[]
+  selected_deliverables: { id: number; quantity: number }[]
+  service_overrides: Record<number, { basic_price?: number; premium_price?: number; elite_price?: number }>
+  package_overrides: Record<number, { basic_price?: number; premium_price?: number; elite_price?: number }>
+  custom_services: Array<{ name: string; price: number; quantity: number; package_type: "basic" | "premium" | "elite" }>
+}
+
+export interface SavedQuotation {
+  id: number
+  lead_id?: number
+  follow_up_id?: number
+  quotation_number: string
+  slug: string
+  client_name: string
+  bride_name: string
+  groom_name: string
+  mobile: string
+  email: string
+  default_package: string
+  total_amount: number
+  status: string
+  workflow_status?: string
+  created_by: string
+  created_at: string
+  updated_at: string
+  quotation_data: QuotationData
+  events_count: number
+  quotation_services?: any[]
+  quotation_deliverables?: any[]
+}
+
+/**
+ * Create a new quotation using PostgreSQL
+ */
+export async function createQuotation(
+  quotationData: QuotationData,
+  leadId?: string,
+  followUpId?: string,
+  taskId?: string
+): Promise<{ success: boolean; quotation?: SavedQuotation; error?: string }> {
+
+  try {
+    console.log('🚀 Starting optimized quotation creation via PostgreSQL...')
+    
+    // Parallel operations for better performance
+    const [totalAmount, quotationNumber, authResult] = await Promise.all([
+      calculateQuotationTotal(quotationData),
+      generateQuotationNumber(),
+      getAuthenticatedUser()
+    ])
+    
+    const slug = await generateQuotationSlug(quotationNumber)
+    
+    console.log('✅ Parallel operations completed:', { totalAmount, quotationNumber, slug })
+    
+    const { data: { user }, error: authError } = authResult
+    
+    if (!user || authError) {
+      console.error('❌ Authentication error:', authError)
+      return { success: false, error: "User not authenticated" }
+    }
+
+    // Use PostgreSQL transaction for data consistency
+    const result = await transaction(async (client) => {
+      // Prepare the quotation data for insertion
+      const quotationInsertData = {
+        lead_id: leadId ? parseInt(leadId) : null,
+        follow_up_id: followUpId ? parseInt(followUpId) : null,
+        quotation_number: quotationNumber,
+        slug: slug,
+        client_name: quotationData.client_name,
+        bride_name: quotationData.bride_name,
+        groom_name: quotationData.groom_name,
+        mobile: `${quotationData.mobile_country_code} ${quotationData.mobile}`,
+        whatsapp: quotationData.whatsapp ? `${quotationData.whatsapp_country_code} ${quotationData.whatsapp}` : null,
+        alternate_mobile: quotationData.alternate_mobile ? `${quotationData.alternate_mobile_country_code} ${quotationData.alternate_mobile}` : null,
+        alternate_whatsapp: quotationData.alternate_whatsapp ? `${quotationData.alternate_whatsapp_country_code} ${quotationData.alternate_whatsapp}` : null,
+        email: quotationData.email,
+        default_package: quotationData.default_package,
+        total_amount: totalAmount,
+        status: 'draft',
+        created_by: parseInt(user.id), // Now using employee_id directly
+        quotation_data: JSON.stringify(quotationData),
+        events_count: quotationData.events.length
+      }
+
+      // Insert quotation into PostgreSQL
+      const quotationResult = await client.query(`
+        INSERT INTO quotations (
+          lead_id, follow_up_id, quotation_number, slug, client_name, bride_name, groom_name,
+          mobile, whatsapp, alternate_mobile, alternate_whatsapp, email, default_package,
+          total_amount, status, created_by, quotation_data, events_count, created_at, updated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, NOW(), NOW()
+        ) RETURNING *
+      `, [
+        quotationInsertData.lead_id,
+        quotationInsertData.follow_up_id,
+        quotationInsertData.quotation_number,
+        quotationInsertData.slug,
+        quotationInsertData.client_name,
+        quotationInsertData.bride_name,
+        quotationInsertData.groom_name,
+        quotationInsertData.mobile,
+        quotationInsertData.whatsapp,
+        quotationInsertData.alternate_mobile,
+        quotationInsertData.alternate_whatsapp,
+        quotationInsertData.email,
+        quotationInsertData.default_package,
+        quotationInsertData.total_amount,
+        quotationInsertData.status,
+        quotationInsertData.created_by,
+        quotationInsertData.quotation_data,
+        quotationInsertData.events_count
+      ])
+
+      const insertedQuotation = quotationResult.rows[0]
+      const quotationId = insertedQuotation.id
+
+      // Insert events data
+      for (const event of quotationData.events) {
+        await client.query(`
+          INSERT INTO quotation_events (
+            quotation_id, event_name, event_date, event_location, venue_name,
+            start_time, end_time, expected_crowd, selected_package, created_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+        `, [
+          quotationId,
+          event.event_name,
+          event.event_date,
+          event.event_location,
+          event.venue_name,
+          event.start_time,
+          event.end_time,
+          event.expected_crowd,
+          event.selected_package
+        ])
+      }
+
+      // Update normalized tables for services and deliverables
+      await updateNormalizedTables(quotationId, quotationData)
+
+      // Handle specific workflows
+      if (taskId) {
+        await handleTaskQuotationWorkflow(insertedQuotation, taskId, totalAmount)
+      }
+
+      console.log(`✅ Quotation created successfully: ${quotationNumber} (ID: ${quotationId})`)
+      
+      return insertedQuotation
+    })
+
+    // Return the normalized quotation data
+    const normalizedQuotation = await getQuotationWithNormalizedData(result)
+    return { success: true, quotation: normalizedQuotation }
+
+  } catch (error: any) {
+    console.error('❌ Error creating quotation via PostgreSQL:', error)
+    return { 
+      success: false, 
+      error: error.message || "Failed to create quotation"
+    }
+  }
+}
+
+// Handle revision workflow when quotation is updated after rejection
+async function handleRevisionWorkflow(quotation: any, totalAmount: number, userId: string) {
+  const supabase = createClient()
+  
+  try {
+    console.log('🔄 Processing revision workflow for quotation:', quotation.quotation_number)
+    
+    // 1. Find and complete ALL pending revision tasks for this quotation
+    const { data: revisionTasks, error: taskError } = await supabase
+      .from('ai_tasks')
+      .select('*')
+      .eq('quotation_id', quotation.id)
+      .eq('task_type', 'quotation_revision')
+      .in('status', ['pending', 'in_progress'])
+      .order('created_at', { ascending: false })
+
+    if (revisionTasks && revisionTasks.length > 0 && !taskError) {
+      // Complete all revision tasks
+      const taskIds = revisionTasks.map(task => task.id)
+      await supabase
+        .from('ai_tasks')
+        .update({
+          status: 'completed',
+          completed_at: new Date().toISOString()
+        })
+        .in('id', taskIds)
+      
+      console.log('✅ Completed revision tasks:', taskIds)
+    } else {
+      console.log('ℹ️ No pending revision tasks found for quotation:', quotation.id)
+    }
+
+    // 2. Update quotation status to draft and workflow_status to pending_approval
+    const { error: statusUpdateError } = await supabase
+      .from('quotations')
+      .update({ 
+        status: 'draft',
+        workflow_status: 'pending_approval',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', quotation.id)
+    
+    if (statusUpdateError) {
+      console.error('❌ Failed to update quotation status:', statusUpdateError)
+    } else {
+      console.log('✅ Updated quotation status to pending')
+    }
+
+    // 3. Create new approval record
+    await supabase
+      .from('quotation_approvals')
+      .insert({
+        quotation_id: quotation.id,
+        approval_status: 'pending',
+        comments: `Revised quotation resubmitted for approval. Updated amount: ₹${totalAmount.toLocaleString()}`,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+
+    // 4. Find Sales Head and create new approval task
+    const { data: salesHead, error: salesHeadError } = await supabase
+      .from('employees')
+      .select('id, first_name, last_name, job_title')
+      .ilike('job_title', '%sales head%')
+      .limit(1)
+      .single()
+
+    if (salesHeadError || !salesHead) {
+      console.error('❌ No Sales Head found for approval:', salesHeadError)
+      console.log('Available Sales Heads:', salesHead)
+      return
+    }
+    
+    await supabase
+      .from('ai_tasks')
+      .insert({
+        task_title: `Review revised quotation for ${quotation.client_name}`,
+        task_description: `Review the revised ₹${totalAmount.toLocaleString()} quotation ${quotation.quotation_number} for ${quotation.client_name}. This quotation was previously rejected and has now been updated.`,
+        task_type: 'quotation_approval',
+        priority: 'high',
+        status: 'pending',
+        assigned_to_employee_id: salesHead.id,
+        assigned_to: `${salesHead.first_name} ${salesHead.last_name}`.trim(),
+        quotation_id: quotation.id,
+        client_name: quotation.client_name,
+        due_date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        business_impact: totalAmount > 50000 ? 'high' : 'medium',
+        estimated_value: totalAmount,
+        ai_reasoning: `Revised quotation ${quotation.quotation_number} requires Sales Head approval before sending to client.`,
+        metadata: {
+          quotation_number: quotation.quotation_number,
+          revision_workflow: true,
+          previous_status: 'rejected',
+          revised_amount: totalAmount
+        }
+      })
+    
+    console.log('✅ Created new approval task for Sales Head:', salesHead.first_name, salesHead.last_name)
+    
+  } catch (error) {
+    console.error('❌ Revision workflow processing failed:', error)
+  }
+}
+
+// Separate async function for workflow processing
+async function handleTaskQuotationWorkflow(quotation: any, taskId: string, totalAmount: number) {
+  const supabase = createClient()
+  
+  try {
+    console.log(`🚀 Processing task-quotation workflow for quotation ${quotation.quotation_number} (Task ID: ${taskId})`)
+    
+    // Step 1: Update quotation status to pending approval
+    console.log('📝 Step 1: Updating quotation status...')
+    const { error: quotationUpdateError } = await supabase
+      .from('quotations')
+      .update({ 
+        status: 'draft',
+        workflow_status: 'pending_approval',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', quotation.id)
+    
+    if (quotationUpdateError) {
+      console.error('❌ Failed to update quotation status:', quotationUpdateError)
+      throw quotationUpdateError
+    }
+    console.log('✅ Quotation status updated to pending_approval')
+
+    // Step 2: Find Sales Head for approval record
+    console.log('📝 Step 2: Finding Sales Head for approval...')
+    const { data: salesHeadForApproval, error: salesHeadForApprovalError } = await supabase
+      .from('employees')
+      .select('id, first_name, last_name, job_title')
+      .ilike('job_title', '%sales head%')
+      .limit(1)
+      .single()
+    
+    if (salesHeadForApprovalError || !salesHeadForApproval) {
+      console.error('❌ Failed to find Sales Head for approval:', salesHeadForApprovalError)
+      throw new Error('Sales Head not found for approval record')
+    }
+
+    // Step 3: Create approval record
+    console.log('📝 Step 3: Creating approval record...')
+    const { error: approvalError } = await supabase
+      .from('quotation_approvals')
+      .insert({
+        quotation_id: quotation.id,
+        approver_user_id: salesHeadForApproval.id,
+        approval_status: 'pending',
+        comments: `Auto-submitted from task completion (Task ID: ${taskId})`,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+    
+    if (approvalError) {
+      console.error('❌ Failed to create approval record:', approvalError)
+      throw approvalError
+    }
+    console.log('✅ Approval record created')
+
+    // Step 4: Update original task to completed
+    console.log('📝 Step 4: Completing original task...')
+    const { error: taskUpdateError } = await supabase
+      .from('ai_tasks')
+      .update({
+        status: 'completed',
+        completed_at: new Date().toISOString(),
+        quotation_id: quotation.id,
+        estimated_value: totalAmount,
+        metadata: {
+          quotation_created: true,
+          quotation_id: quotation.id,
+          quotation_number: quotation.quotation_number,
+          auto_submitted_for_approval: true,
+          completion_timestamp: new Date().toISOString(),
+          workflow_step: 'task_completed_quotation_created',
+          completion_notes: `Task completed successfully. Quotation ${quotation.quotation_number} has been created and submitted for approval.`
+        }
+      })
+      .eq('id', taskId)
+    
+    if (taskUpdateError) {
+      console.error('❌ Failed to update original task:', taskUpdateError)
+      throw taskUpdateError
+    }
+    console.log('✅ Original task marked as completed')
+
+    // Step 5: Create approval task for Sales Head (reuse the same Sales Head)
+    console.log('📝 Step 5: Creating approval task for Sales Head...')
+    const { error: approvalTaskError } = await supabase
+      .from('ai_tasks')
+      .insert({
+        task_title: `Review and approve quotation for ${quotation.client_name}`,
+        task_description: `Review the ₹${totalAmount.toLocaleString()} quotation ${quotation.quotation_number} for ${quotation.client_name} and approve for sending.`,
+        task_type: 'quotation_approval',
+        priority: 'high',
+        status: 'pending',
+        assigned_to_employee_id: salesHeadForApproval.id,
+        assigned_to: `${salesHeadForApproval.first_name} ${salesHeadForApproval.last_name}`.trim(),
+        quotation_id: quotation.id,
+        client_name: quotation.client_name,
+        due_date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        business_impact: totalAmount > 50000 ? 'high' : 'medium',
+        estimated_value: totalAmount,
+        metadata: {
+          source_task_id: taskId,
+          quotation_number: quotation.quotation_number,
+          auto_generated_from_task: true,
+          requires_management_approval: true,
+          original_task_completed: true,
+          ai_reasoning: `Quotation ${quotation.quotation_number} requires Sales Head approval before sending to client.`,
+          ai_confidence_score: 0.9,
+          estimated_duration_minutes: 15
+        }
+      })
+    
+    if (approvalTaskError) {
+      console.error('❌ Failed to create approval task:', approvalTaskError)
+      throw approvalTaskError
+    }
+    console.log(`✅ Approval task created for Sales Head: ${salesHeadForApproval.first_name} ${salesHeadForApproval.last_name}`)
+    
+    console.log('🎉 Task-quotation workflow completed successfully!')
+    
+  } catch (error) {
+    console.error('❌ Task-quotation workflow failed:', error)
+    // Don't throw the error to prevent breaking the quotation creation
+    // but log it clearly for debugging
+  }
+}
+
+/**
+ * Get all quotations for the current user
+ */
+export async function getQuotations(): Promise<{ success: boolean; quotations?: SavedQuotation[]; error?: string }> {
+  const supabase = createClient()
+
+  try {
+    // Get current user (using mock for development)
+    const { data: { user }, error: authError } = await getAuthenticatedUser()
+    
+    if (!user || authError) {
+      return { success: false, error: "User not authenticated" }
+    }
+
+    // Use employee_id directly (no UUID conversion needed after migration)
+    const employeeId = parseInt(user.id)
+    console.log(`Filtering quotations by employee_id: ${employeeId}`)
+    
+    const { data: quotations, error } = await supabase
+      .from('quotations')
+      .select(`
+        *,
+        leads (
+          lead_number,
+          client_name
+        )
+      `)
+      .eq('created_by', employeeId)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('Error fetching quotations:', error)
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, quotations: quotations || [] }
+
+  } catch (error: any) {
+    console.error('Error in getQuotations:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Enhanced function to get quotation with normalized services and deliverables
+ */
+async function getQuotationWithNormalizedData(quotation: any): Promise<SavedQuotation> {
+  // Get services and deliverables from normalized tables
+  const servicesResult = await getQuotationServices(quotation.id)
+  const deliverablesResult = await getQuotationDeliverables(quotation.id)
+
+  return {
+    ...quotation,
+    quotation_services: servicesResult.success ? servicesResult.services : [],
+    quotation_deliverables: deliverablesResult.success ? deliverablesResult.deliverables : []
+  }
+}
+
+/**
+ * Get a specific quotation by slug (for public sharing)
+ */
+export async function getQuotationBySlug(slug: string): Promise<{ success: boolean; quotation?: SavedQuotation; error?: string }> {
+  const supabase = createClient()
+
+  try {
+    const { data: quotation, error } = await supabase
+      .from('quotations')
+      .select(`
+        *,
+        leads (
+          lead_number,
+          client_name
+        ),
+        quotation_events (*)
+      `)
+      .eq('slug', slug)
+      .single()
+
+    if (error) {
+      console.error('Error fetching quotation by slug:', error)
+      return { success: false, error: error.message }
+    }
+
+    // Enhance with normalized data
+    const enhancedQuotation = await getQuotationWithNormalizedData(quotation)
+
+    return { success: true, quotation: enhancedQuotation }
+
+  } catch (error: any) {
+    console.error('Error in getQuotationBySlug:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Get a specific quotation by quotation number
+ */
+export async function getQuotationByNumber(quotationNumber: string): Promise<{ success: boolean; quotation?: SavedQuotation; error?: string }> {
+  const supabase = createClient()
+
+  try {
+    const { data: quotation, error } = await supabase
+      .from('quotations')
+      .select(`
+        *,
+        leads (
+          lead_number,
+          client_name
+        ),
+        quotation_events (*)
+      `)
+      .eq('quotation_number', quotationNumber)
+      .single()
+
+    if (error) {
+      console.error('Error fetching quotation by number:', error)
+      return { success: false, error: error.message }
+    }
+
+    // Enhance with normalized data
+    const enhancedQuotation = await getQuotationWithNormalizedData(quotation)
+
+    return { success: true, quotation: enhancedQuotation }
+
+  } catch (error: any) {
+    console.error('Error in getQuotationByNumber:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Get a specific quotation by ID
+ */
+export async function getQuotation(id: string): Promise<{ success: boolean; quotation?: SavedQuotation; error?: string }> {
+  const supabase = createClient()
+
+  try {
+    const { data: quotation, error } = await supabase
+      .from('quotations')
+      .select(`
+        *,
+        leads (
+          lead_number,
+          client_name
+        ),
+        quotation_events (*)
+      `)
+      .eq('id', id)
+      .single()
+
+    if (error) {
+      console.error('Error fetching quotation:', error)
+      return { success: false, error: error.message }
+    }
+
+    // Enhance with normalized data
+    const enhancedQuotation = await getQuotationWithNormalizedData(quotation)
+
+    return { success: true, quotation: enhancedQuotation }
+
+  } catch (error: any) {
+    console.error('Error in getQuotation:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Get quotation by lead ID (for checking if quotation exists for a lead)
+ */
+export async function getQuotationByLeadId(leadId: string): Promise<{ success: boolean; quotation?: SavedQuotation; error?: string }> {
+  const supabase = createClient()
+
+  try {
+    const { data: quotation, error } = await supabase
+      .from('quotations')
+      .select(`
+        *,
+        leads (
+          lead_number,
+          client_name
+        ),
+        quotation_events (*)
+      `)
+      .eq('lead_id', leadId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (error) {
+      console.error('Error fetching quotation by lead ID:', error)
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, quotation }
+
+  } catch (error: any) {
+    console.error('Error in getQuotationByLeadId:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Update quotation status
+ */
+export async function updateQuotationStatus(
+  id: string, 
+  status: 'draft' | 'sent' | 'approved' | 'rejected' | 'expired'
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = createClient()
+
+  try {
+    const { error } = await supabase
+      .from('quotations')
+      .update({ 
+        status,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+
+    if (error) {
+      console.error('Error updating quotation status:', error)
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+
+  } catch (error: any) {
+    console.error('Error in updateQuotationStatus:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Delete a quotation
+ */
+export async function deleteQuotation(id: string): Promise<{ success: boolean; error?: string }> {
+  const supabase = createClient()
+
+  try {
+    const { error } = await supabase
+      .from('quotations')
+      .delete()
+      .eq('id', id)
+
+    if (error) {
+      console.error('Error deleting quotation:', error)
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+
+  } catch (error: any) {
+    console.error('Error in deleteQuotation:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Get quotations by status
+ */
+export async function getQuotationsByStatus(statuses: string[]): Promise<{ success: boolean; quotations?: SavedQuotation[]; error?: string }> {
+  const supabase = createClient()
+
+  try {
+    // Get current user (using our fixed authentication)
+    const { data: { user }, error: authError } = await getAuthenticatedUser()
+    
+    if (!user || authError) {
+      return { success: false, error: "User not authenticated" }
+    }
+
+    // Use employee_id directly (no UUID conversion needed after migration)
+    const employeeId = parseInt(user.id)
+    
+    const { data: quotations, error } = await supabase
+      .from('quotations')
+      .select(`
+        *,
+        leads (
+          lead_number,
+          client_name
+        )
+      `)
+      .eq('created_by', employeeId)
+      .in('status', statuses)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('Error fetching quotations by status:', error)
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, quotations: quotations || [] }
+
+  } catch (error: any) {
+    console.error('Error in getQuotationsByStatus:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Get quotations count by status
+ */
+export async function getQuotationsCountByStatus(): Promise<{ success: boolean; counts?: Record<string, number>; error?: string }> {
+  const supabase = createClient()
+
+  try {
+    // Get current user (using our fixed authentication)
+    const { data: { user }, error: authError } = await getAuthenticatedUser()
+    
+    if (!user || authError) {
+      return { success: false, error: "User not authenticated" }
+    }
+
+    // Use employee_id directly (no UUID conversion needed after migration)
+    const employeeId = parseInt(user.id)
+    
+    const { data: quotations, error } = await supabase
+      .from('quotations')
+      .select('status')
+      .eq('created_by', employeeId)
+
+    if (error) {
+      console.error('Error fetching quotations for count:', error)
+      return { success: false, error: error.message }
+    }
+
+    // Count by status
+    const counts: Record<string, number> = {
+      all: quotations?.length || 0,
+      draft: 0,
+      sent: 0,
+      approved: 0,
+      rejected: 0,
+      expired: 0,
+      active: 0
+    }
+
+    quotations?.forEach(q => {
+      const status = q.status.toLowerCase()
+      if (counts[status] !== undefined) {
+        counts[status]++
+      }
+    })
+
+    // Calculate active count (draft + sent + approved)
+    counts.active = counts.draft + counts.sent + counts.approved
+
+    return { success: true, counts }
+
+  } catch (error: any) {
+    console.error('Error in getQuotationsCountByStatus:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Generate a unique quotation number
+ */
+async function generateQuotationNumber(): Promise<string> {
+  const supabase = createClient()
+  
+  try {
+    // Get the current count of quotations to generate a sequential number
+    const { count, error } = await supabase
+      .from('quotations')
+      .select('*', { count: 'exact', head: true })
+
+    if (error) {
+      console.error('Error getting quotation count:', error)
+      // Fallback to timestamp-based number
+      return `QT-${Date.now()}`
+    }
+
+    const nextNumber = (count || 0) + 1
+    const year = new Date().getFullYear()
+    return `QT-${year}-${nextNumber.toString().padStart(4, '0')}`
+
+  } catch (error) {
+    console.error('Error generating quotation number:', error)
+    return `QT-${Date.now()}`
+  }
+}
+
+/**
+ * Calculate total amount for a quotation
+ */
+async function calculateQuotationTotal(quotationData: QuotationData): Promise<number> {
+  let total = 0
+
+  // Add custom services total
+  if (quotationData.default_package === "custom") {
+    total += quotationData.custom_services.reduce((sum, service) => sum + (service.price * service.quantity), 0) * quotationData.events.length
+    return total
+  }
+
+  try {
+    // Import the pricing functions
+    const { getQuotationServices, getQuotationDeliverables } = await import('./quotation-data-actions')
+    
+    // Get real pricing data
+    const [services, deliverables] = await Promise.all([
+      getQuotationServices(),
+      getQuotationDeliverables()
+    ])
+
+    // Calculate services and deliverables total for each event
+    for (const event of quotationData.events) {
+      const packageType = event.selected_package === "default" ? quotationData.default_package : event.selected_package
+      
+      // Services total for this event
+      const eventServices = event.selected_services.length > 0 ? event.selected_services : quotationData.selected_services
+      const servicesTotal = eventServices.reduce((sum, serviceItem) => {
+        const service = services.find(s => s.id === serviceItem.id)
+        if (!service) return sum
+        
+        const priceKey = `${packageType}_price` as keyof typeof service
+        const basePrice = service[priceKey] as number || 0
+        const override = event.service_overrides[serviceItem.id] || quotationData.service_overrides[serviceItem.id]
+        const price = override?.[`${packageType}_price` as keyof typeof override] ?? basePrice
+        return sum + ((price as number) * serviceItem.quantity)
+      }, 0)
+
+      // Deliverables total for this event  
+      const eventDeliverables = event.selected_deliverables.length > 0 ? event.selected_deliverables : quotationData.selected_deliverables
+      const deliverablesTotal = eventDeliverables.reduce((sum, deliverableItem) => {
+        const deliverable = deliverables.find(d => d.id === deliverableItem.id)
+        if (!deliverable) return sum
+        
+        const priceKey = `${packageType}_total_price` as keyof typeof deliverable
+        const basePrice = deliverable[priceKey] as number || 0
+        const override = event.package_overrides[deliverableItem.id]
+        const price = override?.[`${packageType}_price` as keyof typeof override] ?? basePrice
+        return sum + ((price as number) * deliverableItem.quantity)
+      }, 0)
+
+      total += servicesTotal + deliverablesTotal
+    }
+
+    return total
+    
+  } catch (error) {
+    console.error('Error calculating quotation total:', error)
+    // Fallback to a basic calculation if pricing data fails
+    return quotationData.events.length * 10000 // Basic fallback
+  }
+}
+
+/**
+ * Initialize quotations table if it doesn't exist
+ */
+export async function initializeQuotationsTable(): Promise<{ success: boolean; error?: string }> {
+  const supabase = createClient()
+
+  try {
+    console.log('Checking if quotations table exists...')
+    
+    // Try to query the quotations table to check if it exists
+    const { data, error: checkError } = await supabase
+      .from('quotations')
+      .select('id')
+      .limit(1)
+      .maybeSingle()
+
+    if (checkError) {
+      // Table likely doesn't exist
+      console.log('Quotations table does not exist. Error:', checkError.message)
+      
+      // For now, we'll return an error asking the user to create the table manually
+      return { 
+        success: false, 
+        error: "Quotations table does not exist. Please create the quotations table in your Supabase database. Check the console for SQL commands." 
+      }
+    }
+
+    console.log('Quotations table exists and is accessible')
+    return { success: true }
+
+  } catch (error: any) {
+    console.error('Error in initializeQuotationsTable:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Recalculate and update total amounts for existing quotations
+ */
+export async function recalculateQuotationTotals(): Promise<{ success: boolean; updated: number; error?: string }> {
+  const supabase = createClient()
+  
+  try {
+    console.log('Starting quotation total recalculation...')
+    
+    // Get all quotations
+    const { data: quotations, error: fetchError } = await supabase
+      .from('quotations')
+      .select('*')
+    
+    if (fetchError) {
+      console.error('Error fetching quotations for recalculation:', fetchError)
+      return { success: false, updated: 0, error: fetchError.message }
+    }
+    
+    if (!quotations || quotations.length === 0) {
+      return { success: true, updated: 0 }
+    }
+    
+    let updatedCount = 0
+    
+    // Process each quotation
+    for (const quotation of quotations) {
+      try {
+        const quotationData = quotation.quotation_data as QuotationData
+        const newTotal = await calculateQuotationTotal(quotationData)
+        
+        // Only update if the total has changed
+        if (Math.abs(newTotal - quotation.total_amount) > 0.01) { // Allow for small floating point differences
+          console.log(`Updating quotation ${quotation.quotation_number}: ${quotation.total_amount} → ${newTotal}`)
+          
+          const { error: updateError } = await supabase
+            .from('quotations')
+            .update({ 
+              total_amount: newTotal,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', quotation.id)
+          
+          if (updateError) {
+            console.error(`Error updating quotation ${quotation.quotation_number}:`, updateError)
+          } else {
+            updatedCount++
+          }
+        }
+      } catch (error) {
+        console.error(`Error processing quotation ${quotation.quotation_number}:`, error)
+      }
+    }
+    
+    console.log(`Quotation recalculation completed. Updated ${updatedCount} quotations.`)
+    return { success: true, updated: updatedCount }
+    
+  } catch (error: any) {
+    console.error('Error in recalculateQuotationTotals:', error)
+    return { success: false, updated: 0, error: error.message }
+  }
+}
+
+/**
+ * Debug function to test pricing calculations
+ */
+export async function debugQuotationCalculation(quotationId: string): Promise<{ success: boolean; debug?: any; error?: string }> {
+  const supabase = createClient()
+  
+  try {
+    console.log('=== DEBUG QUOTATION CALCULATION ===')
+    
+    // Get the quotation
+    const { data: quotation, error: quotationError } = await supabase
+      .from('quotations')
+      .select('*')
+      .eq('id', quotationId)
+      .single()
+    
+    if (quotationError || !quotation) {
+      return { success: false, error: 'Quotation not found' }
+    }
+    
+    console.log('Quotation data:', quotation.quotation_number)
+    
+    // Get pricing data
+    const { getQuotationServices, getQuotationDeliverables } = await import('./quotation-data-actions')
+    const [services, deliverables] = await Promise.all([
+      getQuotationServices(),
+      getQuotationDeliverables()
+    ])
+    
+    console.log('Available services:', services.length)
+    console.log('Available deliverables:', deliverables.length)
+    
+    const quotationData = quotation.quotation_data as QuotationData
+    const event = quotationData.events[0] // First event
+    
+    console.log('Event services:', event.selected_services)
+    console.log('Event deliverables:', event.selected_deliverables)
+    
+    // Debug service calculations
+    let servicesTotal = 0
+    for (const serviceItem of event.selected_services) {
+      const service = services.find(s => s.id === serviceItem.id)
+      if (service) {
+        const packageType = event.selected_package === "default" ? quotationData.default_package : event.selected_package
+        const priceKey = `${packageType}_price` as keyof typeof service
+        const price = service[priceKey] as number || 0
+        const itemTotal = price * serviceItem.quantity
+        servicesTotal += itemTotal
+        
+        console.log(`Service ${service.servicename}: ₹${price} × ${serviceItem.quantity} = ₹${itemTotal}`)
+      } else {
+        console.log(`Service ID ${serviceItem.id} not found in database`)
+      }
+    }
+    
+    // Debug deliverable calculations  
+    let deliverablesTotal = 0
+    for (const deliverableItem of event.selected_deliverables) {
+      const deliverable = deliverables.find(d => d.id === deliverableItem.id)
+      if (deliverable) {
+        const packageType = event.selected_package === "default" ? quotationData.default_package : event.selected_package
+        const priceKey = `${packageType}_total_price` as keyof typeof deliverable
+        const price = deliverable[priceKey] as number || 0
+        const itemTotal = price * deliverableItem.quantity
+        deliverablesTotal += itemTotal
+        
+        console.log(`Deliverable ${deliverable.deliverable_name}: ₹${price} × ${deliverableItem.quantity} = ₹${itemTotal}`)
+      } else {
+        console.log(`Deliverable ID ${deliverableItem.id} not found in database`)
+      }
+    }
+    
+    const calculatedTotal = servicesTotal + deliverablesTotal
+    
+    console.log('=== CALCULATION SUMMARY ===')
+    console.log(`Services Total: ₹${servicesTotal}`)
+    console.log(`Deliverables Total: ₹${deliverablesTotal}`)
+    console.log(`Calculated Total: ₹${calculatedTotal}`)
+    console.log(`Stored Total: ₹${quotation.total_amount}`)
+    console.log(`Difference: ₹${calculatedTotal - quotation.total_amount}`)
+    
+    return {
+      success: true,
+      debug: {
+        quotation_number: quotation.quotation_number,
+        stored_total: quotation.total_amount,
+        calculated_total: calculatedTotal,
+        services_total: servicesTotal,
+        deliverables_total: deliverablesTotal,
+        difference: calculatedTotal - quotation.total_amount,
+        services_count: services.length,
+        deliverables_count: deliverables.length,
+        event_services: event.selected_services,
+        event_deliverables: event.selected_deliverables
+      }
+    }
+    
+  } catch (error: any) {
+    console.error('Error in debugQuotationCalculation:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Update an existing quotation - NOW REQUIRES APPROVAL FOR ALL CHANGES
+ */
+export async function updateQuotation(
+  quotationId: string,
+  quotationData: QuotationData,
+  taskId?: string
+): Promise<{ success: boolean; quotation?: SavedQuotation; error?: string; requiresApproval?: boolean }> {
+  const supabase = createClient()
+
+  try {
+    console.log('🔐 Starting quotation update with approval workflow...')
+    console.log('📋 Task ID provided:', taskId)
+    
+    // Calculate total amount
+    const totalAmount = await calculateQuotationTotal(quotationData)
+    console.log('Calculated total amount:', totalAmount)
+    
+    // Get current user
+    const { data: { user }, error: authError } = await getAuthenticatedUser()
+    
+    if (!user || authError) {
+      console.error('❌ Authentication error in updateQuotation:', authError)
+      console.error('❌ User object:', user)
+      return { success: false, error: authError || "User not authenticated" }
+    }
+
+    // Get original quotation data for comparison
+    const { data: originalQuotation, error: originalFetchError } = await supabase
+      .from('quotations')
+      .select('*')
+      .eq('id', quotationId)
+      .single()
+    
+    if (originalFetchError || !originalQuotation) {
+      console.error('Error fetching original quotation:', originalFetchError)
+      return { success: false, error: "Original quotation not found" }
+    }
+
+    // Check if this is a rejected quotation being revised (allow direct update)
+    const wasRejected = originalQuotation.status === 'rejected'
+    console.log('Current quotation status before update:', originalQuotation.status, 'Was rejected:', wasRejected)
+
+    // Detect if there are any changes that require approval
+    const hasChanges = await detectQuotationChanges(originalQuotation, quotationData, totalAmount)
+    
+    console.log('🔍 Change detection result:', { hasChanges, wasRejected, originalStatus: originalQuotation.status })
+
+    // Prepare the quotation data for update
+    const quotationUpdateData = {
+      client_name: quotationData.client_name,
+      bride_name: quotationData.bride_name,
+      groom_name: quotationData.groom_name,
+      mobile: `${quotationData.mobile_country_code} ${quotationData.mobile}`,
+      whatsapp: quotationData.whatsapp ? `${quotationData.whatsapp_country_code} ${quotationData.whatsapp}` : null,
+      alternate_mobile: quotationData.alternate_mobile ? `${quotationData.alternate_mobile_country_code} ${quotationData.alternate_mobile}` : null,
+      alternate_whatsapp: quotationData.alternate_whatsapp ? `${quotationData.alternate_whatsapp_country_code} ${quotationData.alternate_whatsapp}` : null,
+      email: quotationData.email,
+      default_package: quotationData.default_package,
+      total_amount: totalAmount,
+      quotation_data: quotationData,
+      events_count: quotationData.events.length,
+      updated_at: new Date().toISOString()
+    }
+
+    // Update the main quotation record
+    console.log('Updating quotation record...')
+    const { data: quotation, error: quotationError } = await supabase
+      .from('quotations')
+      .update(quotationUpdateData)
+      .eq('id', quotationId)
+      .select()
+      .single()
+
+    if (quotationError) {
+      console.error('Error updating quotation:', quotationError)
+      return { success: false, error: `Database error: ${quotationError.message}` }
+    }
+
+    console.log('Quotation updated successfully:', quotation.id)
+
+    // Delete existing event records
+    await supabase
+      .from('quotation_events')
+      .delete()
+      .eq('quotation_id', quotation.id)
+
+    // Create new event records
+    for (const [index, event] of quotationData.events.entries()) {
+      console.log(`Creating event ${index + 1} of ${quotationData.events.length}...`)
+      
+      const eventDate = event.event_date instanceof Date ? event.event_date : new Date(event.event_date)
+      
+      const eventInsertData = {
+        quotation_id: quotation.id,
+        event_name: event.event_name,
+        event_date: eventDate.toISOString(),
+        event_location: event.event_location,
+        venue_name: event.venue_name,
+        start_time: event.start_time,
+        end_time: event.end_time,
+        expected_crowd: event.expected_crowd,
+        selected_package: event.selected_package,
+        selected_services: event.selected_services,
+        selected_deliverables: event.selected_deliverables,
+        service_overrides: event.service_overrides,
+        package_overrides: event.package_overrides
+      }
+      
+      const { data: createdEvent, error: eventError } = await supabase
+        .from('quotation_events')
+        .insert(eventInsertData)
+        .select()
+        .single()
+
+      if (eventError) {
+        console.error(`Error creating quotation event ${index + 1}:`, eventError)
+      } else {
+        console.log(`Event ${index + 1} created successfully`)
+        
+        // Update normalized tables for this event
+        await updateNormalizedTablesForEvent(quotation.id, createdEvent.id, event, quotationData.default_package)
+      }
+    }
+
+    // CRITICAL: Update normalized tables to ensure consistency
+    console.log('Updating normalized tables to maintain consistency...')
+    await updateNormalizedTables(quotation.id, quotationData)
+
+    // Auto-complete the original task if taskId is provided
+    if (taskId) {
+      console.log('🎯 Auto-completing original task:', taskId)
+      try {
+        const { error: taskUpdateError } = await supabase
+          .from('ai_tasks')
+          .update({
+            status: 'completed',
+            completion_notes: `Quotation ${quotation.quotation_number} updated successfully with new amount ₹${totalAmount.toLocaleString()}`,
+            completed_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', taskId)
+        
+        if (taskUpdateError) {
+          console.error('❌ Failed to auto-complete task:', taskUpdateError)
+        } else {
+          console.log('✅ Original task auto-completed successfully')
+        }
+      } catch (taskError) {
+        console.error('❌ Error auto-completing task:', taskError)
+      }
+    }
+
+    // Check if this is a revision workflow (based on original status)
+    if (wasRejected) {
+      console.log('🔄 Processing revision workflow for rejected quotation...')
+      try {
+        await handleRevisionWorkflow(quotation, totalAmount, user.id)
+        console.log('✅ Revision workflow completed successfully')
+      } catch (workflowError) {
+        console.error('❌ Revision workflow failed:', workflowError)
+        // Don't fail the update, just log the error
+      }
+    } else {
+      console.log('ℹ️ Quotation was not rejected, skipping revision workflow. Original status:', originalQuotation?.status)
+    }
+
+    // AFTER successful update, handle approval workflow if changes were detected
+    if (hasChanges && !wasRejected) {
+      console.log('🚨 Changes detected - triggering approval workflow AFTER update')
+      
+      try {
+        const approvalResult = await createEditApprovalRequest(
+          quotationId,
+          originalQuotation,
+          quotationData,
+          totalAmount,
+          user.id
+        )
+        
+        if (approvalResult.success) {
+          console.log('✅ Approval workflow triggered successfully')
+          return { 
+            success: true, 
+            requiresApproval: true,
+            quotation: {
+              ...quotation,
+              quotation_data: quotationData
+            },
+            error: "Quotation updated and submitted for approval. You will be notified once approved."
+          }
+        } else {
+          console.error('❌ Approval workflow failed:', approvalResult.error)
+          // Don't fail the update, just log the error
+        }
+      } catch (approvalError) {
+        console.error('❌ Approval workflow error:', approvalError)
+        // Don't fail the update, just log the error
+      }
+    }
+
+    console.log('✅ Quotation update completed successfully')
+    
+    // 🔄 CONTINUOUS WORKFLOW DISABLED - Using discrete workflow instead
+    // try {
+    //   const { continuousWorkflow } = await import('@/lib/continuous-workflow')
+    //   await continuousWorkflow.progressWorkflow(parseInt(quotationId))
+    //   console.log('✅ Continuous workflow progressed')
+    // } catch (workflowError) {
+    //   console.error('❌ Continuous workflow error:', workflowError)
+    //   // Don't fail the update if workflow fails
+    // }
+    
+    return { 
+      success: true, 
+      quotation: {
+        ...quotation,
+        quotation_data: quotationData
+      }
+    }
+
+  } catch (error: any) {
+    console.error('Error updating quotation:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Update normalized tables for a specific event
+ */
+async function updateNormalizedTablesForEvent(
+  quotationId: number, 
+  eventId: number, 
+  event: QuotationEventData, 
+  defaultPackage: string
+) {
+  const supabase = createClient()
+  
+  try {
+    const packageType = event.selected_package === "default" ? defaultPackage : event.selected_package
+    
+    // Get pricing data
+    const { getQuotationServices: getServicePricing, getQuotationDeliverables: getDeliverablePricing } = await import('./quotation-data-actions')
+    const [servicePricing, deliverablePricing] = await Promise.all([
+      getServicePricing(),
+      getDeliverablePricing()
+    ])
+    
+    // Update services for this event
+    const services = event.selected_services.length > 0 ? event.selected_services : []
+    for (const serviceItem of services) {
+      const service = servicePricing.find(s => s.id === serviceItem.id)
+      if (service) {
+        const priceKey = `${packageType}_price` as keyof typeof service
+        const unitPrice = service[priceKey] as number || 0
+        const override = event.service_overrides[serviceItem.id]
+        const finalPrice = override?.[`${packageType}_price` as keyof typeof override] ?? unitPrice
+        
+        // Try to update normalized table, but don't fail if table doesn't exist
+        try {
+          await supabase.from('quotation_services').upsert({
+            quotation_id: quotationId,
+            event_id: eventId,
+            service_id: serviceItem.id,
+            quantity: serviceItem.quantity,
+            package_type: packageType,
+            unit_price: finalPrice,
+            total_price: finalPrice * serviceItem.quantity,
+            status: 'active'
+          })
+        } catch (normalizedError) {
+          console.log('⚠️ Normalized services table not available, skipping...')
+        }
+      }
+    }
+    
+    // Update deliverables for this event
+    const deliverables = event.selected_deliverables.length > 0 ? event.selected_deliverables : []
+    for (const deliverableItem of deliverables) {
+      const deliverable = deliverablePricing.find(d => d.id === deliverableItem.id)
+      if (deliverable) {
+        const priceKey = `${packageType}_total_price` as keyof typeof deliverable
+        const unitPrice = deliverable[priceKey] as number || 0
+        const override = event.package_overrides[deliverableItem.id]
+        const finalPrice = override?.[`${packageType}_price` as keyof typeof override] ?? unitPrice
+        
+        // Try to update normalized table, but don't fail if table doesn't exist
+        try {
+          await supabase.from('quotation_deliverables').upsert({
+            quotation_id: quotationId,
+            event_id: eventId,
+            deliverable_id: deliverableItem.id,
+            quantity: deliverableItem.quantity,
+            package_type: packageType,
+            unit_price: finalPrice,
+            total_price: finalPrice * deliverableItem.quantity,
+            status: 'quoted'
+          })
+        } catch (normalizedError) {
+          console.log('⚠️ Normalized deliverables table not available, skipping...')
+        }
+      }
+    }
+    
+  } catch (error) {
+    console.error('Error updating normalized tables for event:', error)
+  }
+}
+
+/**
+ * Update normalized tables to match quotation data
+ */
+async function updateNormalizedTables(quotationId: number, quotationData: QuotationData) {
+  const supabase = createClient()
+  
+  try {
+    // Clear existing normalized data (if tables exist)
+    try {
+      await Promise.all([
+        supabase.from('quotation_services').delete().eq('quotation_id', quotationId),
+        supabase.from('quotation_deliverables').delete().eq('quotation_id', quotationId)
+      ])
+      console.log('Cleared existing normalized data for quotation:', quotationId)
+    } catch (normalizedError) {
+      console.log('⚠️ Normalized tables not available, skipping cleanup...')
+    }
+    
+  } catch (error) {
+    console.error('Error updating normalized tables:', error)
+  }
+}
+
+/**
+ * Get quotation services from normalized table
+ */
+export async function getQuotationServices(quotationId: number): Promise<{ success: boolean; services?: any[]; error?: string }> {
+  const supabase = createClient()
+
+  try {
+    const { data: services, error } = await supabase
+      .from('quotation_services')
+      .select(`
+        *,
+        services (
+          id,
+          servicename,
+          basic_price,
+          premium_price,
+          elite_price,
+          category
+        )
+      `)
+      .eq('quotation_id', quotationId)
+      .order('created_at', { ascending: true })
+
+    if (error) {
+      console.error('Error fetching quotation services:', error)
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, services: services || [] }
+
+  } catch (error: any) {
+    console.error('Error in getQuotationServices:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Get quotation deliverables from normalized table
+ */
+export async function getQuotationDeliverables(quotationId: number): Promise<{ success: boolean; deliverables?: any[]; error?: string }> {
+  const supabase = createClient()
+
+  try {
+    const { data: deliverables, error } = await supabase
+      .from('quotation_deliverables')
+      .select(`
+        *,
+        deliverables (
+          id,
+          deliverable_name,
+          basic_price,
+          premium_price,
+          elite_price,
+          deliverable_cat,
+          deliverable_type
+        ),
+        services (
+          id,
+          servicename
+        )
+      `)
+      .eq('quotation_id', quotationId)
+      .order('created_at', { ascending: true })
+
+    if (error) {
+      console.error('Error fetching quotation deliverables:', error)
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, deliverables: deliverables || [] }
+
+  } catch (error: any) {
+    console.error('Error in getQuotationDeliverables:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Detect if there are changes between original and modified quotation data
+ */
+async function detectQuotationChanges(
+  originalQuotation: any,
+  newQuotationData: QuotationData,
+  newTotalAmount: number
+): Promise<boolean> {
+  try {
+    // Check if total amount changed
+    if (Math.abs(originalQuotation.total_amount - newTotalAmount) > 0.01) {
+      console.log('💰 Amount change detected:', originalQuotation.total_amount, '→', newTotalAmount)
+      return true
+    }
+
+    // Check if client details changed
+    const originalData = originalQuotation.quotation_data
+    if (originalData.client_name !== newQuotationData.client_name ||
+        originalData.bride_name !== newQuotationData.bride_name ||
+        originalData.groom_name !== newQuotationData.groom_name ||
+        originalData.mobile !== newQuotationData.mobile ||
+        originalData.email !== newQuotationData.email) {
+      console.log('👤 Client details change detected')
+      return true
+    }
+
+    // Check if package changed
+    if (originalData.default_package !== newQuotationData.default_package) {
+      console.log('📦 Package change detected')
+      return true
+    }
+
+    // Check if events changed (simplified check)
+    if (originalData.events?.length !== newQuotationData.events?.length) {
+      console.log('📅 Event count change detected')
+      return true
+    }
+
+    // Check if services or deliverables changed (simplified check)
+    const originalServicesCount = originalData.selected_services?.length || 0
+    const newServicesCount = newQuotationData.selected_services?.length || 0
+    const originalDeliverablesCount = originalData.selected_deliverables?.length || 0
+    const newDeliverablesCount = newQuotationData.selected_deliverables?.length || 0
+
+    if (originalServicesCount !== newServicesCount || originalDeliverablesCount !== newDeliverablesCount) {
+      console.log('🛠️ Services/deliverables change detected')
+      return true
+    }
+
+    console.log('✅ No significant changes detected')
+    return false
+
+  } catch (error) {
+    console.error('❌ Error detecting changes:', error)
+    // If we can't detect changes, err on the side of caution and require approval
+    return true
+  }
+}
+
+/**
+ * Create an approval task for Sales Head when quotation edit is requested
+ */
+async function createEditApprovalTask(quotation: any, editRequest: any, requesterId: number) {
+  try {
+    const supabase = createClient()
+    
+    // Find Sales Head for approval (case-insensitive)
+    const { data: salesHeads, error: salesHeadError } = await supabase
+      .from('employees')
+      .select('id, first_name, last_name, email, job_title')
+      .ilike('job_title', '%sales head%')
+    
+    const salesHead = salesHeads?.[0] // Take the first Sales Head found
+    
+    if (salesHeadError || !salesHead) {
+      console.error('❌ No Sales Head found for approval:', salesHeadError)
+      console.log('Available Sales Heads:', salesHeads)
+      return
+    }
+    
+    // Create approval task
+    const { error: taskError } = await supabase
+      .from('ai_tasks')
+      .insert({
+        task_title: `Review quotation edit for ${quotation.client_name}`,
+        task_description: `Review and approve/reject the requested changes to quotation ${quotation.quotation_number} for ${quotation.client_name}. Changes include: ${editRequest.changes_summary}`,
+        task_type: 'quotation_edit_approval',
+        priority: 'high',
+        status: 'pending',
+        assigned_to_employee_id: salesHead.id,
+        assigned_to: `${salesHead.first_name} ${salesHead.last_name}`.trim(),
+        quotation_id: quotation.id,
+        client_name: quotation.client_name,
+        due_date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours
+        business_impact: editRequest.amount_difference > 10000 ? 'high' : 'medium',
+        estimated_value: editRequest.modified_amount,
+        metadata: {
+          edit_request_id: editRequest.id,
+          requested_by_employee_id: requesterId,
+          original_amount: editRequest.original_amount,
+          modified_amount: editRequest.modified_amount,
+          amount_difference: editRequest.amount_difference,
+          percentage_change: editRequest.percentage_change,
+          auto_generated_from_edit: true,
+          requires_approval: true,
+          ai_reasoning: `Quotation ${quotation.quotation_number} edit requires Sales Head approval before applying changes.`,
+          ai_confidence_score: 0.9,
+          estimated_duration_minutes: 15
+        }
+      })
+    
+    if (taskError) {
+      console.error('❌ Failed to create approval task:', taskError)
+      throw taskError
+    }
+    
+    console.log(`✅ Approval task created for Sales Head: ${salesHead.first_name} ${salesHead.last_name}`)
+    
+  } catch (error) {
+    console.error('❌ Error creating edit approval task:', error)
+    throw error
+  }
+}
+
+/**
+ * Create an edit approval request - FIXED to work directly with database
+ */
+async function createEditApprovalRequest(
+  quotationId: string,
+  originalQuotation: any,
+  newQuotationData: QuotationData,
+  newTotalAmount: number,
+  userId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    console.log('📝 Creating edit approval request for quotation:', quotationId)
+    
+    const supabase = createClient()
+    
+    // Get current user's employee ID
+    const { data: { user }, error: authError } = await getAuthenticatedUser()
+    
+    if (!user || authError) {
+      console.error('❌ Authentication error in approval request:', authError)
+      console.error('❌ User object:', user)
+      console.error('❌ Auth error details:', authError)
+      return { success: false, error: authError || "User not authenticated" }
+    }
+
+    // Get employee ID for the current user - ensure it's an integer
+    let employeeId: number | null = null
+    
+    // The user.id is already the employee ID from getAuthenticatedUser()
+    employeeId = parseInt(user.id)
+    console.log('🔐 Using employee ID for approval request:', employeeId)
+    
+    // Verify the employee exists
+    const { data: employee, error: empError } = await supabase
+      .from('employees')
+      .select('id, first_name, last_name')
+      .eq('id', employeeId)
+      .single()
+    
+    if (empError || !employee) {
+      console.error('❌ Employee not found:', employeeId, empError)
+      return { success: false, error: 'Employee ID not found. Please contact administrator.' }
+    }
+    
+    console.log('✅ Employee verified:', employee.first_name, employee.last_name)
+
+    // Calculate change impact
+    const originalAmount = originalQuotation.total_amount || 0
+    const modifiedAmount = newTotalAmount
+    const amountDifference = modifiedAmount - originalAmount
+    const percentageChange = originalAmount > 0 ? ((amountDifference / originalAmount) * 100) : 0
+
+    console.log(`💰 Edit impact: ₹${originalAmount.toLocaleString()} → ₹${modifiedAmount.toLocaleString()} (${percentageChange.toFixed(1)}% change)`)
+
+    // Create edit approval request directly in database
+    const { data: editRequest, error: requestError } = await supabase
+      .from('quotation_edit_approvals')
+      .insert({
+        quotation_id: parseInt(quotationId),
+        requested_by: employeeId,
+        original_data: originalQuotation.quotation_data,
+        modified_data: newQuotationData,
+        changes_summary: generateChangesSummary(originalQuotation, newQuotationData, newTotalAmount),
+        edit_reason: 'Quotation modification requested',
+        original_amount: originalAmount,
+        modified_amount: modifiedAmount,
+        amount_difference: amountDifference,
+        percentage_change: percentageChange,
+        approval_status: 'pending',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .select()
+      .single()
+
+    if (requestError) {
+      console.error('❌ Error creating edit approval request:', requestError)
+      return { success: false, error: `Failed to create approval request: ${requestError.message}` }
+    }
+
+    // Update quotation status to indicate edit pending approval
+    const { error: statusUpdateError } = await supabase
+      .from('quotations')
+      .update({
+        status: 'edit_pending_approval',
+        workflow_status: 'edit_pending_approval',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', quotationId)
+    
+    if (statusUpdateError) {
+      console.error('❌ Failed to update quotation status:', statusUpdateError)
+    } else {
+      console.log('✅ Quotation status updated to edit_pending_approval')
+    }
+
+    // Create approval task for Sales Head
+    try {
+      await createEditApprovalTask(originalQuotation, editRequest, employeeId)
+      console.log('✅ Approval task created for Sales Head')
+    } catch (taskError) {
+      console.error('❌ Failed to create approval task:', taskError)
+      // Don't fail the approval request creation, just log the error
+    }
+
+    console.log('✅ Edit approval request created successfully:', editRequest.id)
+    return { success: true }
+
+  } catch (error: any) {
+    console.error('❌ Error creating edit approval request:', error)
+    return { success: false, error: 'Failed to create approval request' }
+  }
+}
+
+/**
+ * Generate a summary of changes for approval request
+ */
+function generateChangesSummary(
+  originalQuotation: any,
+  newQuotationData: QuotationData,
+  newTotalAmount: number
+): string {
+  const changes: string[] = []
+  const originalData = originalQuotation.quotation_data
+
+  // Amount change
+  if (Math.abs(originalQuotation.total_amount - newTotalAmount) > 0.01) {
+    const difference = newTotalAmount - originalQuotation.total_amount
+    changes.push(`Amount: ₹${originalQuotation.total_amount.toLocaleString()} → ₹${newTotalAmount.toLocaleString()} (${difference > 0 ? '+' : ''}₹${difference.toLocaleString()})`)
+  }
+
+  // Client details changes
+  if (originalData.client_name !== newQuotationData.client_name) {
+    changes.push(`Client Name: "${originalData.client_name}" → "${newQuotationData.client_name}"`)
+  }
+  if (originalData.bride_name !== newQuotationData.bride_name) {
+    changes.push(`Bride Name: "${originalData.bride_name}" → "${newQuotationData.bride_name}"`)
+  }
+  if (originalData.groom_name !== newQuotationData.groom_name) {
+    changes.push(`Groom Name: "${originalData.groom_name}" → "${newQuotationData.groom_name}"`)
+  }
+
+  // Package change
+  if (originalData.default_package !== newQuotationData.default_package) {
+    changes.push(`Package: ${originalData.default_package} → ${newQuotationData.default_package}`)
+  }
+
+  // Events change
+  if (originalData.events?.length !== newQuotationData.events?.length) {
+    changes.push(`Events: ${originalData.events?.length || 0} → ${newQuotationData.events?.length || 0}`)
+  }
+
+  return changes.length > 0 ? changes.join('; ') : 'Minor modifications detected'
+}

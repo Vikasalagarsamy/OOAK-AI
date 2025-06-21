@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle, RefreshCw, User, Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { createClient } from "@/lib/supabase-singleton"
+import { query } from "@/lib/postgresql-client"
 import { Badge } from "@/components/ui/badge"
 
 interface UserWithRole {
@@ -31,43 +31,37 @@ interface Role {
 
 export function UsersByRole() {
   const [roles, setRoles] = useState<Role[]>([])
-  const [selectedRole, setSelectedRole] = useState<string>("1") // Default to Administrator role
+  const [selectedRole, setSelectedRole] = useState<string>("1")
   const [users, setUsers] = useState<UserWithRole[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [refreshKey, setRefreshKey] = useState(0) // Used to trigger refreshes
-  const supabase = createClient()
+  const [refreshKey, setRefreshKey] = useState(0)
 
-  // Load roles with user counts
   useEffect(() => {
     async function loadRoles() {
       try {
-        // First get all roles
-        const { data: rolesData, error: rolesError } = await supabase
-          .from("roles")
-          .select("id, title, description")
-          .order("title")
+        console.log('🔍 Loading roles with user counts...')
+        
+        const result = await query(`
+          SELECT 
+            r.id, 
+            r.title, 
+            r.description,
+            COUNT(ua.id) as user_count
+          FROM roles r
+          LEFT JOIN user_accounts ua ON r.id = ua.role_id AND ua.is_active = true
+          GROUP BY r.id, r.title, r.description
+          ORDER BY r.title
+        `)
 
-        if (rolesError) throw new Error(`Failed to fetch roles: ${rolesError.message}`)
+        if (!result.success) {
+          throw new Error(`Failed to fetch roles: ${result.error}`)
+        }
 
-        // Then get user counts for each role
-        const roleCounts = await Promise.all(
-          rolesData.map(async (role) => {
-            const { count, error } = await supabase
-              .from("user_accounts")
-              .select("*", { count: "exact", head: true })
-              .eq("role_id", role.id)
-
-            return {
-              ...role,
-              user_count: error ? 0 : count || 0,
-            }
-          }),
-        )
-
-        setRoles(roleCounts || [])
+        setRoles(result.data || [])
+        console.log(`✅ Loaded ${result.data?.length || 0} roles`)
       } catch (error: any) {
-        console.error("Error loading roles:", error)
+        console.error("❌ Error loading roles:", error)
         setError(`Failed to load roles: ${error.message}`)
       }
     }
@@ -75,7 +69,6 @@ export function UsersByRole() {
     loadRoles()
   }, [refreshKey])
 
-  // Load users for the selected role
   useEffect(() => {
     async function loadUsers() {
       if (!selectedRole) return
@@ -84,45 +77,33 @@ export function UsersByRole() {
       setError(null)
 
       try {
-        // Get users with their role information
-        const { data, error } = await supabase
-          .from("user_accounts")
-          .select(`
-            id,
-            username,
-            email,
-            last_login,
-            created_at,
-            updated_at,
-            employees!employee_id (
-              first_name,
-              last_name
-            ),
-            roles!role_id (
-              title
-            )
-          `)
-          .eq("role_id", Number.parseInt(selectedRole, 10))
-          .eq("is_active", true)
-          .order("username")
+        console.log(`🔍 Loading users for role ${selectedRole}...`)
 
-        if (error) throw new Error(`Failed to fetch users: ${error.message}`)
+        const result = await query(`
+          SELECT 
+            ua.id,
+            ua.username,
+            ua.email,
+            ua.last_login,
+            ua.created_at,
+            ua.updated_at,
+            COALESCE(e.first_name || ' ' || e.last_name, 'Unknown') as name,
+            r.title as role_name
+          FROM user_accounts ua
+          LEFT JOIN employees e ON ua.employee_id = e.id
+          LEFT JOIN roles r ON ua.role_id = r.id
+          WHERE ua.role_id = $1 AND ua.is_active = true
+          ORDER BY ua.username
+        `, [Number.parseInt(selectedRole, 10)])
 
-        // Transform the data to match the expected format
-        const transformedUsers = data.map((user) => ({
-          id: user.id,
-          username: user.username,
-          email: user.email,
-          name: user.employees ? `${user.employees.first_name} ${user.employees.last_name}` : "Unknown",
-          role_name: user.roles ? user.roles.title : "Unknown",
-          last_login: user.last_login,
-          created_at: user.created_at,
-          updated_at: user.updated_at,
-        }))
+        if (!result.success) {
+          throw new Error(`Failed to fetch users: ${result.error}`)
+        }
 
-        setUsers(transformedUsers || [])
+        setUsers(result.data || [])
+        console.log(`✅ Loaded ${result.data?.length || 0} users`)
       } catch (error: any) {
-        console.error("Error loading users:", error)
+        console.error("❌ Error loading users:", error)
         setError(`Error loading users: ${error.message}`)
         setUsers([])
       } finally {
@@ -137,7 +118,6 @@ export function UsersByRole() {
     setRefreshKey((prev) => prev + 1)
   }
 
-  // Format date for display
   const formatDate = (dateString: string | null) => {
     if (!dateString) return "Never"
     const date = new Date(dateString)
@@ -202,56 +182,45 @@ export function UsersByRole() {
               </TableHeader>
               <TableBody>
                 {loading ? (
-                  // Loading skeleton
                   Array.from({ length: 3 }).map((_, index) => (
                     <TableRow key={index}>
-                      <TableCell>
-                        <Skeleton className="h-6 w-32" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-6 w-32" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-6 w-48" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-6 w-32" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-6 w-20" />
-                      </TableCell>
+                      <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-40" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                     </TableRow>
                   ))
-                ) : users.length > 0 ? (
-                  // User data
+                ) : users.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                      No users found for this role
+                    </TableCell>
+                  </TableRow>
+                ) : (
                   users.map((user) => (
                     <TableRow key={user.id}>
-                      <TableCell className="font-medium">{user.name}</TableCell>
+                      <TableCell className="font-medium">
+                        <div className="flex items-center">
+                          <User className="h-4 w-4 mr-2 text-muted-foreground" />
+                          {user.name}
+                        </div>
+                      </TableCell>
                       <TableCell>{user.username}</TableCell>
                       <TableCell>{user.email}</TableCell>
-                      <TableCell className="text-sm">
+                      <TableCell>
                         <div className="flex items-center">
-                          <Clock className="h-3 w-3 mr-1 text-muted-foreground" />
+                          <Clock className="h-4 w-4 mr-2 text-muted-foreground" />
                           {formatDate(user.last_login)}
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant={user.last_login ? "default" : "outline"}>
-                          {user.last_login ? "Active" : "Never logged in"}
+                        <Badge variant="default" className="text-xs">
+                          {user.role_name}
                         </Badge>
                       </TableCell>
                     </TableRow>
                   ))
-                ) : (
-                  // No users found
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center py-6 text-muted-foreground">
-                      <div className="flex flex-col items-center justify-center gap-2">
-                        <User className="h-8 w-8 text-gray-300" />
-                        <p>No users found with this role</p>
-                      </div>
-                    </TableCell>
-                  </TableRow>
                 )}
               </TableBody>
             </Table>

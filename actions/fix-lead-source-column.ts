@@ -1,64 +1,94 @@
 "use server"
 
-import { createClient } from "@/lib/supabase/server"
+import { query } from "@/lib/postgresql-client"
 
 export async function addLeadSourceColumn(): Promise<{ success: boolean; message: string }> {
-  const supabase = createClient()
-
   try {
-    // First check if the column already exists
-    const { data: columnExists, error: checkError } = await supabase
-      .from("information_schema.columns")
-      .select("column_name")
-      .eq("table_schema", "public")
-      .eq("table_name", "leads")
-      .or("column_name.eq.lead_source,column_name.eq.lead_source_id")
+    console.log("🔧 [LEAD_COLUMN] Starting lead_source column addition via PostgreSQL...")
 
-    if (checkError) {
-      console.error("Error checking column existence:", checkError)
-      return {
-        success: false,
-        message: `Error checking column existence: ${checkError.message}`,
-      }
-    }
+    // Check if either lead_source or lead_source_id column already exists
+    console.log("🔍 [LEAD_COLUMN] Checking for existing lead source columns...")
+    const columnCheckResult = await query(`
+      SELECT column_name
+      FROM information_schema.columns 
+      WHERE table_schema = 'public' 
+      AND table_name = 'leads' 
+      AND column_name IN ('lead_source', 'lead_source_id')
+      ORDER BY column_name
+    `)
 
-    // If column already exists, return success
-    if (columnExists && columnExists.length > 0) {
+    const existingColumns = columnCheckResult.rows
+
+    // If any column already exists, return success
+    if (existingColumns && existingColumns.length > 0) {
+      const columnName = existingColumns[0].column_name
+      console.log(`✅ [LEAD_COLUMN] Column ${columnName} already exists`)
       return {
         success: true,
-        message: `Column ${columnExists[0].column_name} already exists`,
+        message: `Column ${columnName} already exists`
       }
     }
 
-    // Add the lead_source column
-    const { error: alterError } = await supabase.rpc("execute_sql", {
-      sql: "ALTER TABLE leads ADD COLUMN lead_source TEXT",
-    })
+    console.log("➕ [LEAD_COLUMN] Adding lead_source column to leads table...")
 
-    if (alterError) {
-      // Try direct SQL if RPC fails
-      const { error: directError } = await supabase.rpc("execute_sql", {
-        sql: "ALTER TABLE public.leads ADD COLUMN lead_source TEXT",
-      })
+    // Add the lead_source column with proper constraints
+    await query(`
+      ALTER TABLE leads 
+      ADD COLUMN lead_source TEXT DEFAULT 'direct'
+    `)
 
-      if (directError) {
-        console.error("Error adding lead_source column:", directError)
-        return {
-          success: false,
-          message: `Error adding lead_source column: ${directError.message}`,
-        }
-      }
+    console.log("📝 [LEAD_COLUMN] Setting default values for existing records...")
+
+    // Update any existing NULL values (though there shouldn't be any with DEFAULT)
+    const updateResult = await query(`
+      UPDATE leads 
+      SET lead_source = 'direct' 
+      WHERE lead_source IS NULL
+    `)
+
+    console.log(`📊 [LEAD_COLUMN] Updated ${updateResult.rowCount || 0} existing records`)
+
+    // Create index for better query performance
+    await query(`
+      CREATE INDEX IF NOT EXISTS idx_leads_lead_source 
+      ON leads(lead_source)
+    `)
+
+    // Add a check constraint for common lead source values
+    try {
+      await query(`
+        ALTER TABLE leads 
+        ADD CONSTRAINT leads_lead_source_check 
+        CHECK (lead_source IN (
+          'direct', 'website', 'referral', 'social_media', 'email_campaign', 
+          'phone_call', 'advertisement', 'event', 'partner', 'unknown', 'other'
+        ) OR lead_source IS NULL)
+      `)
+      console.log("🛡️ [LEAD_COLUMN] Added validation constraint for lead_source values")
+    } catch (constraintError) {
+      console.log("ℹ️ [LEAD_COLUMN] Constraint already exists or couldn't be added")
     }
 
+    console.log("✅ [LEAD_COLUMN] Lead source column added successfully!")
     return {
       success: true,
-      message: "Successfully added lead_source column to leads table",
+      message: "Successfully added lead_source column to leads table with constraints and index"
     }
-  } catch (error) {
-    console.error("Exception in addLeadSourceColumn:", error)
+
+  } catch (error: any) {
+    console.error("❌ [LEAD_COLUMN] Error adding lead_source column:", error)
+    
+    // Handle specific PostgreSQL errors gracefully
+    if (error.message && error.message.includes('already exists')) {
+      return {
+        success: true,
+        message: "Lead source column already exists"
+      }
+    }
+
     return {
       success: false,
-      message: `Exception: ${error instanceof Error ? error.message : String(error)}`,
+      message: `Failed to add lead_source column: ${error.message || "Unknown error"}`
     }
   }
-}
+} 

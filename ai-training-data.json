@@ -1,0 +1,278 @@
+{
+  "vikasPersonality": {
+    "averageResponseLength": 7,
+    "responseDistribution": {
+      "short": 37,
+      "medium": 59,
+      "long": 4
+    },
+    "commonWords": [
+      "will",
+      "you",
+      "your",
+      "link",
+      "well",
+      "thank",
+      "shared",
+      "video",
+      "please",
+      "share",
+      "final",
+      "event",
+      "unlock",
+      "pictures",
+      "noted",
+      "details",
+      "shortly",
+      "photography",
+      "update",
+      "candid"
+    ],
+    "tone": "professional but friendly",
+    "businessContext": "photography and video production"
+  },
+  "conversationExamples": [
+    {
+      "filename": "Lakshmi_Priyanka_Post_Production_Transcript.txt",
+      "messageCount": 11,
+      "exchanges": []
+    },
+    {
+      "filename": "Pooja_Karthikeyan_Engagement_Transcript_FULL.txt",
+      "messageCount": 37,
+      "exchanges": [
+        {
+          "clientSaid": "Hi I wanted to enquire about photography package for my wedding",
+          "youResponded": "Hello Pooja! Thank you for contacting us. Could you please share your event dates & location?",
+          "responseLength": 16
+        },
+        {
+          "clientSaid": "Location: Maraimalai nagar, Chennai | Venue: Sri Alwar Palace | Events: Wedding & Reception on 06/07/2025 & 07/07/2025 at 5pm & 4am",
+          "youResponded": "Thank you for sharing your details. Our team will reach you shortly to discuss further.",
+          "responseLength": 15
+        },
+        {
+          "clientSaid": "Thanks",
+          "youResponded": "Welcome to ONE OF A KIND PHOTOGRAPHY. Your customized package details will be shared shortly.",
+          "responseLength": 15
+        },
+        {
+          "clientSaid": "Hi",
+          "youResponded": "Hello Pooja",
+          "responseLength": 2
+        },
+        {
+          "clientSaid": "[Submitted Engagement Flow]",
+          "youResponded": "THANK YOU FOR SUBMITTING YOUR ENGAGEMENT EVENT FLOW",
+          "responseLength": 8
+        },
+        {
+          "clientSaid": "The pictures are nice. Can you edit few groom pictures?",
+          "youResponded": "Please send 2–3 pictures you’d like us to edit.",
+          "responseLength": 9
+        },
+        {
+          "clientSaid": "Can you also add vows video & groom second entry in traditional video?",
+          "youResponded": "Let us check and update.",
+          "responseLength": 5
+        },
+        {
+          "clientSaid": "Looks good, go ahead!",
+          "youResponded": "UNLOCK LINK - Edited Pictures",
+          "responseLength": 5
+        },
+        {
+          "clientSaid": "The edited pictures are so good. Thank you.",
+          "youResponded": "Candid video first draft link shared",
+          "responseLength": 6
+        },
+        {
+          "clientSaid": "Video seems blur. Kindly change to 1080p",
+          "youResponded": "Got it. Will update.",
+          "responseLength": 4
+        }
+      ]
+    },
+    {
+      "filename": "Rohith_Complete_Conversation_20250607.txt",
+      "messageCount": 47,
+      "exchanges": [
+        {
+          "clientSaid": "Hi, I'm interested in booking for a 1st Birthday function.",
+          "youResponded": "Hello Rohith! Thank you for contacting OOAK. Could you please share your event details and date?",
+          "responseLength": 16
+        },
+        {
+          "clientSaid": "It's for my daughter, Lekhya. Event is on Dec 26, 2024 at Sri Convention Hall.",
+          "youResponded": "Thank you for the details. We'll get back to you shortly with a custom package.",
+          "responseLength": 15
+        },
+        {
+          "clientSaid": "Thank you so much for the edits — they look amazing! Just one minor change request...",
+          "youResponded": "Sure. Please let us know the timestamp and replacement clips/songs you'd like.",
+          "responseLength": 12
+        },
+        {
+          "clientSaid": "Also at the end of video .. please remove the footage of us 3 (me holding the baby and wife). Please end with a baby-only clip.",
+          "youResponded": "Noted. We'll update the video accordingly.",
+          "responseLength": 6
+        },
+        {
+          "clientSaid": "End with baby alone, remove awkward footage of all 3.",
+          "youResponded": "Noted. We’ll revise it and get back to you.",
+          "responseLength": 9
+        },
+        {
+          "clientSaid": "Hello, any updates on the candid video?",
+          "youResponded": "It's under progress. Will share the draft by next week.",
+          "responseLength": 10
+        },
+        {
+          "clientSaid": "Also add new baby clips: [Google Drive links]",
+          "youResponded": "Thank you. Changes noted.",
+          "responseLength": 4
+        },
+        {
+          "clientSaid": "Looks good! Please call me for one last quick change.",
+          "youResponded": "Final Reels will be shared soon.",
+          "responseLength": 6
+        },
+        {
+          "clientSaid": "It’s been 4 months since the event, please try to close this soon.",
+          "youResponded": "Apologies for the delay. Reels will be shared by EOD.",
+          "responseLength": 10
+        }
+      ]
+    },
+    {
+      "filename": "Sandeeprajan_Complete_Conversation_20250607.txt",
+      "messageCount": 41,
+      "exchanges": [
+        {
+          "clientSaid": "Hello, we had requested some edited versions of our wedding photos.",
+          "youResponded": "Hi Sandeep! The photos are now available at https://gallery.ooak.photography/sakshixsandeep/",
+          "responseLength": 9
+        },
+        {
+          "clientSaid": "Are these edited? The raw photos look better.",
+          "youResponded": "You can select 15–20 pics per event and send them to retouchpics@ooak.photography",
+          "responseLength": 12
+        },
+        {
+          "clientSaid": "[Shares selected photos and requests different styles: indoor, outdoor, mandapam]",
+          "youResponded": "We’ll share 3 different sample tones in 2 days.",
+          "responseLength": 9
+        },
+        {
+          "clientSaid": "[Later] Thanks, album looks good except reception photos are above wedding.",
+          "youResponded": "Noted, we’ll rearrange. 3 extra sheets will be added.",
+          "responseLength": 9
+        },
+        {
+          "clientSaid": "Hi, what's the update?",
+          "youResponded": "Final print in progress. Will deliver next week.",
+          "responseLength": 8
+        },
+        {
+          "clientSaid": "Hi, we've selected 100 pics for soft copy edit. Please confirm.",
+          "youResponded": "Got it, editing underway. Will share updates.",
+          "responseLength": 7
+        },
+        {
+          "clientSaid": "Is it done yet?",
+          "youResponded": "Sample draft shared — please check for layout and order.",
+          "responseLength": 10
+        },
+        {
+          "clientSaid": "Layout looks good. Can we add 10 more pictures?",
+          "youResponded": "That will require additional sheets and charges. Do you approve?",
+          "responseLength": 10
+        },
+        {
+          "clientSaid": "Yes, but please ensure reception pics are after wedding.",
+          "youResponded": "Confirmed. Will add 2 sheets for layout adjustment.",
+          "responseLength": 8
+        },
+        {
+          "clientSaid": "Please finish under 2k for both albums.",
+          "youResponded": "Will try and update.",
+          "responseLength": 4
+        }
+      ]
+    }
+  ],
+  "responseTemplates": {
+    "greetings": [
+      "Hello! Thank you for contacting OOAK.",
+      "Hi! Could you please share your event details?",
+      "Thank you for the details.",
+      "Thanks for contacting ONE OF A KIND PHOTOGRAPHY!"
+    ],
+    "acknowledgments": [
+      "Noted.",
+      "Got it.",
+      "Thank you.",
+      "Understood.",
+      "Acknowledged.",
+      "Sure."
+    ],
+    "updates": [
+      "Will share updates.",
+      "We'll get back to you shortly.",
+      "It's under progress.",
+      "Will share by next week.",
+      "Completion expected by [timeframe]."
+    ],
+    "links": [
+      "UNLOCK YOUR EDITED PICTURES: [link]",
+      "Your photos are now available at [link]",
+      "Updated video link: [link]"
+    ]
+  },
+  "realExamples": {
+    "shortResponses": [
+      "QUOTATION LINK: https://quotation.ooak.photography/booknow.php?q_id=V9tmoUjjtKvF",
+      "Hello Pooja",
+      "Let us check and update.",
+      "UNLOCK LINK - Edited Pictures",
+      "Got it. Will update.",
+      "Noted. Will revise.",
+      "Dear Rohith,",
+      "Our portfolio links:",
+      "Instagram: https://www.instagram.com/ooak.photography",
+      "Website: https://www.ooak.photography",
+      "Facebook: https://www.facebook.com/ooak.photography",
+      "YouTube: https://www.youtube.com/@ooakphotography",
+      "Gallery: https://www.ooak.photography/destination-wedding-photography/",
+      "Book Appointments: https://www.ooak.photography/book-appointments/",
+      "QUOTATION LINK: https://quotation.ooak.photography/booknow.php?q_id=6kaj5D00032f",
+      "Updated video link (Traditional): https://www.dropbox.com/scl/fo/59ghvigg4qsf5p3ysk8ik/AA00_KeWxf2NbgcTn0SXmOA?rlkey=o7qe3qfpeyayaxchgpjr9qdz8&dl=0",
+      "UNLOCK YOUR EDITED PICTURES: https://gallery.ooak.photography/lekhyasbirthday/",
+      "UNLOCK YOUR CANDID VIDEO: https://www.dropbox.com/scl/fo/kvacl2y9sn8acxvf2guqh/AMw3ydhenK_tEgbPcEKClis?rlkey=qf79k8b96py85gc13pz1bkosa&dl=0",
+      "Thank you. Changes noted.",
+      "Updated Candid Video Link: https://www.dropbox.com/scl/fo/kvacl2y9sn8acxvf2guqh/AMw3ydhenK_tEgbPcEKClis?dl=0"
+    ],
+    "mediumResponses": [
+      "Thank you for sharing your details. Our team will reach you shortly to discuss further.",
+      "Welcome to ONE OF A KIND PHOTOGRAPHY. Your customized package details will be shared shortly.",
+      "PLEASE SUBMIT - YOUR ENGAGEMENT EVENT FLOW: https://crm.ooak.photography/#/eventform/175243",
+      "THANK YOU FOR SUBMITTING YOUR ENGAGEMENT EVENT FLOW",
+      "POST PRODUCTION PROCESS initiated – shared timelines & expectations:",
+      "UNLOCK LINK - Color Corrected Pictures",
+      "Please send 2–3 pictures you’d like us to edit.",
+      "Traditional video updated – new Dropbox link sent",
+      "Candid video first draft link shared",
+      "Final revised candid video shared again",
+      "Thank you for confirming! When will you collect hard disk?",
+      "Hard disk sent. Let us know once received.",
+      "Color corrected photos only on Pixel link.",
+      "Thank you for the details. We'll get back to you shortly with a custom package.",
+      "Welcome to ONE OF A KIND PHOTOGRAPHY."
+    ],
+    "longResponses": [
+      "Hello Pooja! Thank you for contacting us. Could you please share your event dates & location?",
+      "Hello Rohith! Thank you for contacting OOAK. Could you please share your event details and date?",
+      "Thanks for contacting ONE OF A KIND PHOTOGRAPHY! Your Celebrations turn into timeless memories through our professional photography services."
+    ]
+  }
+}

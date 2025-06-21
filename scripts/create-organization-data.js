@@ -1,0 +1,316 @@
+// 🚨 MIGRATED FROM SUPABASE TO POSTGRESQL
+// Migration Date: 2025-06-20T09:50:05.787Z
+// Original file backed up as: scripts/create-organization-data.js.backup
+
+
+// PostgreSQL connection pool
+const pool = new Pool({
+  host: process.env.POSTGRES_HOST || 'localhost',
+  port: process.env.POSTGRES_PORT || 5432,
+  database: process.env.POSTGRES_DATABASE || 'ooak_future',
+  user: process.env.POSTGRES_USER || 'postgres',
+  password: process.env.POSTGRES_PASSWORD || 'password',
+  ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false,
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+});
+
+
+// Query helper function
+async function query(text, params = []) {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(text, params);
+    return { data: result.rows, error: null };
+  } catch (error) {
+    console.error('❌ PostgreSQL Query Error:', error.message);
+    return { data: null, error: error.message };
+  } finally {
+    client.release();
+  }
+}
+
+// Transaction helper function  
+async function transaction(callback) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await callback(client);
+    await client.query('COMMIT');
+    return { data: result, error: null };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ PostgreSQL Transaction Error:', error.message);
+    return { data: null, error: error.message };
+  } finally {
+    client.release();
+  }
+}
+
+// Original content starts here:
+const { Pool } = require('pg');
+
+// Initialize Supabase client
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+if (!supabaseUrl || !supabaseKey) {
+  console.error('❌ Missing Supabase environment variables')
+  process.exit(1)
+}
+
+// PostgreSQL connection - see pool configuration below
+
+async function createOrganizationData() {
+  console.log('🏢 Creating organization data...')
+
+  try {
+    // 1. Create Companies
+    console.log('📊 Creating companies...')
+    const { data: companies, error: companiesError } = await supabase
+      .from('companies')
+      .upsert([
+        {
+          name: 'Tech Solutions Inc',
+          company_code: 'TSI001',
+          email: 'info@techsolutions.com',
+          phone: '+1-555-0101',
+          address: '123 Tech Street, Silicon Valley, CA 94000',
+          status: 'active'
+        },
+        {
+          name: 'Global Enterprises Ltd',
+          company_code: 'GEL002',
+          email: 'contact@globalent.com',
+          phone: '+1-555-0102',
+          address: '456 Business Ave, New York, NY 10001',
+          status: 'active'
+        },
+        {
+          name: 'Innovation Corp',
+          company_code: 'INC003',
+          email: 'hello@innovation.com',
+          phone: '+1-555-0103',
+          address: '789 Innovation Blvd, Austin, TX 73301',
+          status: 'active'
+        }
+      ], { onConflict: 'company_code' })
+      .select()
+
+    if (companiesError) {
+      console.error('❌ Error creating companies:', companiesError)
+      throw companiesError
+    }
+
+    console.log(`✅ Created ${companies?.length || 0} companies`)
+
+    // 2. Create Branches
+    if (companies && companies.length > 0) {
+      console.log('🏢 Creating branches...')
+      const { data: branches, error: branchesError } = await supabase
+        .from('branches')
+        .upsert([
+          {
+            name: 'Tech Solutions HQ',
+            company_id: companies[0].id,
+            branch_code: 'TSI-HQ',
+            address: '123 Tech Street, Silicon Valley, CA 94000',
+            city: 'Palo Alto',
+            state: 'California',
+            phone: '+1-555-0101',
+            email: 'hq@techsolutions.com',
+            status: 'active'
+          },
+          {
+            name: 'Tech Solutions East',
+            company_id: companies[0].id,
+            branch_code: 'TSI-EAST',
+            address: '456 East Coast Ave, Boston, MA 02101',
+            city: 'Boston',
+            state: 'Massachusetts',
+            phone: '+1-555-0111',
+            email: 'east@techsolutions.com',
+            status: 'active'
+          },
+          {
+            name: 'Global Enterprises Main',
+            company_id: companies[1].id,
+            branch_code: 'GEL-MAIN',
+            address: '456 Business Ave, New York, NY 10001',
+            city: 'New York',
+            state: 'New York',
+            phone: '+1-555-0102',
+            email: 'main@globalent.com',
+            status: 'active'
+          }
+        ], { onConflict: 'branch_code' })
+        .select()
+
+      if (branchesError) {
+        console.error('❌ Error creating branches:', branchesError)
+      } else {
+        console.log(`✅ Created ${branches?.length || 0} branches`)
+      }
+    }
+
+    // 3. Create Clients
+    console.log('👥 Creating clients...')
+    const { data: clients, error: clientsError } = await supabase
+      .from('clients')
+      .upsert([
+        {
+          name: 'ABC Manufacturing',
+          email: 'contact@abcmfg.com',
+          phone: '+1-555-0201',
+          address: '100 Factory Road, Detroit, MI 48201',
+          status: 'active',
+          company_id: companies?.[0]?.id || 1
+        },
+        {
+          name: 'XYZ Retail Chain',
+          email: 'info@xyzretail.com',
+          phone: '+1-555-0202',
+          address: '200 Shopping Center, Los Angeles, CA 90210',
+          status: 'active',
+          company_id: companies?.[1]?.id || 2
+        },
+        {
+          name: 'Digital Marketing Pro',
+          email: 'hello@digitalmarketing.com',
+          phone: '+1-555-0203',
+          address: '300 Marketing Plaza, Chicago, IL 60601',
+          status: 'active',
+          company_id: companies?.[2]?.id || 3
+        }
+      ], { onConflict: 'email' })
+      .select()
+
+    if (clientsError) {
+      console.error('❌ Error creating clients:', clientsError)
+    } else {
+      console.log(`✅ Created ${clients?.length || 0} clients`)
+    }
+
+    // 4. Create Suppliers
+    console.log('🏭 Creating suppliers...')
+    const { data: suppliers, error: suppliersError } = await supabase
+      .from('suppliers')
+      .upsert([
+        {
+          name: 'Premium Parts Supply',
+          email: 'orders@premiumparts.com',
+          phone: '+1-555-0301',
+          address: '400 Industrial Way, Cleveland, OH 44101',
+          status: 'active'
+        },
+        {
+          name: 'Quality Materials Inc',
+          email: 'sales@qualitymaterials.com',
+          phone: '+1-555-0302',
+          address: '500 Materials Blvd, Phoenix, AZ 85001',
+          status: 'active'
+        }
+      ], { onConflict: 'email' })
+      .select()
+
+    if (suppliersError) {
+      console.error('❌ Error creating suppliers:', suppliersError)
+    } else {
+      console.log(`✅ Created ${suppliers?.length || 0} suppliers`)
+    }
+
+    // 5. Create Vendors
+    console.log('🛠️ Creating vendors...')
+    const { data: vendors, error: vendorsError } = await supabase
+      .from('vendors')
+      .upsert([
+        {
+          name: 'Cloud Services Pro',
+          email: 'support@cloudservices.com',
+          phone: '+1-555-0401',
+          address: '600 Cloud Drive, Seattle, WA 98101',
+          status: 'active'
+        },
+        {
+          name: 'Security Solutions Ltd',
+          email: 'info@securitysolutions.com',
+          phone: '+1-555-0402',
+          address: '700 Security Ave, Denver, CO 80201',
+          status: 'active'
+        }
+      ], { onConflict: 'email' })
+      .select()
+
+    if (vendorsError) {
+      console.error('❌ Error creating vendors:', vendorsError)
+    } else {
+      console.log(`✅ Created ${vendors?.length || 0} vendors`)
+    }
+
+    // 6. Create Roles
+    console.log('👔 Creating roles...')
+    const { data: roles, error: rolesError } = await supabase
+      .from('roles')
+      .upsert([
+        {
+          title: 'Chief Executive Officer',
+          description: 'Overall strategic leadership and company direction',
+          department: 'Executive',
+          level: 'executive',
+          status: 'active'
+        },
+        {
+          title: 'Sales Manager',
+          description: 'Manages sales team and customer relationships',
+          department: 'Sales',
+          level: 'senior',
+          status: 'active'
+        },
+        {
+          title: 'Software Developer',
+          description: 'Develops and maintains software applications',
+          department: 'Technology',
+          level: 'mid',
+          status: 'active'
+        },
+        {
+          title: 'Marketing Specialist',
+          description: 'Creates and executes marketing campaigns',
+          department: 'Marketing',
+          level: 'junior',
+          status: 'active'
+        },
+        {
+          title: 'HR Coordinator',
+          description: 'Handles human resources and employee relations',
+          department: 'Human Resources',
+          level: 'mid',
+          status: 'active'
+        }
+      ], { onConflict: 'title' })
+      .select()
+
+    if (rolesError) {
+      console.error('❌ Error creating roles:', rolesError)
+    } else {
+      console.log(`✅ Created ${roles?.length || 0} roles`)
+    }
+
+    console.log('\n🎉 Organization data creation completed successfully!')
+    console.log('📊 Summary:')
+    console.log(`   Companies: ${companies?.length || 0}`)
+    console.log(`   Branches: ${branches?.length || 0}`)
+    console.log(`   Clients: ${clients?.length || 0}`)
+    console.log(`   Suppliers: ${suppliers?.length || 0}`)
+    console.log(`   Vendors: ${vendors?.length || 0}`)
+    console.log(`   Roles: ${roles?.length || 0}`)
+
+  } catch (error) {
+    console.error('❌ Failed to create organization data:', error)
+    process.exit(1)
+  }
+}
+
+// Run the script
+createOrganizationData() 

@@ -1,6 +1,6 @@
 "use server"
 
-import { createClient } from '@/lib/supabase-server'
+import { query, transaction } from "@/lib/postgresql-client"
 import { getCurrentUser } from './auth-actions'
 import { NotificationService } from '@/lib/notification-service'
 import type { 
@@ -12,20 +12,31 @@ import type {
   WorkflowAnalytics
 } from '@/types/quotation-workflow'
 
+/**
+ * QUOTATION WORKFLOW ACTIONS - NOW 100% POSTGRESQL
+ * 
+ * Complete migration from Supabase to PostgreSQL
+ * - Direct PostgreSQL queries for maximum performance
+ * - Transaction safety for data consistency
+ * - Enhanced error handling and logging
+ * - Role-based permission checking
+ * - All Supabase dependencies eliminated
+ */
+
 export async function updateQuotationWorkflowStatus(
   quotationId: number, 
   newStatus: WorkflowStatus,
   additionalData?: Record<string, any>
 ) {
   try {
-    const supabase = createClient()
+    console.log('🔄 Updating quotation workflow status via PostgreSQL...')
     const user = await getCurrentUserWithValidUUID()
     
     if (!user) {
       return { success: false, error: 'User not authenticated' }
     }
 
-    // Update quotation status
+    // Update quotation status using PostgreSQL
     const updateData: Record<string, any> = { 
       workflow_status: newStatus 
     }
@@ -41,63 +52,72 @@ export async function updateQuotationWorkflowStatus(
       if (additionalData?.payment_reference) updateData.payment_reference = additionalData.payment_reference
     }
 
-    const { data, error } = await supabase
-      .from('quotations')
-      .update(updateData)
-      .eq('id', quotationId)
-      .select()
+    // Build dynamic SQL for updates
+    const updateFields = Object.keys(updateData).map((key, index) => `${key} = $${index + 2}`).join(', ')
+    const updateValues = [quotationId, ...Object.values(updateData)]
 
-    if (error) {
-      console.error('Error updating quotation status:', error)
-      return { success: false, error: error.message }
+    const result = await query(`
+      UPDATE quotations 
+      SET ${updateFields}, updated_at = NOW()
+      WHERE id = $1 
+      RETURNING *
+    `, updateValues)
+
+    if (result.rows.length === 0) {
+      console.error('❌ Quotation not found for update:', quotationId)
+      return { success: false, error: 'Quotation not found' }
     }
 
-    return { success: true, data: data[0] }
+    console.log('✅ Quotation workflow status updated successfully')
+    return { success: true, data: result.rows[0] }
   } catch (error) {
-    console.error('Error in updateQuotationWorkflowStatus:', error)
+    console.error('❌ Error in updateQuotationWorkflowStatus:', error)
     return { success: false, error: 'Failed to update quotation status' }
   }
 }
 
 export async function submitQuotationForApproval(quotationId: number) {
   try {
-    const supabase = createClient()
+    console.log('📝 Submitting quotation for approval via PostgreSQL...')
     const user = await getCurrentUserWithValidUUID()
     
     if (!user) {
       return { success: false, error: 'User not authenticated' }
     }
 
-    // Simply update quotation status to pending_approval
-    const { data, error } = await supabase
-      .from('quotations')
-      .update({ 
-        workflow_status: 'pending_approval'
-      })
-      .eq('id', quotationId)
-      .select()
+    // Use PostgreSQL transaction for atomic operations
+    const result = await transaction(async (client) => {
+      // Update quotation status to pending_approval
+      const quotationResult = await client.query(`
+        UPDATE quotations 
+        SET workflow_status = 'pending_approval', updated_at = NOW()
+        WHERE id = $1 
+        RETURNING *
+      `, [quotationId])
 
-    if (error) {
-      console.error('Error updating quotation status:', error)
-      return { success: false, error: error.message }
-    }
+      if (quotationResult.rows.length === 0) {
+        throw new Error('Quotation not found')
+      }
 
-    // Create a simple approval request
-    const { error: approvalError } = await supabase
-      .from('quotation_approvals')
-      .insert([{
-        quotation_id: quotationId,
-        approval_status: 'pending'
-      }])
+      // Create a simple approval request
+      try {
+        await client.query(`
+          INSERT INTO quotation_approvals (quotation_id, approval_status, created_at, updated_at)
+          VALUES ($1, 'pending', NOW(), NOW())
+        `, [quotationId])
+        console.log('✅ Approval request created')
+      } catch (approvalError) {
+        console.error('⚠️ Error creating approval request (non-critical):', approvalError)
+        // Don't fail the whole operation if approval record fails
+      }
 
-    if (approvalError) {
-      console.error('Error creating approval request:', approvalError)
-      // Don't fail the whole operation if approval record fails
-    }
+      return quotationResult.rows[0]
+    })
 
-    return { success: true, data: data[0] }
+    console.log('✅ Quotation submitted for approval successfully')
+    return { success: true, data: result }
   } catch (error) {
-    console.error('Error in submitQuotationForApproval:', error)
+    console.error('❌ Error in submitQuotationForApproval:', error)
     return { success: false, error: 'Failed to submit for approval' }
   }
 }
@@ -108,7 +128,7 @@ export async function approveQuotation(
   priceAdjustments?: Record<string, any>
 ) {
   try {
-    const supabase = createClient()
+    console.log('✅ Approving quotation via PostgreSQL...')
     const user = await getCurrentUserWithValidUUID()
     
     if (!user) {
@@ -120,73 +140,59 @@ export async function approveQuotation(
       return { success: false, error: 'Insufficient permissions to approve quotation' }
     }
 
-    // First, update the quotation status directly
-    const { data: quotationData, error: quotationError } = await supabase
-      .from('quotations')
-      .update({ 
-        workflow_status: 'approved'
-      })
-      .eq('id', quotationId)
-      .select()
+    // Use PostgreSQL transaction for atomic operations
+    const result = await transaction(async (client) => {
+      // Update the quotation status directly
+      const quotationResult = await client.query(`
+        UPDATE quotations 
+        SET workflow_status = 'approved', updated_at = NOW()
+        WHERE id = $1 
+        RETURNING *
+      `, [quotationId])
 
-    if (quotationError) {
-      console.error('Error updating quotation status:', quotationError)
-      return { success: false, error: quotationError.message }
-    }
-
-    // Try to update approval record if it exists, otherwise create one
-    const { data: existingApproval } = await supabase
-      .from('quotation_approvals')
-      .select('*')
-      .eq('quotation_id', quotationId)
-      .single()
-
-    if (existingApproval) {
-      // Update existing approval record
-      const { error: approvalError } = await supabase
-        .from('quotation_approvals')
-        .update({
-          approver_user_id: user.id,
-          approval_status: 'approved',
-          approval_date: new Date().toISOString(),
-          comments,
-          price_adjustments: priceAdjustments
-        })
-        .eq('quotation_id', quotationId)
-
-      if (approvalError) {
-        console.error('Error updating approval record:', approvalError)
-        // Don't fail the whole operation
+      if (quotationResult.rows.length === 0) {
+        throw new Error('Quotation not found')
       }
-    } else {
-      // Create new approval record
-      const { error: approvalError } = await supabase
-        .from('quotation_approvals')
-        .insert([{
-          quotation_id: quotationId,
-          approver_user_id: user.id,
-          approval_status: 'approved',
-          approval_date: new Date().toISOString(),
-          comments,
-          price_adjustments: priceAdjustments
-        }])
 
-      if (approvalError) {
-        console.error('Error creating approval record:', approvalError)
-        // Don't fail the whole operation
+      // Try to update or create approval record
+      const existingApprovalResult = await client.query(`
+        SELECT * FROM quotation_approvals WHERE quotation_id = $1 LIMIT 1
+      `, [quotationId])
+
+      if (existingApprovalResult.rows.length > 0) {
+        // Update existing approval record
+        await client.query(`
+          UPDATE quotation_approvals 
+          SET approver_user_id = $1, approval_status = 'approved', 
+              approval_date = NOW(), comments = $2, price_adjustments = $3, updated_at = NOW()
+          WHERE quotation_id = $4
+        `, [user.id, comments, JSON.stringify(priceAdjustments), quotationId])
+        console.log('✅ Updated existing approval record')
+      } else {
+        // Create new approval record
+        await client.query(`
+          INSERT INTO quotation_approvals (
+            quotation_id, approver_user_id, approval_status, approval_date, 
+            comments, price_adjustments, created_at, updated_at
+          ) VALUES ($1, $2, 'approved', NOW(), $3, $4, NOW(), NOW())
+        `, [quotationId, user.id, comments, JSON.stringify(priceAdjustments)])
+        console.log('✅ Created new approval record')
       }
-    }
 
-    return { success: true, data: quotationData[0] }
+      return quotationResult.rows[0]
+    })
+
+    console.log('✅ Quotation approved successfully')
+    return { success: true, data: result }
   } catch (error) {
-    console.error('Error in approveQuotation:', error)
+    console.error('❌ Error in approveQuotation:', error)
     return { success: false, error: 'Failed to approve quotation' }
   }
 }
 
 export async function rejectQuotation(quotationId: number, comments: string) {
   try {
-    const supabase = createClient()
+    console.log('❌ Rejecting quotation via PostgreSQL...')
     const user = await getCurrentUserWithValidUUID()
     
     if (!user) {
@@ -198,64 +204,52 @@ export async function rejectQuotation(quotationId: number, comments: string) {
       return { success: false, error: 'Insufficient permissions to reject quotation' }
     }
 
-    // First, update the quotation status directly
-    const { data: quotationData, error: quotationError } = await supabase
-      .from('quotations')
-      .update({ 
-        workflow_status: 'rejected'
-      })
-      .eq('id', quotationId)
-      .select()
+    // Use PostgreSQL transaction for atomic operations
+    const result = await transaction(async (client) => {
+      // Update the quotation status directly
+      const quotationResult = await client.query(`
+        UPDATE quotations 
+        SET workflow_status = 'rejected', updated_at = NOW()
+        WHERE id = $1 
+        RETURNING *
+      `, [quotationId])
 
-    if (quotationError) {
-      console.error('Error updating quotation status:', quotationError)
-      return { success: false, error: quotationError.message }
-    }
-
-    // Try to update approval record if it exists, otherwise create one
-    const { data: existingApproval } = await supabase
-      .from('quotation_approvals')
-      .select('*')
-      .eq('quotation_id', quotationId)
-      .single()
-
-    if (existingApproval) {
-      // Update existing approval record
-      const { error: approvalError } = await supabase
-        .from('quotation_approvals')
-        .update({
-          approver_user_id: user.id,
-          approval_status: 'rejected',
-          approval_date: new Date().toISOString(),
-          comments
-        })
-        .eq('quotation_id', quotationId)
-
-      if (approvalError) {
-        console.error('Error updating approval record:', approvalError)
-        // Don't fail the whole operation
+      if (quotationResult.rows.length === 0) {
+        throw new Error('Quotation not found')
       }
-    } else {
-      // Create new approval record
-      const { error: approvalError } = await supabase
-        .from('quotation_approvals')
-        .insert([{
-          quotation_id: quotationId,
-          approver_user_id: user.id,
-          approval_status: 'rejected',
-          approval_date: new Date().toISOString(),
-          comments
-        }])
 
-      if (approvalError) {
-        console.error('Error creating approval record:', approvalError)
-        // Don't fail the whole operation
+      // Try to update or create approval record
+      const existingApprovalResult = await client.query(`
+        SELECT * FROM quotation_approvals WHERE quotation_id = $1 LIMIT 1
+      `, [quotationId])
+
+      if (existingApprovalResult.rows.length > 0) {
+        // Update existing approval record
+        await client.query(`
+          UPDATE quotation_approvals 
+          SET approver_user_id = $1, approval_status = 'rejected', 
+              approval_date = NOW(), comments = $2, updated_at = NOW()
+          WHERE quotation_id = $3
+        `, [user.id, comments, quotationId])
+        console.log('✅ Updated existing rejection record')
+      } else {
+        // Create new approval record
+        await client.query(`
+          INSERT INTO quotation_approvals (
+            quotation_id, approver_user_id, approval_status, approval_date, 
+            comments, created_at, updated_at
+          ) VALUES ($1, $2, 'rejected', NOW(), $3, NOW(), NOW())
+        `, [quotationId, user.id, comments])
+        console.log('✅ Created new rejection record')
       }
-    }
 
-    return { success: true, data: quotationData[0] }
+      return quotationResult.rows[0]
+    })
+
+    console.log('✅ Quotation rejected successfully')
+    return { success: true, data: result }
   } catch (error) {
-    console.error('Error in rejectQuotation:', error)
+    console.error('❌ Error in rejectQuotation:', error)
     return { success: false, error: 'Failed to reject quotation' }
   }
 }
@@ -266,7 +260,7 @@ export async function markPaymentReceived(
   paymentReference: string
 ) {
   try {
-    const supabase = createClient()
+    console.log('💰 Marking payment received via PostgreSQL...')
     const user = await getCurrentUserWithValidUUID()
     
     if (!user) {
@@ -274,11 +268,11 @@ export async function markPaymentReceived(
     }
 
     // Get quotation details for notification
-    const { data: quotation } = await supabase
-      .from('quotations')
-      .select('*')
-      .eq('id', quotationId)
-      .single()
+    const quotationResult = await query(`
+      SELECT * FROM quotations WHERE id = $1
+    `, [quotationId])
+
+    const quotation = quotationResult.rows[0]
 
     // Check if user has permission to mark payment received
     if (!['Sales Head', 'Administrator', 'Sales Representative'].includes(user.roleName)) {
@@ -298,12 +292,18 @@ export async function markPaymentReceived(
 
     // Send payment received notifications
     if (quotation) {
-      await NotificationService.notifyPaymentReceived(quotation, paymentAmount)
+      try {
+        await NotificationService.notifyPaymentReceived(quotation, paymentAmount)
+        console.log('✅ Payment notification sent')
+      } catch (notificationError) {
+        console.error('⚠️ Payment notification failed (non-critical):', notificationError)
+      }
     }
 
+    console.log('✅ Payment marked as received successfully')
     return { success: true, data: statusUpdate.data }
   } catch (error) {
-    console.error('Error in markPaymentReceived:', error)
+    console.error('❌ Error in markPaymentReceived:', error)
     return { success: false, error: 'Failed to mark payment received' }
   }
 }
@@ -319,7 +319,7 @@ export async function createPostSaleConfirmation(
   }
 ) {
   try {
-    const supabase = createClient()
+    console.log('📞 Creating post-sale confirmation via PostgreSQL...')
     const user = await getCurrentUserWithValidUUID()
     
     if (!user) {
@@ -340,83 +340,93 @@ export async function createPostSaleConfirmation(
       client_expectations: confirmationDetails.client_expectations || 'All expectations confirmed'
     }
 
-    // Create post-sale confirmation record
-    const { data, error } = await supabase
-      .from('post_sale_confirmations')
-      .insert([{
-        quotation_id: quotationId,
-        confirmed_by_user_id: user.id,
-        confirmation_date: new Date().toISOString(),
-        ...defaultConfirmationDetails
-      }])
-      .select()
+    // Use PostgreSQL transaction for atomic operations
+    const result = await transaction(async (client) => {
+      // Create post-sale confirmation record
+      const confirmationResult = await client.query(`
+        INSERT INTO post_sale_confirmations (
+          quotation_id, confirmed_by_user_id, confirmation_date,
+          client_contact_person, confirmation_method, deliverables_confirmed,
+          event_details_confirmed, client_expectations, created_at, updated_at
+        ) VALUES ($1, $2, NOW(), $3, $4, $5, $6, $7, NOW(), NOW())
+        RETURNING *
+      `, [
+        quotationId,
+        user.id,
+        defaultConfirmationDetails.client_contact_person,
+        defaultConfirmationDetails.confirmation_method,
+        JSON.stringify(defaultConfirmationDetails.deliverables_confirmed),
+        JSON.stringify(defaultConfirmationDetails.event_details_confirmed),
+        defaultConfirmationDetails.client_expectations
+      ])
 
-    if (error) {
-      console.error('Error creating post-sale confirmation:', error)
-      return { success: false, error: error.message }
-    }
+      // Update quotation status to confirmed
+      const statusUpdate = await updateQuotationWorkflowStatus(quotationId, 'confirmed')
+      if (!statusUpdate.success) {
+        throw new Error('Failed to update quotation status to confirmed')
+      }
 
-    // Update quotation status to confirmed
-    const statusUpdate = await updateQuotationWorkflowStatus(quotationId, 'confirmed')
-    if (!statusUpdate.success) {
-      return statusUpdate
-    }
+      return confirmationResult.rows[0]
+    })
 
-    return { success: true, data: data[0] }
+    console.log('✅ Post-sale confirmation created successfully')
+    return { success: true, data: result }
   } catch (error) {
-    console.error('Error in createPostSaleConfirmation:', error)
+    console.error('❌ Error in createPostSaleConfirmation:', error)
     return { success: false, error: 'Failed to create post-sale confirmation' }
   }
 }
 
 export async function getQuotationWithWorkflow(quotationId: number): Promise<{ success: boolean, data?: EnhancedQuotation, error?: string }> {
   try {
-    const supabase = createClient()
+    console.log('📊 Fetching quotation with workflow via PostgreSQL...')
     
-    const { data, error } = await supabase
-      .from('quotations')
-      .select(`
-        *,
-        quotation_approvals(*),
-        post_sale_confirmations(*)
-      `)
-      .eq('id', quotationId)
-      .single()
+    const result = await query(`
+      SELECT 
+        q.*,
+        json_agg(DISTINCT qa.*) FILTER (WHERE qa.id IS NOT NULL) as quotation_approvals,
+        json_agg(DISTINCT psc.*) FILTER (WHERE psc.id IS NOT NULL) as post_sale_confirmations
+      FROM quotations q
+      LEFT JOIN quotation_approvals qa ON q.id = qa.quotation_id
+      LEFT JOIN post_sale_confirmations psc ON q.id = psc.quotation_id
+      WHERE q.id = $1
+      GROUP BY q.id
+    `, [quotationId])
 
-    if (error) {
-      console.error('Error fetching quotation with workflow:', error)
-      return { success: false, error: error.message }
+    if (result.rows.length === 0) {
+      console.error('❌ Quotation not found:', quotationId)
+      return { success: false, error: 'Quotation not found' }
     }
 
-    return { success: true, data }
+    console.log('✅ Quotation with workflow data fetched successfully')
+    return { success: true, data: result.rows[0] }
   } catch (error) {
-    console.error('Error in getQuotationWithWorkflow:', error)
+    console.error('❌ Error in getQuotationWithWorkflow:', error)
     return { success: false, error: 'Failed to fetch quotation workflow data' }
   }
 }
 
 export async function getQuotationsByWorkflowStatus(status: WorkflowStatus): Promise<{ success: boolean, data?: EnhancedQuotation[], error?: string }> {
   try {
-    const supabase = createClient()
+    console.log('📋 Fetching quotations by workflow status via PostgreSQL...')
     
-    const { data, error } = await supabase
-      .from('quotations')
-      .select(`
-        *,
-        quotation_approvals(*),
-        post_sale_confirmations(*)
-      `)
-      .eq('workflow_status', status)
-      .order('created_at', { ascending: false })
+    const result = await query(`
+      SELECT 
+        q.*,
+        json_agg(DISTINCT qa.*) FILTER (WHERE qa.id IS NOT NULL) as quotation_approvals,
+        json_agg(DISTINCT psc.*) FILTER (WHERE psc.id IS NOT NULL) as post_sale_confirmations
+      FROM quotations q
+      LEFT JOIN quotation_approvals qa ON q.id = qa.quotation_id
+      LEFT JOIN post_sale_confirmations psc ON q.id = psc.quotation_id
+      WHERE q.workflow_status = $1
+      GROUP BY q.id
+      ORDER BY q.created_at DESC
+    `, [status])
 
-    if (error) {
-      console.error('Error fetching quotations by status:', error)
-      return { success: false, error: error.message }
-    }
-
-    return { success: true, data: data || [] }
+    console.log(`✅ Found ${result.rows.length} quotations with status: ${status}`)
+    return { success: true, data: result.rows || [] }
   } catch (error) {
-    console.error('Error in getQuotationsByWorkflowStatus:', error)
+    console.error('❌ Error in getQuotationsByWorkflowStatus:', error)
     return { success: false, error: 'Failed to fetch quotations by status' }
   }
 }
@@ -434,9 +444,10 @@ export async function getPendingApprovals(): Promise<{ success: boolean, data?: 
       return { success: false, error: 'Insufficient permissions to view pending approvals' }
     }
 
+    console.log('📋 Fetching pending approvals for authorized user...')
     return await getQuotationsByWorkflowStatus('pending_approval')
   } catch (error) {
-    console.error('Error in getPendingApprovals:', error)
+    console.error('❌ Error in getPendingApprovals:', error)
     return { success: false, error: 'Failed to fetch pending approvals' }
   }
 }
@@ -454,35 +465,34 @@ export async function getPendingConfirmations(): Promise<{ success: boolean, dat
       return { success: false, error: 'Insufficient permissions to view pending confirmations' }
     }
 
+    console.log('📋 Fetching pending confirmations for authorized user...')
     return await getQuotationsByWorkflowStatus('payment_received')
   } catch (error) {
-    console.error('Error in getPendingConfirmations:', error)
+    console.error('❌ Error in getPendingConfirmations:', error)
     return { success: false, error: 'Failed to fetch pending confirmations' }
   }
 }
 
 export async function getWorkflowAnalytics(): Promise<{ success: boolean, data?: WorkflowAnalytics[], error?: string }> {
   try {
-    const supabase = createClient()
+    console.log('📈 Fetching workflow analytics via PostgreSQL...')
     
-    const { data, error } = await supabase
-      .from('quotation_workflow_analytics')
-      .select('*')
-      .order('quotation_created', { ascending: false })
+    const result = await query(`
+      SELECT * FROM quotation_workflow_analytics 
+      ORDER BY quotation_created DESC
+    `)
 
-    if (error) {
-      console.error('Error fetching workflow analytics:', error)
-      return { success: false, error: error.message }
-    }
-
-    return { success: true, data: data || [] }
+    console.log(`✅ Loaded ${result.rows.length} workflow analytics records`)
+    return { success: true, data: result.rows || [] }
   } catch (error) {
-    console.error('Error in getWorkflowAnalytics:', error)
+    console.error('❌ Error in getWorkflowAnalytics:', error)
     return { success: false, error: 'Failed to fetch workflow analytics' }
   }
 }
 
-// Temporary helper to ensure proper UUID for development
+import { getUserIdForDatabase } from '@/lib/uuid-helpers'
+
+// Get current user and convert to UUID format for database queries
 async function getCurrentUserWithValidUUID() {
   try {
     const user = await getCurrentUser()
@@ -490,19 +500,13 @@ async function getCurrentUserWithValidUUID() {
       return null
     }
     
-    // If user ID is not a proper UUID (like '1' or other simple string), replace with proper UUID
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-    if (!uuidRegex.test(user.id)) {
-      // Use proper UUID format for development
-      return {
-        ...user,
-        id: '550e8400-e29b-41d4-a716-446655440000' // Proper UUID format
-      }
+    // Convert simple user ID to UUID format for database compatibility (if needed)
+    return {
+      ...user,
+      id: getUserIdForDatabase ? getUserIdForDatabase(user.id) : user.id
     }
-    
-    return user
   } catch (error) {
-    console.error('Error getting current user:', error)
+    console.error('❌ Error getting current user:', error)
     return null
   }
-} 
+}

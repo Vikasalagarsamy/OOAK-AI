@@ -1,0 +1,294 @@
+// 🚨 MIGRATED FROM SUPABASE TO POSTGRESQL
+// Migration Date: 2025-06-20T09:50:05.790Z
+// Original file backed up as: populate-test-data.cjs.backup
+
+
+// PostgreSQL connection pool
+const pool = new Pool({
+  host: process.env.POSTGRES_HOST || 'localhost',
+  port: process.env.POSTGRES_PORT || 5432,
+  database: process.env.POSTGRES_DATABASE || 'ooak_future',
+  user: process.env.POSTGRES_USER || 'postgres',
+  password: process.env.POSTGRES_PASSWORD || 'password',
+  ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false,
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+});
+
+
+// Query helper function
+async function query(text, params = []) {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(text, params);
+    return { data: result.rows, error: null };
+  } catch (error) {
+    console.error('❌ PostgreSQL Query Error:', error.message);
+    return { data: null, error: error.message };
+  } finally {
+    client.release();
+  }
+}
+
+// Transaction helper function  
+async function transaction(callback) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await callback(client);
+    await client.query('COMMIT');
+    return { data: result, error: null };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ PostgreSQL Transaction Error:', error.message);
+    return { data: null, error: error.message };
+  } finally {
+    client.release();
+  }
+}
+
+// Original content starts here:
+const { Pool } = require('pg'););
+
+// PostgreSQL connection - see pool configuration below
+
+async function populateTestData() {
+  console.log('🔧 POPULATING TEST DATA FOR QUOTATION OWNERSHIP');
+  console.log('='.repeat(60));
+  
+  try {
+    // 1. Ensure Vikas Alagarsamy employee exists
+    console.log('\n1️⃣ Ensuring Vikas Alagarsamy employee exists...');
+    
+    const { data: existingEmployee } = await supabase
+      .from('employees')
+      .select('*')
+      .eq('id', 87)
+      .single();
+    
+    if (!existingEmployee) {
+      console.log('Creating Vikas Alagarsamy employee...');
+      const { data: newEmployee, error: empError } = await supabase
+        .from('employees')
+        .insert({
+          id: 87,
+          name: 'Vikas Alagarsamy',
+          email: 'vikas.alagarsamy1987@gmail.com',
+          department_id: 2, // Sales department
+          phone: '+919677362524',
+          role: 'Sales Manager',
+          status: 'active'
+        })
+        .select()
+        .single();
+        
+      if (empError) {
+        console.log('❌ Error creating employee:', empError.message);
+      } else {
+        console.log('✅ Created Vikas Alagarsamy employee:', newEmployee.id);
+      }
+    } else {
+      console.log('✅ Vikas Alagarsamy employee already exists:', existingEmployee.id);
+    }
+    
+    // 2. Create a lead assigned to Vikas
+    console.log('\n2️⃣ Creating lead for Vikas...');
+    
+    const { data: existingLead } = await supabase
+      .from('leads')
+      .select('*')
+      .eq('client_name', 'Jothi Alagarsamy')
+      .single();
+    
+    let leadId = existingLead?.id;
+    
+    if (!existingLead) {
+      const { data: newLead, error: leadError } = await supabase
+        .from('leads')
+        .insert({
+          client_name: 'Jothi Alagarsamy',
+          bride_name: 'Jothi',
+          groom_name: 'Alagarsamy',
+          phone: '+919677362525',
+          email: 'jothi.alagarsamy@example.com',
+          assigned_to: 87, // Vikas's employee ID
+          status: 'QUALIFIED',
+          lead_source: 'Referral',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+        
+      if (leadError) {
+        console.log('❌ Error creating lead:', leadError.message);
+        return;
+      } else {
+        leadId = newLead.id;
+        console.log('✅ Created lead:', newLead.id);
+      }
+    } else {
+      // Update existing lead to be assigned to Vikas
+      await supabase
+        .from('leads')
+        .update({ assigned_to: 87 })
+        .eq('id', existingLead.id);
+      console.log('✅ Updated existing lead to be assigned to Vikas');
+    }
+    
+    // 3. Create/Update quotation with correct user assignment
+    console.log('\n3️⃣ Creating quotation with correct user assignment...');
+    
+    const quotationData = {
+      client_name: 'Jothi Alagarsamy',
+      bride_name: 'Jothi',
+      groom_name: 'Alagarsamy',
+      mobile: '+919677362525',
+      mobile_country_code: '+91',
+      whatsapp: '+919677362525',
+      whatsapp_country_code: '+91',
+      email: 'jothi.alagarsamy@example.com',
+      events: [
+        {
+          id: 'event-1',
+          event_name: 'Wedding Ceremony',
+          event_date: new Date('2024-12-15'),
+          event_location: 'Chennai',
+          venue_name: 'Grand Palace',
+          start_time: '10:00',
+          end_time: '18:00',
+          expected_crowd: '200-300',
+          selected_package: 'premium',
+          selected_services: [
+            { id: 1, quantity: 1 },
+            { id: 2, quantity: 2 }
+          ],
+          selected_deliverables: [
+            { id: 1, quantity: 1 },
+            { id: 2, quantity: 1 }
+          ],
+          service_overrides: {},
+          package_overrides: {}
+        }
+      ],
+      default_package: 'premium',
+      selected_services: [
+        { id: 1, quantity: 1 },
+        { id: 2, quantity: 2 }
+      ],
+      selected_deliverables: [
+        { id: 1, quantity: 1 },
+        { id: 2, quantity: 1 }
+      ],
+      service_overrides: {},
+      package_overrides: {},
+      custom_services: []
+    };
+    
+    // Check if quotation already exists
+    const { data: existingQuotation } = await supabase
+      .from('quotations')
+      .select('*')
+      .eq('client_name', 'Jothi Alagarsamy')
+      .single();
+    
+    if (existingQuotation) {
+      // Update existing quotation
+      const { data: updatedQuotation, error: updateError } = await supabase
+        .from('quotations')
+        .update({
+          created_by: '87',  // Vikas's employee ID as string
+          assigned_to: 87,   // Vikas's employee ID as number  
+          lead_id: leadId,
+          status: 'pending_approval',
+          total_amount: 43500
+        })
+        .eq('id', existingQuotation.id)
+        .select()
+        .single();
+        
+      if (updateError) {
+        console.log('❌ Error updating quotation:', updateError.message);
+      } else {
+        console.log('✅ Updated existing quotation assignment:');
+        console.log(`   • ID: ${updatedQuotation.id}`);
+        console.log(`   • Created by: ${updatedQuotation.created_by}`);
+        console.log(`   • Assigned to: ${updatedQuotation.assigned_to}`);
+        console.log(`   • Amount: ₹${updatedQuotation.total_amount}`);
+      }
+    } else {
+      // Create new quotation
+      const { data: newQuotation, error: quotationError } = await supabase
+        .from('quotations')
+        .insert({
+          lead_id: leadId,
+          quotation_number: `QUO-${Date.now()}`,
+          slug: `jothi-alagarsamy-${Date.now()}`,
+          client_name: 'Jothi Alagarsamy',
+          bride_name: 'Jothi',
+          groom_name: 'Alagarsamy',
+          mobile: '+919677362525',
+          email: 'jothi.alagarsamy@example.com',
+          default_package: 'premium',
+          total_amount: 43500,
+          status: 'pending_approval',
+          created_by: '87',  // Vikas's employee ID as string
+          assigned_to: 87,   // Vikas's employee ID as number
+          quotation_data: quotationData,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+        
+      if (quotationError) {
+        console.log('❌ Error creating quotation:', quotationError.message);
+      } else {
+        console.log('✅ Created new quotation:');
+        console.log(`   • ID: ${newQuotation.id}`);
+        console.log(`   • Created by: ${newQuotation.created_by}`);
+        console.log(`   • Assigned to: ${newQuotation.assigned_to}`);
+        console.log(`   • Amount: ₹${newQuotation.total_amount}`);
+      }
+    }
+    
+    // 4. Verify the setup
+    console.log('\n4️⃣ Verifying the complete setup...');
+    
+    const { data: finalQuotations } = await supabase
+      .from('quotations')
+      .select('id, quotation_number, client_name, total_amount, status, created_by, assigned_to')
+      .eq('created_by', '87');
+    
+    const { data: finalLeads } = await supabase
+      .from('leads')
+      .select('id, client_name, assigned_to, status')
+      .eq('assigned_to', 87);
+    
+    console.log(`📊 Final Results:`);
+    console.log(`   • Quotations for Vikas: ${finalQuotations?.length || 0}`);
+    console.log(`   • Leads for Vikas: ${finalLeads?.length || 0}`);
+    
+    if (finalQuotations && finalQuotations.length > 0) {
+      const totalRevenue = finalQuotations.reduce((sum, q) => sum + (q.total_amount || 0), 0);
+      console.log(`   • Total revenue: ₹${totalRevenue.toLocaleString()}`);
+      
+      finalQuotations.forEach(q => {
+        console.log(`   • ${q.quotation_number}: ${q.client_name} - ₹${q.total_amount} (${q.status})`);
+      });
+    }
+    
+    console.log('\n🎉 SUCCESS! Test data populated with correct user assignments!');
+    console.log('\n📋 What this fixes:');
+    console.log('✅ Quotations are now properly assigned to Vikas (created_by: "87")');
+    console.log('✅ Leads are assigned to Vikas (assigned_to: 87)');
+    console.log('✅ Team Performance will now show correct metrics');
+    console.log('✅ "My Quotations" page will now display quotations');
+    
+  } catch (error) {
+    console.error('❌ Error populating test data:', error);
+  }
+}
+
+populateTestData(); 

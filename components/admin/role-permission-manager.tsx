@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { createBrowserClient } from "@/lib/supabase-browser"
+import { query, transaction } from "@/lib/postgresql-client"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -50,23 +50,31 @@ export function RolePermissionManager({ onRoleSelect }: RolePermissionManagerPro
   const [error, setError] = useState<string | null>(null)
   const [expandedMenus, setExpandedMenus] = useState<Record<number, boolean>>({})
 
-  const supabase = createBrowserClient()
-
   // Load roles
   useEffect(() => {
     async function loadRoles() {
       try {
         setError(null)
-        const { data, error } = await supabase.from("roles").select("id, title").order("title")
+        console.log('🔍 Loading roles...')
 
-        if (error) throw error
+        const result = await query(`
+          SELECT id, title 
+          FROM roles 
+          ORDER BY title
+        `)
 
-        setRoles(data || [])
-        if (data && data.length > 0) {
-          setSelectedRole(data[0].id)
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to load roles')
         }
+
+        setRoles(result.data || [])
+        if (result.data && result.data.length > 0) {
+          setSelectedRole(result.data[0].id)
+        }
+
+        console.log(`✅ Loaded ${result.data?.length || 0} roles`)
       } catch (error: any) {
-        console.error("Error loading roles:", error)
+        console.error("❌ Error loading roles:", error)
         setError(`Failed to load roles: ${error.message}`)
         toast({
           title: "Error",
@@ -84,23 +92,30 @@ export function RolePermissionManager({ onRoleSelect }: RolePermissionManagerPro
     async function loadMenuItems() {
       try {
         setError(null)
-        const { data, error } = await supabase
-          .from("menu_items")
-          .select("id, parent_id, name, icon, path, sort_order, is_visible")
-          .order("sort_order")
+        console.log('🔍 Loading menu items...')
 
-        if (error) throw error
+        const result = await query(`
+          SELECT id, parent_id, name, icon, path, sort_order, is_visible
+          FROM menu_items 
+          ORDER BY sort_order
+        `)
 
-        setMenuItems(data || [])
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to load menu items')
+        }
+
+        setMenuItems(result.data || [])
 
         // Initialize all menus as expanded
         const expanded: Record<number, boolean> = {}
-        data?.forEach((item) => {
+        result.data?.forEach((item) => {
           expanded[item.id] = true
         })
         setExpandedMenus(expanded)
+
+        console.log(`✅ Loaded ${result.data?.length || 0} menu items`)
       } catch (error: any) {
-        console.error("Error loading menu items:", error)
+        console.error("❌ Error loading menu items:", error)
         setError(`Failed to load menu items: ${error.message}`)
         toast({
           title: "Error",
@@ -128,17 +143,22 @@ export function RolePermissionManager({ onRoleSelect }: RolePermissionManagerPro
       setLoading(true)
       try {
         setError(null)
-        const { data, error } = await supabase
-          .from("role_menu_permissions")
-          .select("menu_item_id, can_view, can_add, can_edit, can_delete")
-          .eq("role_id", selectedRole)
+        console.log(`🔍 Loading permissions for role ${selectedRole}...`)
 
-        if (error) throw error
+        const result = await query(`
+          SELECT menu_item_id, can_view, can_add, can_edit, can_delete
+          FROM role_menu_permissions 
+          WHERE role_id = $1
+        `, [selectedRole])
+
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to load permissions')
+        }
 
         // Convert to a map for easier lookup
         const permissionsMap: Record<number, Permission> = {}
-        if (data) {
-          data.forEach((item) => {
+        if (result.data) {
+          result.data.forEach((item) => {
             permissionsMap[item.menu_item_id] = {
               menu_item_id: item.menu_item_id,
               can_view: item.can_view,
@@ -150,8 +170,9 @@ export function RolePermissionManager({ onRoleSelect }: RolePermissionManagerPro
         }
 
         setPermissions(permissionsMap)
+        console.log(`✅ Loaded permissions for ${Object.keys(permissionsMap).length} menu items`)
       } catch (error: any) {
-        console.error("Error loading permissions:", error)
+        console.error("❌ Error loading permissions:", error)
         setError(`Failed to load permissions: ${error.message}`)
         toast({
           title: "Error",
@@ -265,6 +286,8 @@ export function RolePermissionManager({ onRoleSelect }: RolePermissionManagerPro
     setSaving(true)
     try {
       setError(null)
+      console.log(`💾 Saving permissions for role ${selectedRole}...`)
+
       // Convert permissions object to array
       const permissionsArray = Object.values(permissions).map((perm) => ({
         role_id: selectedRole,
@@ -273,25 +296,51 @@ export function RolePermissionManager({ onRoleSelect }: RolePermissionManagerPro
         can_add: perm.can_add,
         can_edit: perm.can_edit,
         can_delete: perm.can_delete,
-        updated_at: new Date().toISOString(),
       }))
 
-      // First delete existing permissions
-      const { error: deleteError } = await supabase.from("role_menu_permissions").delete().eq("role_id", selectedRole)
+      // Use transaction for atomic permission update
+      const result = await transaction(async (queryFn) => {
+        // First delete existing permissions
+        await queryFn(`
+          DELETE FROM role_menu_permissions 
+          WHERE role_id = $1
+        `, [selectedRole])
 
-      if (deleteError) throw deleteError
+        // Then insert new permissions in batches
+        if (permissionsArray.length > 0) {
+          const values = permissionsArray.map((perm, index) => {
+            const baseIndex = index * 6
+            return `($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3}, $${baseIndex + 4}, $${baseIndex + 5}, $${baseIndex + 6})`
+          }).join(', ')
 
-      // Then insert new permissions
-      const { error: insertError } = await supabase.from("role_menu_permissions").insert(permissionsArray)
+          const params = permissionsArray.flatMap(perm => [
+            perm.role_id,
+            perm.menu_item_id,
+            perm.can_view,
+            perm.can_add,
+            perm.can_edit,
+            perm.can_delete
+          ])
 
-      if (insertError) throw insertError
+          await queryFn(`
+            INSERT INTO role_menu_permissions 
+            (role_id, menu_item_id, can_view, can_add, can_edit, can_delete)
+            VALUES ${values}
+          `, params)
+        }
+      })
 
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to save permissions')
+      }
+
+      console.log(`✅ Saved ${permissionsArray.length} permissions`)
       toast({
         title: "Success",
         description: "Permissions saved successfully",
       })
     } catch (error: any) {
-      console.error("Error saving permissions:", error)
+      console.error("❌ Error saving permissions:", error)
       setError(`Failed to save permissions: ${error.message}`)
       toast({
         title: "Error",
@@ -558,23 +607,17 @@ export function RolePermissionManager({ onRoleSelect }: RolePermissionManagerPro
                   onClick={() => {
                     if (selectedRole) {
                       setLoading(true)
-                      supabase
-                        .from("role_menu_permissions")
-                        .select("menu_item_id, can_view, can_add, can_edit, can_delete")
-                        .eq("role_id", selectedRole)
-                        .then(({ data, error }) => {
-                          if (error) {
-                            console.error("Error refreshing permissions:", error)
-                            toast({
-                              title: "Error",
-                              description: "Failed to refresh permissions",
-                              variant: "destructive",
-                            })
-                          } else {
+                      query(`
+                        SELECT menu_item_id, can_view, can_add, can_edit, can_delete
+                        FROM role_menu_permissions 
+                        WHERE role_id = $1
+                      `, [selectedRole])
+                        .then((result) => {
+                          if (result.success) {
                             // Convert to a map for easier lookup
                             const permissionsMap: Record<number, Permission> = {}
-                            if (data) {
-                              data.forEach((item) => {
+                            if (result.data) {
+                              result.data.forEach((item) => {
                                 permissionsMap[item.menu_item_id] = {
                                   menu_item_id: item.menu_item_id,
                                   can_view: item.can_view,
@@ -585,6 +628,13 @@ export function RolePermissionManager({ onRoleSelect }: RolePermissionManagerPro
                               })
                             }
                             setPermissions(permissionsMap)
+                          } else {
+                            console.error("Error refreshing permissions:", result.error)
+                            toast({
+                              title: "Error",
+                              description: "Failed to refresh permissions",
+                              variant: "destructive",
+                            })
                           }
                           setLoading(false)
                         })

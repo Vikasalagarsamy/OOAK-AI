@@ -1,0 +1,108 @@
+import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
+
+// Paths that don't require authentication
+const PUBLIC_PATHS = [
+  "/login",
+  "/api/auth/login",
+  "/api/auth/logout",
+  "/api/auth/status",
+  "/api/auth/user",
+  "/api/health",
+  "/api/check-database-schema",
+  "/_next",
+  "/favicon.ico",
+  "/images",
+]
+
+// Helper function to check if a path is public
+function isPublicPath(pathname: string): boolean {
+  return PUBLIC_PATHS.some(path => pathname.startsWith(path)) ||
+    pathname.match(/\.(ico|png|jpg|jpeg|svg|css|js)$/) !== null ||
+    pathname.startsWith('/api/') // Temporarily exclude all API routes for debugging
+}
+
+export async function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl
+
+  console.log("🛡️ Middleware processing path:", pathname)
+
+  // Skip middleware for API routes during development
+  if (process.env.NODE_ENV === 'development' && pathname.startsWith('/api/')) {
+    console.log("⏩ Skipping middleware for API route:", pathname)
+    return NextResponse.next()
+  }
+
+  // Check if the path is public
+  if (isPublicPath(pathname)) {
+    console.log("🔓 Public path access:", pathname)
+    return NextResponse.next()
+  }
+
+  // Handle root path
+  if (pathname === "/") {
+    const token = req.cookies.get("auth_token")?.value
+    if (token && token.length > 10) { // Simple token check
+      console.log("🏠 Root path - authenticated, redirecting to dashboard")
+      const url = req.nextUrl.clone()
+      url.pathname = "/dashboard"
+      return NextResponse.redirect(url)
+    } else {
+      console.log("🏠 Root path - unauthenticated, redirecting to login")
+      const url = req.nextUrl.clone()
+      url.pathname = "/login"
+      return NextResponse.redirect(url)
+    }
+  }
+
+  // For all other routes, check authentication
+  const res = NextResponse.next()
+  
+  try {
+    // Get the token from cookies
+    const token = req.cookies.get("auth_token")?.value
+
+    if (!token || token.length < 10) {
+      console.log("❌ No valid auth token found, redirecting from:", pathname)
+      const redirectUrl = req.nextUrl.clone()
+      redirectUrl.pathname = '/login'
+      redirectUrl.searchParams.set('from', pathname)
+      return NextResponse.redirect(redirectUrl)
+    }
+
+    // If trying to access login page while authenticated, redirect to dashboard
+    if (pathname === "/login") {
+      console.log("🔄 Redirecting authenticated user from login to dashboard")
+      const url = req.nextUrl.clone()
+      url.pathname = "/dashboard"
+      return NextResponse.redirect(url)
+    }
+
+    console.log("✅ Token valid, allowing access to:", pathname)
+    // Allow the request to proceed
+    return res
+  } catch (error) {
+    console.error('Middleware auth error:', error)
+    
+    // On error, redirect to login
+    const redirectUrl = req.nextUrl.clone()
+    redirectUrl.pathname = '/login'
+    redirectUrl.searchParams.set('error', 'auth_error')
+    return NextResponse.redirect(redirectUrl)
+  }
+}
+
+// Configure which paths should be processed by middleware
+export const config = {
+  matcher: [
+    /*
+     * Match all request paths except for the ones starting with:
+     * - api (API routes)
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * - public folder
+     */
+    '/((?!api|_next/static|_next/image|favicon.ico).*)',
+  ],
+}

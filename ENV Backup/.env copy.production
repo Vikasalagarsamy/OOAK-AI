@@ -1,0 +1,131 @@
+# =============================================================================
+# RUNPOD DEPLOYMENT - ENVIRONMENT CONFIGURATION
+# =============================================================================
+# Copy this file to .env.production and fill in your actual values
+INTERAKT_API_KEY=QjFvT1hFa0luakQzNTk2ZkNGdjl1cWlxSko0cy1RUXJQSk1PQ2hyWi1Bczo=
+
+
+# =============================================================================
+# DATABASE CONFIGURATION (Required)
+# =============================================================================
+# Get these from your Supabase dashboard: Settings > API
+SUPABASE_URL=https://aavofqdzjhyfjygkxynq.supabase.co
+SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhdm9mcWR6amh5Zmp5Z2t4eW5xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUwOTg5MTQsImV4cCI6MjA2MDY3NDkxNH0.wLxD0Tcp5YnpErGSYGF5mmO78V4zIlCvFSeBrPFy9kY
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhdm9mcWR6amh5Zmp5Z2t4eW5xIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NTA5ODkxNCwiZXhwIjoyMDYwNjc0OTE0fQ.EDdXANDTnC8zjWciG_p6JORec0KyMVZQe2c0Ca6HfLY
+JWT_SECRET=ultra-fast-secret-2024
+# =============================================================================
+# LLM CONFIGURATION (Auto-configured for RunPod)
+# =============================================================================
+LLM_ENDPOINT=http://localhost:11434
+LLM_MODEL=llama3.1:8b
+LLM_BACKUP_MODEL=qwen2.5:7b
+LLM_PROVIDER=ollama
+LLM_TIMEOUT=60000
+LLM_MAX_RETRIES=3
+
+# Optional: External LLM fallback (if you have API keys)
+# OPENAI_API_KEY=sk-your-openai-key-here
+# ANTHROPIC_API_KEY=sk-ant-your-anthropic-key-here
+
+# =============================================================================
+# APPLICATION SETTINGS
+# =============================================================================
+NODE_ENV=production
+NEXT_TELEMETRY_DISABLED=1
+
+# Authentication (auto-generated if not provided)
+NEXTAUTH_SECRET=auto-generated-during-setup
+NEXTAUTH_URL=https://workspace.ooak.photography
+
+# =============================================================================
+# SECURITY CONFIGURATION
+# =============================================================================
+# These will be auto-generated during setup if not provided
+API_SECRET_KEY=auto-generated-during-setup
+HEALTH_CHECK_SECRET=auto-generated-during-setup
+
+# CORS Configuration
+CORS_ORIGIN=https://workspace.ooak.photography
+# For development/testing, you can use: http://localhost:3000
+
+# =============================================================================
+# PERFORMANCE OPTIMIZATION
+# =============================================================================
+# Memory settings for Node.js
+NODE_OPTIONS=--max-old-space-size=4096
+
+# Ollama performance settings (auto-configured based on GPU)
+OLLAMA_MAX_LOADED_MODELS=2
+OLLAMA_MAX_QUEUE=4
+OLLAMA_NUM_PARALLEL=2
+OLLAMA_HOST=0.0.0.0
+OLLAMA_ORIGINS=*
+
+# =============================================================================
+# MONITORING AND LOGGING
+# =============================================================================
+# Log levels: error, warn, info, debug
+LOG_LEVEL=info
+
+# Health check settings
+HEALTH_CHECK_INTERVAL=300000  # 5 minutes
+HEALTH_CHECK_TIMEOUT=5000     # 5 seconds
+
+# =============================================================================
+# DEPLOYMENT SPECIFIC
+# =============================================================================
+# Your domain (optional but recommended)
+DOMAIN=https://workspace.ooak.photography
+
+# Deployment environment
+DEPLOYMENT_ENV=runpod
+
+# =============================================================================
+# FEATURE FLAGS
+# =============================================================================
+# Enable/disable features in production
+ENABLE_AI_TASKS=true
+ENABLE_QUOTATION_GENERATION=true
+ENABLE_TASK_ANALYTICS=true
+ENABLE_PERFORMANCE_MONITORING=true
+
+# =============================================================================
+# BACKUP CONFIGURATION
+# =============================================================================
+# Backup settings (for automated backups)
+BACKUP_ENABLED=true
+BACKUP_INTERVAL=daily
+BACKUP_RETENTION_DAYS=30
+
+# =============================================================================
+# NOTIFICATIONS (Optional)
+# =============================================================================
+# Email settings for system notifications
+# SMTP_HOST=smtp.gmail.com
+# SMTP_PORT=587
+# SMTP_USER=your-email@gmail.com
+# SMTP_PASS=your-app-password
+# ADMIN_EMAIL=admin@your-domain.com
+
+# =============================================================================
+# ANALYTICS (Optional)
+# =============================================================================
+# Google Analytics
+# NEXT_PUBLIC_GA_ID=G-XXXXXXXXXX
+
+# =============================================================================
+# INSTRUCTIONS FOR SETUP
+# =============================================================================
+# 1. Copy this file: cp env.runpod.example .env.production
+# 2. Edit .env.production with your actual values
+# 3. Ensure SUPABASE_* variables are correctly set
+# 4. Set your DOMAIN if you have one
+# 5. Run the deployment script: sudo bash scripts/runpod-setup.sh
+#
+# The setup script will:
+# - Auto-generate secure secrets for any missing values
+# - Configure GPU-optimized settings based on your hardware
+# - Set up monitoring and backup systems
+# - Configure SSL if domain is provided
+#
+# ============================================================================= 

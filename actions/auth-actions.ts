@@ -1,217 +1,162 @@
 "use server"
 
 import { cookies } from "next/headers"
-import { createClient } from "@/lib/supabase"
 import bcrypt from "bcryptjs"
+import { query, transaction } from "@/lib/postgresql-client"
 import { SignJWT, jwtVerify } from "jose"
 import { Database } from "@/types/database.types"
+import { revalidatePath } from "next/cache"
+import { NextResponse } from "next/server"
 
-type UserAccount = Database["public"]["Tables"]["user_accounts"]["Row"] & {
-  employees?: Database["public"]["Tables"]["employees"]["Row"]
-  roles?: Database["public"]["Tables"]["roles"]["Row"]
+// Define types for database responses
+interface Role {
+  id: number
+  title: string
 }
 
-// Define types
-type AuthResult = {
+interface Employee {
+  id: number
+  username: string
+  password_hash: string
+  email: string | null
+  first_name: string | null
+  last_name: string | null
+  role_id: number
+  is_active: boolean
+  roles: Role
+}
+
+// Simple auth result type
+interface AuthResult {
   success: boolean
   error?: string
   user?: any
+  token?: string
 }
 
 // Authentication function
 export async function authenticate(username: string, password: string): Promise<AuthResult> {
   try {
-    console.log("Authentication started for user:", username)
-    const supabase = createClient()
+    console.log("🔐 [AUTH] Authentication started for user:", username)
 
-    // Get user account from database
-    const { data: userAccount, error: userError } = await supabase
-      .from("user_accounts")
-      .select(`
-        id, 
-        username, 
-        email, 
-        password_hash, 
-        is_active, 
-        employee_id, 
-        role_id,
-        employees:employee_id (
-          id, 
-          employee_id, 
-          first_name, 
-          last_name, 
-          email
-        ),
-        roles:role_id (
-          id, 
-          title, 
-          description
-        )
-      `)
-      .eq("username", username)
-      .single()
+    // Get user from employees table with role info using PostgreSQL
+    const result = await query(`
+      SELECT 
+        e.id, 
+        e.username,
+        e.password_hash,
+        e.email,
+        e.first_name,
+        e.last_name,
+        e.role_id,
+        e.is_active,
+        json_build_object(
+          'id', r.id,
+          'title', r.title
+        ) as roles
+      FROM employees e
+      LEFT JOIN roles r ON e.role_id = r.id
+      WHERE e.username = $1
+    `, [username])
 
-    if (userError || !userAccount) {
-      console.error("User not found:", userError?.message || "No user with that username")
+    if (result.rows.length === 0) {
+      console.error("❌ [AUTH] User not found:", username)
       return { success: false, error: "Invalid username or password" }
     }
 
-    console.log("User found, verifying password")
+    const employee = result.rows[0]
 
-    // Check if account is active
-    if (!userAccount.is_active) {
-      console.log("Account is inactive")
-      return { success: false, error: "This account has been deactivated. Please contact your administrator." }
+    // Basic validation
+    if (!employee.is_active) {
+      console.error("❌ [AUTH] Account inactive for user:", username)
+      return { success: false, error: "Account is inactive" }
     }
 
-    // Verify password - ensure password_hash exists
-    if (!userAccount.password_hash) {
-      console.error("User has no password hash")
-      return { success: false, error: "Account not properly configured. Contact administrator." }
+    if (!employee.password_hash) {
+      console.error("❌ [AUTH] Account not properly configured for user:", username)
+      return { success: false, error: "Account not properly configured" }
     }
 
-    try {
-      const passwordValid = await bcrypt.compare(password, userAccount.password_hash)
-      if (!passwordValid) {
-        console.log("Password invalid")
-        return { success: false, error: "Invalid username or password" }
-      }
-    } catch (passwordError) {
-      console.error("Password verification error:", passwordError)
-      return { success: false, error: "Error verifying credentials" }
+    // Verify password
+    const passwordValid = await bcrypt.compare(password, employee.password_hash)
+    if (!passwordValid) {
+      console.error("❌ [AUTH] Invalid password for user:", username)
+      return { success: false, error: "Invalid username or password" }
     }
 
-    console.log("Password verified, creating user object and token")
-
-    // Create a user object without sensitive data
+    // Create user object
     const user = {
-      id: userAccount.id,
-      username: userAccount.username,
-      email: userAccount.email || "",
-      employeeId: userAccount.employee_id,
-      roleId: userAccount.role_id,
-      firstName: userAccount.employees?.first_name || "",
-      lastName: userAccount.employees?.last_name || "",
-      roleName: userAccount.roles?.title || "",
-      isAdmin: userAccount.roles?.title === "Administrator" || userAccount.role_id === 1,
+      id: employee.id,
+      username: employee.username,
+      email: employee.email || "",
+      firstName: employee.first_name || "",
+      lastName: employee.last_name || "",
+      roleId: employee.role_id,
+      roleName: employee.roles?.title || "",
+      isAdmin: employee.roles?.title === "Administrator" || employee.role_id === 1
     }
 
-    try {
-      // Create session token
-      const token = await createSessionToken(user)
-      console.log("Token created successfully")
+    // Create JWT token
+    const token = await createToken(user)
 
-      // Store in cookie
-      const cookieStore = await cookies()
-      cookieStore.delete("auth_token")
-      cookieStore.set("auth_token", token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        maxAge: 60 * 60 * 24 * 7, // 1 week
-        path: "/",
-        sameSite: "lax",
-      })
-      console.log("Cookie set successfully")
+    // Update last login using PostgreSQL
+    await query(`
+      UPDATE employees 
+      SET last_login = $1, updated_at = $1
+      WHERE id = $2
+    `, [new Date().toISOString(), employee.id])
 
-      // Update last login timestamp
-      await supabase.from("user_accounts").update({ last_login: new Date().toISOString() }).eq("id", userAccount.id)
-      console.log("Last login updated")
-
-      return { success: true, user }
-    } catch (tokenError) {
-      console.error("Token creation error:", tokenError)
-      return { success: false, error: "Error creating session" }
-    }
+    console.log("✅ [AUTH] Authentication successful for user:", username)
+    return { success: true, user, token }
   } catch (error) {
-    console.error("Authentication error:", error)
-    return { success: false, error: "An error occurred during authentication" }
+    console.error("❌ [AUTH] Authentication error:", error)
+    return { success: false, error: "Authentication failed" }
   }
-}
-
-// Create JWT token for session using jose library
-async function createSessionToken(user: any) {
-  const secret = process.env.JWT_SECRET || "fallback-secret-only-for-development"
-  if (!secret) {
-    console.error("JWT_SECRET is not defined!")
-  }
-
-  const secretKey = new TextEncoder().encode(secret)
-
-  return await new SignJWT({
-    sub: user.id.toString(),
-    username: user.username,
-    role: user.roleId,
-    roleName: user.roleName,
-    isAdmin: user.isAdmin,
-    // Add a timestamp to ensure the token is unique even if other data is the same
-    iat: Math.floor(Date.now() / 1000),
-    jti: `${user.id}-${Date.now()}`,
-  })
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime("7d")
-    .sign(secretKey)
 }
 
 // Get current user from session
 export async function getCurrentUser() {
   try {
-    console.log("getCurrentUser: Starting to get current user")
     const cookieStore = await cookies()
     const token = cookieStore.get("auth_token")?.value
-
-    if (!token) {
-      console.log("getCurrentUser: No auth token found in cookies")
-      return null
-    }
+    if (!token) return null
 
     const secret = process.env.JWT_SECRET || "fallback-secret-only-for-development"
     const secretKey = new TextEncoder().encode(secret)
 
-    try {
-      const { payload } = await jwtVerify(token, secretKey, {
-        algorithms: ["HS256"],
-      })
+    const { payload } = await jwtVerify(token, secretKey, {
+      algorithms: ["HS256"],
+    })
 
-      console.log("getCurrentUser: Token verified, payload:", payload)
+    if (!payload.sub) return null
 
-      if (!payload.sub) {
-        console.error("getCurrentUser: Token payload missing subject (user ID)")
-        return null
-      }
-
-      // For improved performance, we can return a user object directly from the JWT
-      // instead of querying the database again
-      return {
-        id: payload.sub,
-        username: payload.username as string,
-        email: (payload.email as string) || "",
-        roleId: payload.role as number | string,
-        roleName: (payload.roleName as string) || "",
-        isAdmin: (payload.isAdmin as boolean) || payload.roleName === "Administrator",
-      }
-    } catch (verifyError) {
-      console.error("getCurrentUser: Token verification error:", verifyError)
-      return null
+    return {
+      id: payload.sub,
+      username: payload.username as string,
+      email: payload.email as string,
+      firstName: payload.firstName as string,
+      lastName: payload.lastName as string,
+      roleId: payload.role as number,
+      roleName: payload.roleName as string,
+      isAdmin: payload.isAdmin as boolean,
     }
   } catch (error) {
-    console.error("getCurrentUser: Session validation error:", error)
+    console.error("❌ [AUTH] Get current user error:", error)
     return null
   }
 }
 
-// Logout functionality - FIXED to properly handle client-side redirects
+// Logout functionality
 export async function logout() {
   try {
     // Clear the auth token cookie
     const cookieStore = await cookies()
     cookieStore.delete("auth_token")
 
-    // Return success instead of redirecting
-    // This allows client components to handle the redirect
+    console.log("✅ [AUTH] User logged out successfully")
     return { success: true }
   } catch (error) {
-    console.error("Logout error:", error)
+    console.error("❌ [AUTH] Logout error:", error)
     return { success: false, error: "Failed to log out" }
   }
 }
@@ -231,74 +176,87 @@ export async function hasPermission(requiredRole: string) {
 // Add this function to refresh user session with fresh permissions
 export async function refreshUserSession() {
   try {
+    console.log("🔄 [AUTH] Refreshing user session...")
+
     // First, get the current user data
     const currentUser = await getCurrentUser()
 
     if (!currentUser) {
-      console.error("No user found to refresh session")
+      console.error("❌ [AUTH] No user found to refresh session")
       return { success: false, error: "No active session found" }
     }
 
-    // Create a new JWT token with fresh data
-    const supabase = createClient()
-    const { data: userData, error: userError } = await supabase
-      .from("user_accounts")
-      .select(`
-        id, 
-        username, 
-        email, 
-        is_active, 
-        employee_id, 
-        role_id,
-        employees:employee_id (
-          id, 
-          first_name, 
-          last_name
-        ),
-        roles:role_id (
-          id, 
-          title
-        )
-      `)
-      .eq("id", currentUser.id)
-      .single()
+    // Fetch fresh employee data with PostgreSQL
+    const result = await query(`
+      SELECT 
+        e.*,
+        json_build_object(
+          'id', r.id,
+          'title', r.title,
+          'permissions', r.permissions
+        ) as roles
+      FROM employees e
+      LEFT JOIN roles r ON e.role_id = r.id
+      WHERE e.id = $1
+    `, [currentUser.id])
 
-    if (userError || !userData) {
-      console.error("Error refreshing user session:", userError)
+    if (result.rows.length === 0) {
+      console.error("❌ [AUTH] Employee not found during session refresh")
       return { success: false, error: "Failed to fetch updated user data" }
     }
 
-    // Create a user object without sensitive data
-    const user = {
-      id: userData.id,
-      username: userData.username,
-      email: userData.email || "",
-      employeeId: userData.employee_id,
-      roleId: userData.role_id,
-      firstName: userData.employees?.first_name || "",
-      lastName: userData.employees?.last_name || "",
-      roleName: userData.roles?.title || "",
-      isAdmin: userData.roles?.title === "Administrator" || userData.role_id === 1,
+    const employee = result.rows[0]
+
+    // Create updated user object
+    const updatedUser = {
+      id: employee.id,
+      username: employee.username,
+      email: employee.email || "",
+      firstName: employee.first_name || "",
+      lastName: employee.last_name || "",
+      roleId: employee.role_id,
+      roleName: employee.roles?.title || "",
+      isAdmin: employee.roles?.title === "Administrator" || employee.role_id === 1
     }
 
-    // Create a new token
-    const token = await createSessionToken(user)
+    // Create new JWT token with updated data
+    const newToken = await createToken(updatedUser)
 
-    // Store in cookie
+    // Set the new token as a cookie
     const cookieStore = await cookies()
-    cookieStore.set("auth_token", token, {
+    cookieStore.set("auth_token", newToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      maxAge: 60 * 60 * 24 * 7, // 1 week
-      path: "/",
       sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60, // 7 days
     })
 
-    console.log("Session refreshed for user:", user.username)
-
-    return { success: true, user }
+    console.log("✅ [AUTH] User session refreshed successfully")
+    return { success: true, user: updatedUser }
   } catch (error) {
-    console.error("Error in refreshUserSession:", error)
+    console.error("❌ [AUTH] Error refreshing user session:", error)
     return { success: false, error: "Failed to refresh session" }
   }
+}
+
+async function createToken(user: any) {
+  const secret = process.env.JWT_SECRET || "fallback-secret-only-for-development"
+  const secretKey = new TextEncoder().encode(secret)
+
+  const token = await new SignJWT({
+    username: user.username,
+    email: user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    role: user.roleId,
+    roleName: user.roleName,
+    isAdmin: user.isAdmin,
+  })
+    .setProtectedHeader({ alg: "HS256" })
+    .setSubject(user.id.toString())
+    .setIssuedAt()
+    .setExpirationTime("7d")
+    .sign(secretKey)
+
+  return token
 }

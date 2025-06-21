@@ -12,7 +12,7 @@ import { EditClientDialog } from "./edit-client-dialog"
 import { DeleteClientDialog } from "./delete-client-dialog"
 import { ViewClientDialog } from "./view-client-dialog"
 import type { Client } from "@/types/client"
-import { supabase } from "@/lib/supabase"
+import { query } from "@/lib/postgresql-client"
 import { useToast } from "@/components/ui/use-toast"
 import { Checkbox } from "@/components/ui/checkbox"
 import { BatchDeleteClientsDialog } from "./batch-delete-clients-dialog"
@@ -31,32 +31,25 @@ export function ClientList() {
   const [selectedClientIds, setSelectedClientIds] = useState<number[]>([])
   const [batchDeleteDialogOpen, setBatchDeleteDialogOpen] = useState(false)
 
-  // Check if the table exists by attempting to query it
+  // Check if the table exists by attempting to query it using PostgreSQL
   const checkTableExists = async () => {
     try {
-      // Try to query the clients table with a limit of 0 to just check if it exists
-      const { data, error } = await supabase.from("clients").select("id").limit(0)
+      // Check if the clients table exists using information_schema
+      const result = await query(
+        `SELECT EXISTS (
+          SELECT 1 FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'clients'
+        ) as table_exists`,
+        []
+      )
 
-      // If there's no error, the table exists
-      if (!error) {
-        setTableExists(true)
-        return true
-      }
-
-      // If the error indicates the table doesn't exist, update the state
-      if (
-        error.message.includes('relation "clients" does not exist') ||
-        error.message.includes('relation "public.clients" does not exist')
-      ) {
-        setTableExists(false)
-        return false
-      }
-
-      // For other errors, log them but assume the table might exist
-      console.error("Error checking if table exists:", error)
-      return false
+      const tableExists = result.rows[0]?.table_exists || false
+      setTableExists(tableExists)
+      console.log(`📋 Clients table exists: ${tableExists}`)
+      return tableExists
     } catch (error) {
-      console.error("Error checking if table exists:", error)
+      console.error("❌ Error checking if clients table exists:", error)
       setTableExists(false)
       return false
     }
@@ -65,40 +58,29 @@ export function ClientList() {
   const fetchClients = async () => {
     setLoading(true)
     try {
-      // Fetch clients without the join first
-      const { data: clientsData, error: clientsError } = await supabase.from("clients").select("*").order("name")
+      // Fetch clients using PostgreSQL
+      const clientsResult = await query(
+        "SELECT * FROM clients ORDER BY name",
+        []
+      )
 
-      if (clientsError) {
-        console.error("Error fetching clients:", clientsError)
-        toast({
-          title: "Error",
-          description: `Error fetching clients: ${clientsError.message}`,
-          variant: "destructive",
-        })
-
-        // If the error indicates the table doesn't exist, update the state
-        if (clientsError.message.includes('relation "clients" does not exist')) {
-          setTableExists(false)
-        }
+      if (clientsResult.rows.length === 0) {
+        setClients([])
         return
       }
 
-      // Now fetch companies separately to get company names
-      const { data: companiesData, error: companiesError } = await supabase.from("companies").select("*")
-
-      if (companiesError) {
-        console.error("Error fetching companies:", companiesError)
-        // If we can't get companies, just use the clients data without company names
-        setClients(clientsData || [])
-        return
-      }
+      // Fetch companies separately to get company names
+      const companiesResult = await query(
+        "SELECT * FROM companies",
+        []
+      )
 
       // Create a map of company IDs to company names
       const companyMap = new Map()
 
-      if (companiesData && companiesData.length > 0) {
+      if (companiesResult.rows.length > 0) {
         // Determine which column to use for company name
-        const firstCompany = companiesData[0]
+        const firstCompany = companiesResult.rows[0]
         let nameColumn = null
 
         // Check for possible name columns
@@ -121,26 +103,32 @@ export function ClientList() {
 
         // Create the company map
         if (nameColumn) {
-          companiesData.forEach((company) => {
+          companiesResult.rows.forEach((company) => {
             companyMap.set(company.id, company[nameColumn])
           })
         }
       }
 
       // Combine clients with company names
-      const clientsWithCompanies = clientsData.map((client) => ({
+      const clientsWithCompanies = clientsResult.rows.map((client) => ({
         ...client,
         company_name: companyMap.get(client.company_id) || "Unknown Company",
       }))
 
-      setClients(clientsWithCompanies || [])
+      setClients(clientsWithCompanies)
+      console.log(`✅ Loaded ${clientsWithCompanies.length} clients`)
     } catch (error) {
-      console.error("Error fetching clients:", error)
+      console.error("❌ Error fetching clients:", error)
       toast({
         title: "Error",
         description: `Error fetching clients: ${error instanceof Error ? error.message : String(error)}`,
         variant: "destructive",
       })
+      
+      // If the error indicates the table doesn't exist, update the state
+      if (error instanceof Error && error.message.includes('relation "clients" does not exist')) {
+        setTableExists(false)
+      }
     } finally {
       setLoading(false)
     }
@@ -189,18 +177,34 @@ export function ClientList() {
     try {
       setLoading(true)
 
-      // Use the RPC function to create the clients table
-      const { error } = await supabase.rpc("create_clients_table")
+      // Create the clients table using PostgreSQL DDL
+      await query(`
+        CREATE TABLE IF NOT EXISTS clients (
+          id SERIAL PRIMARY KEY,
+          client_code VARCHAR(50) UNIQUE NOT NULL,
+          name VARCHAR(255) NOT NULL,
+          company_id INTEGER REFERENCES companies(id),
+          contact_person VARCHAR(255) NOT NULL,
+          email VARCHAR(255),
+          country_code VARCHAR(10),
+          phone VARCHAR(20),
+          is_whatsapp BOOLEAN DEFAULT false,
+          has_separate_whatsapp BOOLEAN DEFAULT false,
+          whatsapp_country_code VARCHAR(10),
+          whatsapp_number VARCHAR(20),
+          address TEXT,
+          city VARCHAR(100) NOT NULL,
+          state VARCHAR(100),
+          postal_code VARCHAR(20),
+          country VARCHAR(100),
+          category VARCHAR(50) NOT NULL,
+          status VARCHAR(20) DEFAULT 'ACTIVE',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `, [])
 
-      if (error) {
-        console.error("Error creating clients table:", error)
-        toast({
-          title: "Error",
-          description: `Error creating clients table: ${error.message}`,
-          variant: "destructive",
-        })
-        return
-      }
+      console.log('✅ Clients table created successfully')
 
       toast({
         title: "Success",
@@ -213,7 +217,7 @@ export function ClientList() {
       // After creating the table, fetch clients again
       fetchClients()
     } catch (error) {
-      console.error("Error creating clients table:", error)
+      console.error("❌ Error creating clients table:", error)
       toast({
         title: "Error",
         description: `Error creating clients table: ${error instanceof Error ? error.message : String(error)}`,

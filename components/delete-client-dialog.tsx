@@ -11,9 +11,8 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/components/ui/use-toast"
-import { supabase } from "@/lib/supabase"
+import { deleteClient } from "@/actions/client-actions"
 import type { Client } from "@/types/client"
-import { logActivity } from "@/services/activity-service"
 
 interface DeleteClientDialogProps {
   open: boolean
@@ -30,34 +29,28 @@ export function DeleteClientDialog({ open, onOpenChange, client, onClientDeleted
     setLoading(true)
 
     try {
-      const { error } = await supabase.from("clients").delete().eq("id", client.id)
+      console.log(`🗑️ [UI] Deleting client ${client.name} via server action...`)
 
-      if (error) {
-        throw error
+      const result = await deleteClient(client.id)
+
+      if (result.success) {
+        console.log(`✅ [UI] Client ${client.name} deleted successfully`)
+        
+        toast({
+          title: "Success",
+          description: result.message,
+        })
+
+        // Call the onClientDeleted callback with the client id
+        onClientDeleted(client.id)
+
+        // Close the dialog
+        onOpenChange(false)
+      } else {
+        throw new Error(result.message)
       }
-
-      // Log the activity
-      await logActivity({
-        actionType: "delete",
-        entityType: "client",
-        entityId: client.id.toString(),
-        entityName: client.name,
-        description: `Client ${client.name} (${client.client_code}) was deleted`,
-        userName: "Current User", // Replace with actual user name when available
-      })
-
-      toast({
-        title: "Success",
-        description: "Client deleted successfully",
-      })
-
-      // Call the onClientDeleted callback with the client id
-      onClientDeleted(client.id)
-
-      // Close the dialog
-      onOpenChange(false)
     } catch (error) {
-      console.error("Error deleting client:", error)
+      console.error("❌ [UI] Error deleting client:", error)
       toast({
         title: "Error",
         description: `Error deleting client: ${error instanceof Error ? error.message : String(error)}`,

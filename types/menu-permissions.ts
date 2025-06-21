@@ -1,6 +1,6 @@
 export interface MenuItem {
-  id: number
-  parentId: number | null
+  id: string
+  parentId: string | null
   name: string
   path?: string
   icon?: string
@@ -15,7 +15,7 @@ export interface MenuItemWithChildren extends MenuItem {
 
 export interface RolePermission {
   roleId: number
-  menuItemId: number
+  menuItemId: string
   canView: boolean
   canAdd: boolean
   canEdit: boolean

@@ -28,89 +28,39 @@ export default function QuotationViewPage({ params }: QuotationViewPageProps) {
       setLoading(true)
       setError(null)
       
-      // Check if this is a demo slug
-      if (slug.startsWith('demo-')) {
+      // Check if this is a demo slug - simplified for now
+      if (slug === 'demo-template') {
         setIsDemoMode(true)
-        // Create minimal demo data that satisfies the type requirements
-        const demoQuotation: SavedQuotation = {
-          id: 1,
-          quotation_number: "QT-DEMO-001",
-          slug: slug,
-          client_name: "John Smith",
-          bride_name: "Sarah Johnson", 
-          groom_name: "Michael Chen",
-          mobile: "+91 98765 43210",
-          email: "sarah.michael@email.com",
-          default_package: "premium",
-          total_amount: 285000,
-          status: "draft",
-          created_by: "demo-user",
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          events_count: 2,
-          quotation_data: {
-            client_name: "John Smith",
-            bride_name: "Sarah Johnson",
-            groom_name: "Michael Chen", 
-            mobile: "9876543210",
-            mobile_country_code: "+91",
-            email: "sarah.michael@email.com",
-            whatsapp: "9876543210",
-            whatsapp_country_code: "+91",
-            alternate_mobile: "",
-            alternate_mobile_country_code: "+91",
-            alternate_whatsapp: "",
-            alternate_whatsapp_country_code: "+91",
-            default_package: "premium",
-            service_overrides: {},
-            package_overrides: {},
-            events: [
-              {
-                id: "1",
-                event_name: "Engagement Ceremony",
-                event_date: new Date("2024-02-14"),
-                event_location: "Mumbai, Maharashtra",
-                venue_name: "Royal Banquet Hall",
-                start_time: "18:00",
-                end_time: "22:00",
-                expected_crowd: "150",
-                selected_package: "premium",
-                selected_services: [{ id: 1, quantity: 2 }],
-                selected_deliverables: [{ id: 1, quantity: 1 }],
-                service_overrides: {},
-                package_overrides: {}
-              },
-              {
-                id: "2", 
-                event_name: "Wedding Ceremony",
-                event_date: new Date("2024-03-15"),
-                event_location: "Mumbai, Maharashtra",
-                venue_name: "Grand Palace Resort",
-                start_time: "06:00",
-                end_time: "14:00",
-                expected_crowd: "300",
-                selected_package: "premium",
-                selected_services: [{ id: 1, quantity: 3 }],
-                selected_deliverables: [{ id: 1, quantity: 2 }],
-                service_overrides: {},
-                package_overrides: {}
-              }
-            ],
-            selected_services: [{ id: 1, quantity: 2 }],
-            selected_deliverables: [{ id: 1, quantity: 1 }]
-          }
-        }
-        setQuotation(demoQuotation)
+        setError("Demo mode - please use a real quotation slug")
         setLoading(false)
         return
       }
       
+      // First try to get by slug
       const result = await getQuotationBySlug(slug)
       
       if (result.success && result.quotation) {
         setQuotation(result.quotation)
       } else {
-        setError("Quotation not found or expired")
+        // If slug fails and slug looks like QT-XXXX-XXXX format, try by quotation number
+        if (slug.startsWith('QT-')) {
+          console.log('Slug failed, trying by quotation number:', slug)
+          try {
+            // Import the function to get by quotation number
+            const { getQuotationByNumber } = await import('@/actions/quotations-actions')
+            const numberResult = await getQuotationByNumber(slug)
+            
+            if (numberResult.success && numberResult.quotation) {
+              setQuotation(numberResult.quotation)
+            } else {
+              setError("Quotation not found or expired")
+            }
+          } catch {
+            setError("Quotation not found or expired")
+          }
+        } else {
+          setError("Quotation not found or expired")
+        }
       }
     } catch (err: any) {
       console.error("Error loading quotation:", err)

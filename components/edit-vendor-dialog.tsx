@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
-import { supabase } from "@/lib/supabase"
+import { query } from "@/lib/postgresql-client"
 import type { Vendor, VendorFormData } from "@/types/vendor"
 import { Button } from "@/components/ui/button"
 import {
@@ -104,11 +104,23 @@ export function EditVendorDialog({ vendor, open, onOpenChange, onVendorUpdated }
         ...data,
       }
 
-      const { error } = await supabase.from("vendors").update(vendorData).eq("id", vendor.id)
-
-      if (error) {
-        throw error
-      }
+      await query(
+        `UPDATE vendors SET 
+          vendor_code = $1, name = $2, contact_person = $3, email = $4, phone = $5, 
+          address = $6, city = $7, state = $8, postal_code = $9, country = $10, 
+          category = $11, tax_id = $12, payment_terms = $13, website = $14, 
+          notes = $15, status = $16 
+         WHERE id = $17`, 
+        [
+          vendorData.vendor_code, vendorData.name, vendorData.contact_person, vendorData.email, 
+          vendorData.phone, vendorData.address, vendorData.city, vendorData.state, 
+          vendorData.postal_code, vendorData.country, vendorData.category, vendorData.tax_id, 
+          vendorData.payment_terms, vendorData.website, vendorData.notes, vendorData.status, vendor.id
+        ]
+      )
+      
+      const error = null
+      console.log('✅ Vendor updated successfully:', vendorData.name)
 
       onVendorUpdated()
     } catch (error: any) {

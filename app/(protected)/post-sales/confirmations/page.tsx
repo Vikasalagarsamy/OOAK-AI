@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
-import { createClient } from "@/lib/supabase-client"
+import { createClient } from "@/lib/postgresql-client-unified"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -55,7 +55,7 @@ export default function PostSalesConfirmationsPage() {
 
   const fetchPendingConfirmations = async () => {
     try {
-      const supabase = createClient()
+      const { query, transaction } = createClient()
       const { data, error } = await supabase
         .from('quotations')
         .select('*')
@@ -99,7 +99,7 @@ export default function PostSalesConfirmationsPage() {
 
     setActionLoading(true)
     try {
-      const supabase = createClient()
+      const { query, transaction } = createClient()
 
       // Create post-sale confirmation record
       const { error: confirmationError } = await supabase
