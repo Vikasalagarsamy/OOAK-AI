@@ -95,6 +95,23 @@ function createPostgreSQLBrowserClient() {
             resolve({ data: result.data || [], error: result.success ? null : result.error })
           }
         }),
+        in: (column: string, values: any[]) => ({
+          order: (orderColumn: string, options?: { ascending?: boolean }) => ({
+            then: async (resolve: any) => {
+              const placeholders = values.map((_, i) => `$${i + 1}`).join(', ')
+              const orderDir = options?.ascending === false ? 'DESC' : 'ASC'
+              const sql = `SELECT ${columns} FROM ${tableName} WHERE ${column} IN (${placeholders}) ORDER BY ${orderColumn} ${orderDir}`
+              const result = await query(sql, values)
+              resolve({ data: result.data || [], error: result.success ? null : result.error })
+            }
+          }),
+          then: async (resolve: any) => {
+            const placeholders = values.map((_, i) => `$${i + 1}`).join(', ')
+            const sql = `SELECT ${columns} FROM ${tableName} WHERE ${column} IN (${placeholders})`
+            const result = await query(sql, values)
+            resolve({ data: result.data || [], error: result.success ? null : result.error })
+          }
+        }),
         then: async (resolve: any) => {
           const sql = `SELECT ${columns} FROM ${tableName}`
           const result = await query(sql)
