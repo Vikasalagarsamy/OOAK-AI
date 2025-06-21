@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toast } from "@/components/ui/use-toast"
 import { CheckCircle, XCircle, Calendar, DollarSign, User, Clock, Eye, FileText, MessageSquare } from "lucide-react"
-import EnhancedQuotationReview from "../../admin/task-management/components/enhanced-quotation-review"
+import EnhancedQuotationReview from "@/components/quotation/enhanced-quotation-review"
 
 interface Quotation {
   id: number
