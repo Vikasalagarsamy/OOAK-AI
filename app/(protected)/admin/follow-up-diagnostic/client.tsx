@@ -1,24 +1,18 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import dynamic from "next/dynamic"
-
-// Dynamically import the diagnostic component with no SSR
-const DiagnosticComponent = dynamic(
-  () => import("@/components/follow-ups/followup-diagnostic").then((mod) => mod.FollowupDiagnostic),
-  { ssr: false, loading: () => <p className="text-center py-4">Loading diagnostic tool...</p> },
-)
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 export default function DiagnosticClient() {
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  if (!mounted) {
-    return <p className="text-center py-4">Loading diagnostic tool...</p>
-  }
-
-  return <DiagnosticComponent />
+  return (
+    <div className="container mx-auto py-6 space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Follow-up Diagnostic</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-muted-foreground">Follow-up diagnostic tool will be implemented here.</p>
+        </CardContent>
+      </Card>
+    </div>
+  )
 }
